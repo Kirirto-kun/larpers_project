@@ -1,5 +1,6 @@
 $ErrorActionPreference = 'Stop'
 $campusOriginalModulePath = [Environment]::GetEnvironmentVariable('PSModulePath', 'Process')
+$campusOriginalPath = [Environment]::GetEnvironmentVariable('PATH', 'Process')
 try {
     # Resolve modules for this host before any command can autoload a module.
     $campusHostModules = [IO.Path]::Combine($PSHOME, 'Modules')
@@ -41,6 +42,7 @@ try {
         if ($item.PSIsContainer -or ($item.Attributes -band [IO.FileAttributes]::ReparsePoint)) { throw 'Cache payload must be a regular file' }
         return ($item.Length -eq $Size -and (Get-FileHash -LiteralPath $Path -Algorithm SHA256).Hash -eq $Sha)
     }
+@WINDOWS_SETUP_HELPERS@
     $architecture = [Environment]::GetEnvironmentVariable('PROCESSOR_ARCHITEW6432', 'Process')
     if (-not $architecture) { $architecture = [Environment]::GetEnvironmentVariable('PROCESSOR_ARCHITECTURE', 'Process') }
     switch ($architecture.ToUpperInvariant()) {
@@ -58,6 +60,12 @@ try {
     $work = Join-Path $cache ('.download-' + [Guid]::NewGuid().ToString('N'))
     Protect-Directory $work
     try {
+        $setup = Initialize-CampusWindows -StateDir $cache -Architecture $arch
+        if ($setup.RestartRequired) {
+            Write-Host 'Setup requires a Windows restart. Restart when convenient and open this same Campus file again. No invitation was used.'
+            exit 3010
+        }
+        [Environment]::SetEnvironmentVariable('PATH', $setup.DockerBin + ';' + $campusOriginalPath, 'Process')
         $ca = $null
         $caBase64 = '@CA_BASE64@'
         $caSha = '@CA_SHA256@'
@@ -90,6 +98,7 @@ try {
         $arguments = @()
         if ($ca) { $arguments += @('--ca-file', $ca) }
         $arguments += @('install', '--catalog-url', '@CATALOG_URL@', '--catalog-sha256', '@CATALOG_SHA256@')
+        $arguments += @('--gpu=' + $setup.GPU.ToString().ToLowerInvariant())
         # The Go client launches native Windows PowerShell for its CIM checks.
         [Environment]::SetEnvironmentVariable('PSModulePath', $campusNativePS5Modules, 'Process')
         & $runner @arguments
@@ -111,5 +120,6 @@ try {
     exit 1
 }
 finally {
+    [Environment]::SetEnvironmentVariable('PATH', $campusOriginalPath, 'Process')
     [Environment]::SetEnvironmentVariable('PSModulePath', $campusOriginalModulePath, 'Process')
 }

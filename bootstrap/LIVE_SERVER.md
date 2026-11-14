@@ -1,5 +1,32 @@
 # Current LAN handoff
 
+## Windows setup update: R4
+
+Current Windows file: `bootstrap/test-kit/public/runner-20261115-r4/Connect.cmd`,
+33154 bytes, SHA-256
+`c914c99bef4fa95dd30f5ac36a43fd09c7f25fbf9d0c9deecd16a93335b21fee`.
+It is hosted read-only at
+[R4 Connect.cmd](https://10.4.146.76:8443/downloads/runner-20261115-r4/Connect.cmd).
+Docker Desktop is installed manually. The starter checks/setup WSL2 and,
+after GPU permission, the verified NVIDIA5050 Laptop Windows driver. Confirm
+the normal UAC/vendor windows. If restart is required, reboot and run the
+same file again; invitations are requested only after readiness/preflight.
+
+R4 actual cached Windows startup detected ready WSL2.5.10 without changing it,
+passed CPU preflight, restored identity and reached ready at
+`2026-11-14T16:10:24.117455Z`. Owner Stop exited0. Missing-component branches
+were tested with17 WSL,58 NVIDIA and7 orchestration cases. The combined public
+and orchestration run passed54 cases initially; the6 changed argv expectations were
+updated and reran green. Native32/64-bit system tool selection was checked.
+Strict-CA live catalog/starters/Range/private-file404 and secret scans passed.
+Real missing-component installation/UAC/reboot still needs the target laptop;
+this host's running Docker/WSL and absent NVIDIA hardware were preserved.
+
+R3 and earlier releases below remain recorded alternatives; distribute R4 for
+the automatic Windows prerequisite flow. The catalog/native clients/images
+are unchanged. Large images reused verified hardlink identities/sizes rather
+than another multi-GiB rehash. No invitation is embedded in these files.
+
 The isolated `campus-live` coordinator runs upstream control-plane commit
 `96bfe6d781b080504b9fb7cb2b303f18c64394f7` with the restricted Mac diagnostic
 overlay at [https://10.4.146.76:8443](https://10.4.146.76:8443).

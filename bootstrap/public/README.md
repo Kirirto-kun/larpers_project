@@ -1,5 +1,19 @@
 # Public release starter
 
+The Windows starter now keeps Docker Desktop as the manual prerequisite and
+sets up missing WSL2 and the NVIDIA Windows driver after explicit GPU consent.
+Working components are preserved. Only Microsoft's system WSL command and the
+signed NVIDIA installer receive Windows UAC elevation; the Campus client stays
+under the original user. A required restart exits before enrollment: restart
+Windows and open the same starter again. No automatic reboot or startup task
+is created. The NVIDIA package opens its ordinary installation wizard.
+
+Automatic missing-driver installation is verified for Windows11 AMD64 with an
+RTX5050 Laptop GPU (PCI2D98/2DD8), using official WHQL621.14. Other working
+drivers are kept; unrecognized missing-driver mappings fail explicitly.
+The driver package (~1GB) is separate from the later CUDA environment (~4.18GB).
+CPU mode does not download/install the NVIDIA driver or CUDA.
+
 The operator creates a new release with `prepare_public_release.py`. Inputs are
 fresh native CGO-disabled Go clients, resolved immutable profiles, approved cached
 Docker gzip archives and an optional **public certificate**. No private device

@@ -221,6 +221,8 @@ def write_starters(root, catalog, base_url, *, ca_payload=b''):
     common['@POSIX_TARGETS@'] = '\n'.join(cases)
     windows = {key.split('-')[1]: {'url': base_url + '/' + ref['path'], 'sha256': ref['sha256'], 'size_bytes': ref['size_bytes']} for key, ref in pins.items() if key.startswith('windows-')}
     common['@WINDOWS_TARGETS_BASE64@'] = base64.b64encode(json.dumps(windows, separators=(',', ':')).encode()).decode('ascii')
+    helper_root = Path(__file__).parent / 'public'
+    common['@WINDOWS_SETUP_HELPERS@'] = '\n'.join((helper_root / name).read_text(encoding='utf-8') for name in ('windows-wsl.ps1', 'windows-nvidia.ps1', 'windows-setup.ps1'))
     for name in ('Connect.command', 'Connect.cmd', 'Connect.ps1'):
         content = (Path(__file__).parent / 'public' / (name + '.in')).read_text(encoding='utf-8')
         for key, value in common.items(): content = content.replace(key, value)

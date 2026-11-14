@@ -2,6 +2,7 @@ import { useResource } from "../lib/hooks";
 import type { Summary, Node } from "../lib/types";
 import { PageHeader, Metric, ErrorBox } from "../components/Common";
 import { Topology } from "../components/Topology";
+import { PoolCharts } from "../components/PoolCharts";
 import { CostBreakdown } from "../components/CostBreakdown";
 export function Overview() {
   const {
@@ -37,6 +38,7 @@ export function Overview() {
           value={summary?.recovering_tasks ?? "—"}
         />
       </div>
+      <PoolCharts summary={summary} nodes={nodes} />
       {nodes && <Topology nodes={nodes} events={summary?.events || []} />}
       <CostBreakdown />
     </div>

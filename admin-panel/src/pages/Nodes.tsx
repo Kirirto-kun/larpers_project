@@ -10,6 +10,7 @@ import {
   Empty,
   bytes,
 } from "../components/Common";
+import { UsageBar } from "../components/PoolCharts";
 import { AttemptTimeline } from "../components/AttemptTimeline";
 import { Button } from "../components/ui/button";
 export function Nodes({ admin }: { admin: boolean }) {
@@ -69,19 +70,11 @@ export function Nodes({ admin }: { admin: boolean }) {
       {node && (
         <section className="workspace-section">
           <h2>{node.name}</h2>
+          <div className="device-usage">
+            <UsageBar label="CPU usage" value={node.cpu_utilization} />
+            <UsageBar label="GPU usage" value={node.gpu_utilization} />
+          </div>
           <dl>
-            <dt>CPU utilization</dt>
-            <dd>
-              {node.cpu_utilization === undefined
-                ? "Not measured"
-                : node.cpu_utilization + "%"}
-            </dd>
-            <dt>GPU utilization</dt>
-            <dd>
-              {node.gpu_utilization === undefined
-                ? "Not measured"
-                : node.gpu_utilization + "%"}
-            </dd>
             <dt>Offered CPU</dt>
             <dd>{node.offered_budget.cpu_percent}%</dd>
             <dt>GPU permission</dt>

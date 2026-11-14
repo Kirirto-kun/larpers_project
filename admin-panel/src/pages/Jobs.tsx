@@ -15,7 +15,7 @@ export function Jobs() {
       <section className="workspace-section">
         {data?.length === 0 && <Empty>No jobs yet.</Empty>}
         {data?.map((j) => (
-          <div className="row" key={j.id}>
+          <div className="row job-row" key={j.id}>
             <div>
               <button
                 className="item-button"
@@ -29,6 +29,41 @@ export function Jobs() {
                 {j.accepted_units}/{j.total_units} accepted · {j.failed_units}{" "}
                 failed
               </p>
+            </div>
+            <div className="job-completion">
+              {j.total_units > 0 ? (
+                <>
+                  <div
+                    className="visual-track"
+                    role="progressbar"
+                    aria-label={j.name + " accepted units"}
+                    aria-valuemin={0}
+                    aria-valuemax={j.total_units}
+                    aria-valuenow={Math.min(
+                      j.total_units,
+                      Math.max(0, j.accepted_units),
+                    )}
+                  >
+                    <span
+                      style={{
+                        width:
+                          Math.min(
+                            100,
+                            Math.max(
+                              0,
+                              (j.accepted_units / j.total_units) * 100,
+                            ),
+                          ) + "%",
+                      }}
+                    />
+                  </div>
+                  <small>
+                    {Math.round((j.accepted_units / j.total_units) * 100)}%
+                  </small>
+                </>
+              ) : (
+                <small>No units yet</small>
+              )}
             </div>
             <Status value={j.state} />
           </div>

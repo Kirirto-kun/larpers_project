@@ -3,3 +3,6 @@
 *.exe
 *.test
 /test-results/
+__pycache__/
+*.pyc
+.pytest_cache/

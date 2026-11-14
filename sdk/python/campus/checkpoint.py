@@ -7,6 +7,8 @@ import os
 from pathlib import Path, PurePosixPath
 import re
 import shutil
+import stat
+import tempfile
 import uuid
 
 _BINDINGS = {"code_digest", "input_digest", "environment_digest", "trainer_digest"}
@@ -104,8 +106,31 @@ def load_checkpoint(directory, binding, *, max_bytes: int = 1 << 30) -> dict[str
     if directory.is_symlink() or not (directory / "READY").is_file():
         raise ValueError("checkpoint is not complete")
     root = directory.resolve(strict=True)
+    root_fd = os.open(directory, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW) if os.name == "posix" else None
 
     def read(name, limit):
+        if limit < 0:
+            raise ValueError("checkpoint quota exceeded")
+        safe_path(name)
+        if root_fd is not None:
+            parent = os.dup(root_fd)
+            try:
+                parts = name.split("/")
+                for component in parts[:-1]:
+                    next_parent = os.open(component, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW, dir_fd=parent)
+                    os.close(parent)
+                    parent = next_parent
+                descriptor = os.open(parts[-1], os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK, dir_fd=parent)
+            finally:
+                os.close(parent)
+            with os.fdopen(descriptor, "rb") as stream:
+                info = os.fstat(stream.fileno())
+                if not stat.S_ISREG(info.st_mode) or info.st_size > limit:
+                    raise ValueError("checkpoint quota/type violation")
+                raw = stream.read(limit + 1)
+            if len(raw) > limit:
+                raise ValueError("checkpoint quota exceeded")
+            return raw
         p = directory / safe_path(name)
         for part in [p, *p.parents]:
             if part == directory.parent:
@@ -120,6 +145,14 @@ def load_checkpoint(directory, binding, *, max_bytes: int = 1 << 30) -> dict[str
             raise ValueError("checkpoint quota exceeded")
         return raw
 
+    try:
+        return _verified_files(read, binding, max_bytes)
+    finally:
+        if root_fd is not None:
+            os.close(root_fd)
+
+
+def _verified_files(read, binding, max_bytes):
     raw = read("manifest.json", 1 << 20)
     if read("READY", 64) != hashlib.sha256(raw).hexdigest().encode("ascii"):
         raise ValueError("checkpoint manifest digest mismatch")
@@ -151,11 +184,15 @@ def publish_checkpoint(directory, binding, transport):
     transport.publish(manifest) performs the attempt-scoped checkpoint mutation.
     """
     files = load_checkpoint(directory, binding)
-    manifest = json.loads((Path(directory) / "manifest.json").read_bytes())
-    artifacts = []
-    for name in [*sorted(files), "manifest.json", "READY"]:
-        artifact = transport.upload(Path(directory) / name)
-        artifacts.append({"path": name, **artifact})
-    return transport.publish({"schema_version": "1", "binding": binding,
-                              "files": artifacts,
-                              "manifest_digest": hashlib.sha256(canonical(manifest)).hexdigest()})
+    # Freeze the bytes which were verified. Never reopen workload-controlled paths
+    # between validation and upload (the producer may still be writing).
+    with tempfile.TemporaryDirectory(prefix="campus-checkpoint-") as temporary:
+        frozen = save_checkpoint(temporary, "snapshot", files, binding)
+        manifest = json.loads((frozen / "manifest.json").read_bytes())
+        artifacts = []
+        for name in [*sorted(files), "manifest.json", "READY"]:
+            artifact = transport.upload(frozen / name)
+            artifacts.append({"path": name, **artifact})
+        return transport.publish({"schema_version": "1", "binding": binding,
+                                  "files": artifacts,
+                                  "manifest_digest": hashlib.sha256(canonical(manifest)).hexdigest()})

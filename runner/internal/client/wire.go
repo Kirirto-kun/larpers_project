@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"regexp"
 	"strings"
+	"time"
 )
 
 const Version = "0.1.0"
@@ -40,6 +41,7 @@ type ResourceLimits struct {
 	VRAMBytes       int64    `json:"vram_bytes"`
 }
 type Assignment struct {
+	ReceivedAt time.Time `json:"-"`
 	Fence
 	JobID               string         `json:"job_id"`
 	StageID             string         `json:"stage_id"`
@@ -100,7 +102,7 @@ type Capabilities struct {
 }
 
 var DigestPattern = regexp.MustCompile(`^[a-f0-9]{64}$`)
-var ImagePattern = regexp.MustCompile(`^[a-zA-Z0-9][a-zA-Z0-9._:/-]*@sha256:[a-f0-9]{64}$`)
+var ImagePattern = regexp.MustCompile(`^(?:[a-zA-Z0-9][a-zA-Z0-9._:/-]*@)?sha256:[a-f0-9]{64}$`)
 var IDPattern = regexp.MustCompile(`^[a-zA-Z0-9][a-zA-Z0-9._-]{0,127}$`)
 
 func (a Assignment) Validate() error {

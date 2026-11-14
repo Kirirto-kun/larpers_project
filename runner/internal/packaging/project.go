@@ -66,7 +66,7 @@ func SafePath(name string) error {
 
 func secret(name string) bool {
 	for _, part := range strings.Split(strings.ToLower(name), "/") {
-		if part == ".git" || part == ".hg" || part == ".svn" || part == ".venv" || part == "venv" || part == "node_modules" || part == "__pycache__" || part == ".ssh" || part == ".aws" || part == ".azure" || part == ".config" || part == ".campus" || part == ".env" || strings.HasPrefix(part, ".env.") || strings.HasPrefix(part, "id_rsa") || strings.HasPrefix(part, "id_ed25519") || part == "credentials.json" || part == "credentials" || part == ".netrc" || part == ".npmrc" || strings.HasSuffix(part, ".pem") || strings.HasSuffix(part, ".key") || strings.HasSuffix(part, ".p12") {
+		if part == ".git" || part == ".hg" || part == ".svn" || part == ".campus-env" || part == ".campus-site" || part == ".venv" || part == "venv" || part == "node_modules" || part == "__pycache__" || part == ".ssh" || part == ".aws" || part == ".azure" || part == ".config" || part == ".campus" || part == ".env" || strings.HasPrefix(part, ".env.") || strings.HasPrefix(part, "id_rsa") || strings.HasPrefix(part, "id_ed25519") || part == "credentials.json" || part == "credentials" || part == ".netrc" || part == ".npmrc" || strings.HasSuffix(part, ".pem") || strings.HasSuffix(part, ".key") || strings.HasSuffix(part, ".p12") {
 			return true
 		}
 	}

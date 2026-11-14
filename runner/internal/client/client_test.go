@@ -101,3 +101,17 @@ func TestEndpointAndVersionAreValidated(t *testing.T) {
 		t.Fatal("incompatible server accepted")
 	}
 }
+
+func TestAttemptFencingDoesNotRevokeHealthySession(t *testing.T) {
+	for _, code := range []string{"STALE_ATTEMPT", "LEASE_EXPIRED"} {
+		e := &APIError{Status: 409, Code: code}
+		if !Terminal(e) || SessionFatal(e) {
+			t.Fatal("attempt fence became a node failure", code)
+		}
+	}
+	for _, e := range []*APIError{{Status: 401, Code: "UNAUTHORIZED"}, {Status: 403, Code: "FORBIDDEN"}, {Status: 409, Code: "SESSION_REPLACED"}} {
+		if !SessionFatal(e) {
+			t.Fatal("revoked session kept serving", e)
+		}
+	}
+}

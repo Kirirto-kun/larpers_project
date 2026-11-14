@@ -1,0 +1,4 @@
+{"id":"checkpoints","text":"Campus writes a complete checkpoint locally, verifies it, uploads finalized files, and only then publishes its pointer."}
+{"id":"offline","text":"Prepared workload containers run with network access disabled and use a pinned local model and tokenizer."}
+{"id":"sources","text":"Embedding search results preserve the original source, line number, chunk offsets, and text excerpt."}
+{"id":"unicode","text":"校园计算池支持多语言文本，并保留原始文档的来源和段落。"}

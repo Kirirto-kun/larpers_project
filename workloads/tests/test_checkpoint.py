@@ -45,3 +45,19 @@ def test_checkpoint_rejects_path_escape_and_existing_snapshot(tmp_path):
     result = save_checkpoint(tmp_path, "safe", {"x": b"x"}, binding)
     with pytest.raises(FileExistsError):
         save_checkpoint(tmp_path, "safe", {"x": b"different"}, binding)
+
+
+def test_publisher_uploads_verified_snapshot_even_when_original_changes(tmp_path):
+    binding = {k: "a" * 64 for k in ("code_digest", "input_digest", "environment_digest", "trainer_digest")}
+    root = save_checkpoint(tmp_path, "step", {"a": b"first", "b": b"second"}, binding)
+    class Transport:
+        def __init__(self): self.payloads = {}
+        def upload(self, path):
+            self.payloads[path.name] = path.read_bytes()
+            if path.name == "a":
+                (root / "b").write_bytes(b"modified after validation")
+            return {"artifact_id": path.name}
+        def publish(self, manifest): return manifest
+    transport = Transport()
+    publish_checkpoint(root, binding, transport)
+    assert transport.payloads["b"] == b"second"

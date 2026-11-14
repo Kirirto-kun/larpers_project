@@ -35,6 +35,19 @@ func Terminal(err error) bool {
 	return e.Status == 401 || e.Status == 403 || e.Code == "STALE_ATTEMPT" || e.Code == "LEASE_EXPIRED" || e.Code == "SESSION_REPLACED"
 }
 
+// Attempt fencing only stops that attempt. Credential/session revocation stops
+// the node, including its other active attempts.
+func SessionFatal(err error) bool {
+	var e *APIError
+	if !errors.As(err, &e) {
+		return false
+	}
+	if e.Code == "STALE_ATTEMPT" || e.Code == "LEASE_EXPIRED" {
+		return false
+	}
+	return e.Status == 401 || e.Status == 403 || e.Code == "SESSION_REPLACED"
+}
+
 type Client struct {
 	BaseURL    string
 	Credential string
@@ -129,6 +142,9 @@ func (c *Client) do(ctx context.Context, method, route string, input, output any
 		if err != nil {
 			return err
 		}
+		// net/http otherwise silently replays a POST carrying Idempotency-Key on a
+		// reused connection. Reconciliation/retry ordering belongs to this client.
+		req.GetBody = nil
 		if input != nil {
 			req.Header.Set("Content-Type", "application/json")
 		}

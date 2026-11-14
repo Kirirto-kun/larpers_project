@@ -38,10 +38,7 @@ export function TimingChart({ timings }: { timings: Record<string, number> }) {
           </div>
         );
       })}
-      <small>
-        Stage durations may overlap; their sum is not necessarily end-to-end
-        time.
-      </small>
+      <small>Stages may overlap.</small>
     </section>
   );
 }
@@ -54,10 +51,7 @@ export function UtilizationChart({
   return (
     <section aria-label="Resource utilization charts">
       <h3>CPU/GPU utilization</h3>
-      <p className="muted">
-        1,000 ms sample interval. Missing samples remain gaps. Utilization is
-        separate from pooling efficiency.
-      </p>
+      <p className="muted">1 s intervals · gaps excluded</p>
       {!records.length && <Empty>No utilization measurements.</Empty>}
       {records.map((record) => {
         const samples = record.samples || [];
@@ -133,9 +127,7 @@ export function UtilizationChart({
                 )}
               </svg>
             ) : (
-              <Empty>
-                Raw samples not provided. Only reported averages are shown.
-              </Empty>
+              <Empty>No raw samples. Averages only.</Empty>
             )}
             {(["cpu_percent", "gpu_percent"] as const).map((key) => (
               <div className="chart-row" key={key}>

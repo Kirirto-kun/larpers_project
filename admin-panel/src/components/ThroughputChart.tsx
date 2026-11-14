@@ -36,8 +36,7 @@ export function ThroughputChart({ report: b }: { report: Benchmark }) {
       </div>
       {c && c.efficiency > 100 && (
         <div className="notice">
-          Efficiency exceeds 100%. Review batching, baselines, input
-          distribution, and concurrency before drawing conclusions.
+          Efficiency exceeds 100%. Check the baseline and workload settings.
         </div>
       )}
       {rows.map((r) => (
@@ -56,14 +55,16 @@ export function ThroughputChart({ report: b }: { report: Benchmark }) {
           </span>
         </div>
       ))}
-      <p className="muted">
-        Bars show medians. Pool raw rates:{" "}
-        {b.pool_rates.join(", ") || "No samples"}. Range:{" "}
-        {b.pool_rates.length
-          ? Math.min(...b.pool_rates) + "–" + Math.max(...b.pool_rates)
-          : "Unknown"}
-        .
-      </p>
+      <details>
+        <summary>Raw rates</summary>
+        <p className="muted">
+          Pool: {b.pool_rates.join(", ") || "No samples"}. Range:{" "}
+          {b.pool_rates.length
+            ? Math.min(...b.pool_rates) + "–" + Math.max(...b.pool_rates)
+            : "Unknown"}
+          .
+        </p>
+      </details>
     </>
   );
 }

@@ -23,9 +23,7 @@ export function Nodes({ admin }: { admin: boolean }) {
   const node = data?.find((n) => n.id === selected);
   return (
     <>
-      <PageHeader eyebrow="DEVICES" title="Devices">
-        CPU and GPU capacity is offered explicitly by each participant.
-      </PageHeader>
+      <PageHeader eyebrow="" title="Devices" />
       <ErrorBox message={error || message} />
       <section className="card table-wrap">
         <table>

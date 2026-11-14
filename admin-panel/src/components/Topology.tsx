@@ -10,11 +10,8 @@ export function Topology({
 }) {
   return (
     <section className="card">
-      <h2>A pool of possibilities</h2>
-      <p className="muted">
-        Registered devices and their current roles. Activity comes from
-        persisted pool events.
-      </p>
+      <h2>Devices</h2>
+
       <div className="topology">
         {nodes.length === 0 && <Empty>No devices registered.</Empty>}
         {nodes.map((n) => (
@@ -30,7 +27,7 @@ export function Topology({
         ))}
       </div>
       <details>
-        <summary>Recent pool events · {events.length}</summary>
+        <summary>Activity · {events.length}</summary>
         {events.map((e) => (
           <div className="row" key={e.event_id}>
             <span>

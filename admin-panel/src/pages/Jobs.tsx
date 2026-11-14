@@ -10,9 +10,7 @@ export function Jobs() {
   const job = data?.find((j) => j.id === selected);
   return (
     <>
-      <PageHeader eyebrow="JOBS" title="Jobs">
-        Only accepted units count toward useful throughput.
-      </PageHeader>
+      <PageHeader eyebrow="" title="Jobs" />
       <ErrorBox message={error} />
       <section className="card">
         {data?.length === 0 && <Empty>No jobs yet.</Empty>}

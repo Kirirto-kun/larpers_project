@@ -54,7 +54,6 @@ export function App() {
           Campus Pool
         </Link>
         <nav aria-label="Pool navigation">
-          <p className="nav-label">WORKSPACE / OPERATIONS</p>
           <NavLink end to="/">
             <LayoutDashboard size={18} />
             Overview
@@ -73,7 +72,6 @@ export function App() {
           </NavLink>
         </nav>
         <footer>
-          POOL OPERATIONS
           <a href="/">
             User workspace <ArrowUpRight size={14} />
           </a>
@@ -82,7 +80,7 @@ export function App() {
       <div className="main">
         <div className="topbar">
           <span>
-            Pool console / <b>Campus Pool</b>
+            <b>Campus Pool</b>
           </span>
           <span className="pill">
             {session.name} · {session.role}

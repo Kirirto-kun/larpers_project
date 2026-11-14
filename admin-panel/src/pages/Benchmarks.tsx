@@ -27,10 +27,7 @@ export function Benchmarks({ admin }: { admin: boolean }) {
   const report = reports?.find((b) => b.id === selected);
   return (
     <>
-      <PageHeader eyebrow="BENCHMARKS" title="Benchmarks">
-        Compare matched workloads and resource budgets. Utilization is not
-        pooling efficiency.
-      </PageHeader>
+      <PageHeader eyebrow="" title="Benchmarks" />
       <ErrorBox message={error || message} />
       {admin && (
         <section className="card">
@@ -72,7 +69,7 @@ export function Benchmarks({ admin }: { admin: boolean }) {
                 </select>
               </label>
               <label>
-                Immutable input digest
+                Input digest
                 <input
                   required
                   value={digest}
@@ -101,7 +98,7 @@ export function Benchmarks({ admin }: { admin: boolean }) {
                 />
               </label>
               <label>
-                Batch target units
+                Batch size
                 <input
                   type="number"
                   min="1"
@@ -117,10 +114,10 @@ export function Benchmarks({ admin }: { admin: boolean }) {
                 checked={cold}
                 onChange={(e) => setCold(e.target.checked)}
               />
-              Cold start series
+              Cold start
             </label>
             <fieldset className="form-section">
-              <legend>Compute participants</legend>
+              <legend>Devices</legend>
               {nodes?.map((n) => (
                 <label className="check" key={n.id}>
                   <input
@@ -140,12 +137,8 @@ export function Benchmarks({ admin }: { admin: boolean }) {
             </fieldset>
             <div className="form-footer">
               <Button disabled={busy || !ids.length}>
-                {busy ? "Creating experiment…" : "Create new experiment"}
+                {busy ? "Creating experiment…" : "Create experiment"}
               </Button>
-              <p className="muted">
-                Changed inputs or settings require a new experiment. Existing
-                results are never relabelled.
-              </p>
             </div>
           </form>
         </section>
@@ -193,7 +186,7 @@ export function Benchmarks({ admin }: { admin: boolean }) {
           </dl>
           <TimingChart timings={report.timings_ms} />
           <UtilizationChart records={report.utilization} />
-          <h3>Standalone measurement provenance</h3>
+          <h3>Standalone records</h3>
           {report.standalone.map((s) => (
             <p key={s.node_id}>
               {s.node_id}: {s.provenance}; raw rates: {s.rates.join(", ")}

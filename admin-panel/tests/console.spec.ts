@@ -5,9 +5,7 @@ test("overview uses saved metrics and explicit unmeasured costs", async ({
 }) => {
   await fixtures(page);
   await page.goto("./");
-  await expect(
-    page.getByRole("heading", { name: "Shared compute. Visible progress." }),
-  ).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Overview" })).toBeVisible();
   await expect(page.getByText("Not measured (estimate)")).toBeVisible();
   await expect(page.getByText("Live updates disconnected")).toBeVisible();
 });
@@ -144,16 +142,14 @@ test("changed concurrency creates a distinct experiment without relabelling save
     return route.fulfill({ json: reports });
   });
   await page.goto("benchmarks");
-  await page
-    .getByLabel("Immutable input digest")
-    .fill("sha256:immutable-corpus");
+  await page.getByLabel("Input digest").fill("sha256:immutable-corpus");
   await page.getByLabel("Lab laptop").check();
-  await page.getByRole("button", { name: "Create new experiment" }).click();
+  await page.getByRole("button", { name: "Create experiment" }).click();
   await expect(
     page.getByRole("heading", { name: "embeddings / experiment-2" }),
   ).toBeVisible();
   await page.getByLabel("Concurrency", { exact: true }).fill("4");
-  await page.getByRole("button", { name: "Create new experiment" }).click();
+  await page.getByRole("button", { name: "Create experiment" }).click();
   await expect(
     page.getByRole("heading", { name: "embeddings / experiment-3" }),
   ).toBeVisible();

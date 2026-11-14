@@ -26,18 +26,14 @@ export function CostBreakdown() {
       : null;
   return (
     <section className="card">
-      <h2>Contribution & operating costs</h2>
+      <h2>Costs</h2>
       <ErrorBox message={error} />
       {data ? (
         <>
           <p>
-            {data.credits} internal credits · {data.accepted_units} accepted
-            units · unit version {data.unit_version}
+            {data.credits} internal credits · {data.currency}
           </p>
-          <small>
-            Credits are internal accounting, not paid earnings. Cost currency:{" "}
-            {data.currency}.
-          </small>
+
           <p>
             Cost per accepted unit:{" "}
             {perUnit === null
@@ -61,7 +57,7 @@ export function CostBreakdown() {
           ))}
         </>
       ) : (
-        !error && <Empty>Loading cost assumptions…</Empty>
+        !error && <Empty>Loading…</Empty>
       )}
     </section>
   );

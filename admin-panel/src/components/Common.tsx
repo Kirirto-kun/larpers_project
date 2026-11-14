@@ -39,7 +39,6 @@ export function bytes(n: number) {
       : n.toLocaleString() + " bytes";
 }
 export function PageHeader({
-  eyebrow,
   title,
   children,
 }: {
@@ -49,7 +48,6 @@ export function PageHeader({
 }) {
   return (
     <header className="page-header">
-      <p className="eyebrow">{eyebrow}</p>
       <h1>{title}</h1>
       {children && <p>{children}</p>}
     </header>

@@ -4,6 +4,7 @@ import (
 	"campus/runner/internal/artifacts"
 	"campus/runner/internal/client"
 	"campus/runner/internal/containers"
+	"campus/runner/internal/generated"
 	"campus/runner/internal/leaseguard"
 	"campus/runner/internal/packaging"
 	"campus/runner/internal/session"
@@ -141,8 +142,7 @@ func (r *Runner) RunAssignment(ctx context.Context, a client.Assignment) (Result
 				return
 			case <-heartbeat.C:
 				sent := time.Now()
-				var renewal client.Renewal
-				e := r.Client.Do(runCtx, "POST", "/attempts/"+a.AttemptID+"/renew", a.Fence, &renewal, "")
+				renewal, e := r.requestLease(runCtx, a, "renew")
 				received := time.Now()
 				if e != nil {
 					if client.Terminal(e) {
@@ -151,17 +151,9 @@ func (r *Runner) RunAssignment(ctx context.Context, a client.Assignment) (Result
 					}
 					continue
 				}
-				if renewal.Control == "stop" || renewal.Control == "cancel" {
-					fail(errors.New("coordinator stopped attempt"))
-					return
-				}
-				if renewal.Control == "drain" {
-					if e := session.Control(r.StateDir, "drain"); e != nil {
-						fail(e)
-						return
-					}
-				}
-				if e = lease.Renew(renewal.LeaseRemainingMS, renewal.TaskRemainingMS, received.Sub(sent), received); e != nil {
+				// v1 renews only the lease. Lease.Renew retains the earlier local
+				// hard deadline; the original relative task bound cannot extend it.
+				if e = lease.Renew(renewal.LeaseRemainingMs, a.TaskRemainingMS, received.Sub(sent), received); e != nil {
 					fail(e)
 					return
 				}
@@ -315,13 +307,15 @@ func (r *Runner) RunAssignment(ctx context.Context, a client.Assignment) (Result
 	ready.Stop()
 	tick.Stop()
 	logs := telemetry.NewLogBuffer(4<<20, []string{r.Client.Credential, a.LeaseToken})
+	logSink := newAttemptLogSender(r.Client, a.Fence)
 	observeCtx, stopObserve := context.WithCancel(runCtx)
 	defer stopObserve()
 	var observe sync.WaitGroup
 	var metricSequence atomic.Int64
+	metricSink := newAttemptTelemetrySender(r.Client, a.Fence)
 	if len(a.ResourceLimits.GPUIDs) > 0 {
 		observe.Add(1)
-		go func() { defer observe.Done(); r.gpuMetrics(observeCtx, a, &metricSequence, fail) }()
+		go func() { defer observe.Done(); r.gpuMetrics(observeCtx, a, metricSink, fail) }()
 	}
 	observe.Add(1)
 	go func() { defer observe.Done(); r.runtime().Logs(observeCtx, name, logs) }()
@@ -342,19 +336,19 @@ func (r *Runner) RunAssignment(ctx context.Context, a client.Assignment) (Result
 				stats, e := r.runtime().Stats(observeCtx, name)
 				if e == nil {
 					s := telemetry.NewSample(sequence, "attempt/container", window, end, stats)
-					if e = r.Client.Do(observeCtx, "POST", "/attempts/"+a.AttemptID+"/telemetry", map[string]any{"attempt_id": a.AttemptID, "generation": a.Generation, "lease_token": a.LeaseToken, "sample": s}, nil, ""); client.Terminal(e) {
+					if e = metricSink.Send(observeCtx, s, "compute", float64(a.ResourceLimits.CPUMillis)/1000); client.Terminal(e) {
 						fail(e)
 						return
 					}
 				}
 				window = end
 				if b := logs.Drain(); len(b) > 0 {
-					if e = r.Client.Do(observeCtx, "POST", "/attempts/"+a.AttemptID+"/logs", map[string]any{"attempt_id": a.AttemptID, "generation": a.Generation, "lease_token": a.LeaseToken, "sequence": sequence, "text": string(b), "dropped_bytes": logs.Dropped()}, nil, ""); client.Terminal(e) {
+					if e = logSink.Send(observeCtx, b); client.Terminal(e) {
 						fail(e)
 						return
 					}
 				}
-				if e = r.publishCheckpoints(observeCtx, a, p.Export, published); client.Terminal(e) {
+				if e = r.publishCheckpoints(observeCtx, a, p.Export, published); e != nil {
 					fail(e)
 					return
 				}
@@ -412,16 +406,30 @@ func (r *Runner) RunAssignment(ctx context.Context, a client.Assignment) (Result
 		result.Files = append(result.Files, artifact)
 	}
 	if b := logs.Bytes(); len(b) > 0 {
-		r.Client.Do(runCtx, "POST", "/attempts/"+a.AttemptID+"/logs", map[string]any{"attempt_id": a.AttemptID, "generation": a.Generation, "lease_token": a.LeaseToken, "sequence": time.Now().UnixMilli(), "text": string(b), "dropped_bytes": logs.Dropped()}, nil, "")
+		if e = logSink.Send(runCtx, b); client.Terminal(e) {
+			return result, e
+		}
 	}
 	result.OverheadDurationMS = time.Since(start).Milliseconds() - result.ComputeDurationMS
-	if _, e = r.Client.Complete(runCtx, a.Fence, result); e != nil {
+	wireResult := generated.ResultManifest{Outputs: make([]generated.OutputRef, 0, len(result.Files)), ComputeMs: &result.ComputeDurationMS, ItemIDs: append([]string{}, a.ItemIDs...)}
+	for _, artifact := range result.Files {
+		wireResult.Outputs = append(wireResult.Outputs, generated.OutputRef{Path: artifact.Path, ArtifactID: artifact.ArtifactID})
+	}
+	if _, e = r.Client.Complete(runCtx, a.Fence, wireResult); e != nil {
 		return result, e
 	}
 	return result, nil
 }
 
 func (r *Runner) publishCheckpoints(ctx context.Context, a client.Assignment, export string, published map[string]bool) error {
+	// Missing means unsent, true means acknowledged, and false means an unknown
+	// acknowledgement. Never issue another mutation after that last state: v1
+	// has no checkpoint pointer/status resource or idempotency guarantee.
+	for _, acknowledged := range published {
+		if !acknowledged {
+			return errCheckpointPublicationUnknown
+		}
+	}
 	entries, e := os.ReadDir(filepath.Join(export, "checkpoints"))
 	if os.IsNotExist(e) {
 		return nil
@@ -440,10 +448,8 @@ func (r *Runner) publishCheckpoints(ctx context.Context, a client.Assignment, ex
 		if _, e = os.Stat(filepath.Join(root, "READY")); e != nil {
 			continue
 		}
-		var manifest struct {
-			Binding map[string]string `json:"binding"`
-		}
-		if e = readBoundedJSON(filepath.Join(root, "manifest.json"), &manifest); e != nil {
+		compatibility, e := checkpointCompatibility(root)
+		if e != nil {
 			return e
 		}
 		zipPath := filepath.Join(export, "checkpoint-"+entry.Name()+".zip")
@@ -451,7 +457,7 @@ func (r *Runner) publishCheckpoints(ctx context.Context, a client.Assignment, ex
 		if e != nil {
 			return e
 		}
-		m, e := packaging.PackageProject(root, packaging.Rules{MaxFiles: 10000, MaxBytes: a.ResourceLimits.CheckpointBytes}, f)
+		_, e = packaging.PackageProject(root, packaging.Rules{MaxFiles: 10000, MaxBytes: a.ResourceLimits.CheckpointBytes}, f)
 		closeErr := f.Close()
 		if e != nil {
 			return e
@@ -459,13 +465,18 @@ func (r *Runner) publishCheckpoints(ctx context.Context, a client.Assignment, ex
 		if closeErr != nil {
 			return closeErr
 		}
-		artifact, e := artifacts.Upload(ctx, r.Client, zipPath, a.Fence)
+		artifact, e := artifacts.UploadAs(ctx, r.Client, zipPath, a.Fence, "checkpoint")
 		if e != nil {
 			return e
 		}
-		body := map[string]any{"attempt_id": a.AttemptID, "generation": a.Generation, "lease_token": a.LeaseToken, "artifact": artifact, "binding": manifest.Binding, "manifest_digest": m.Digest}
-		if e = r.Client.Do(ctx, "POST", "/attempts/"+a.AttemptID+"/checkpoints", body, nil, "checkpoint:"+a.AttemptID+":"+m.Digest); e != nil {
-			return e
+		body := generated.CheckpointPublish{Generation: a.Generation, LeaseToken: a.LeaseToken, ArtifactID: artifact.ArtifactID, CompatibilityDigest: compatibility, Sequence: int64(len(published)) + 1}
+		published[entry.Name()] = false
+		var acknowledged generated.Artifact
+		if e = r.Client.DoOnce(ctx, "POST", "/attempts/"+a.AttemptID+"/checkpoints", body, &acknowledged, ""); e != nil {
+			return errors.Join(errCheckpointPublicationUnknown, e)
+		}
+		if acknowledged.ID != artifact.ArtifactID || acknowledged.SHA256 != artifact.Digest || acknowledged.SizeBytes != artifact.SizeBytes || acknowledged.Name != artifact.Path || acknowledged.MediaType != artifact.MediaType {
+			return errors.Join(errCheckpointPublicationUnknown, errors.New("checkpoint artifact acknowledgement mismatch"))
 		}
 		published[entry.Name()] = true
 		os.Remove(zipPath)

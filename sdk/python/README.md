@@ -1,16 +1,16 @@
 # Campus Python SDK
 
-Python 3.11+; runtime dependencies are the Python standard library only.
+Python 3.11+. The ordinary client and checkpoint helpers use only the Python
+standard library. Install the optional exact foundation DTOs when needed:
 
 ```console
 python -m pip install ./sdk/python
+python -m pip install "./sdk/python[dto]"
 ```
 
 ```python
 import os
 import uuid
-import json
-from pathlib import Path
 from campus import Client, NeedsInputError, SubmissionUnknownError
 
 client = Client(os.environ["CAMPUS_ENDPOINT"], os.environ["CAMPUS_TOKEN"])
@@ -19,15 +19,18 @@ submission_key = uuid.uuid4().hex  # Persist before submission for recovery.
 try:
     try:
         handle = client.submit(
-            {"prompt": "Run the selected training project on the selected dataset"},
+            {"prompt": "Run the selected project", "accelerator": "cpu"},
             idempotency_key=submission_key,
             timeout=120,
         )
     except NeedsInputError as error:
-        print(error.questions)
-        # Read explicit owner-authored answers; an absent file stops here.
-        answers = json.loads(Path("answers.json").read_text(encoding="utf-8"))["answers"]
-        client.answer_preview(error.preview_id, error.plan_revision, answers)
+        print(error.questions)  # One {question_id, prompt} object.
+        # Obtain one explicit, owner-authored text answer before continuing.
+        answer = input("Answer: ")
+        client.answer_preview(
+            error.preview_id, error.plan_revision,
+            [{"question_id": error.questions[0]["question_id"], "value": answer}],
+        )
         handle = client.submit_preview(
             error.preview_id, idempotency_key=submission_key, timeout=120,
         )
@@ -36,241 +39,156 @@ except SubmissionUnknownError as error:
         error.preview_id, error.plan_revision, error.idempotency_key,
     )
 
-print(handle.job_id)  # Save this ID; observation may be disconnected.
+print(handle.job_id)  # Persist this ID to reconnect.
 job = handle.wait(timeout=3600)
-directory = handle.download("./training-results")  # Must be a new directory.
+directory = handle.download("./results")  # Must be a new directory.
 ```
 
-The request dictionary is the coordinator's preview input, passed as JSON
-without invented answers or additional execution settings. The example prompt
-does not upload a project or dataset; those inputs must already be selected in
-the coordinator request according to its eventual generated schema.
+`submit` accepts the published `PreviewRequest` dictionary. Its fields are
+`prompt`, `recipe_id`, `project_artifact_id`, `inputs`, `selected_files`,
+`share_with_llm`, `accelerator`, and `prepared_plan`; unknown top-level fields
+fail before network I/O. A prompt alone does not upload local files. Projects
+and inputs must reference artifacts already uploaded through the coordinator.
+The SDK has no upload method. The server enforces the complete request schema;
+for local schema validation, use the optional generated model:
 
-The canonical owner-authored `answers.json` format is shared with
-`campus run --resume --answers answers.json`:
-
-```json
-{"answers":[{"question_id":"dataset","value":"selected-dataset-id"},{"question_id":"epochs","value":3}]}
+```python
+from campus.generated.api import PreviewRequest
+request = PreviewRequest(prompt="Run selected project", accelerator="cpu")
+handle = client.submit(request.model_dump(mode="json", exclude_none=True))
 ```
 
-Use the question IDs and values the owner actually selected. `value` is a JSON
-value, including an explicit `null` when that is the owner's choice. The SDK
-accepts the `answers` list from this document; it never chooses answers itself.
-More questions raise another `NeedsInputError` and require another explicit
-answer batch. No additional preview is created during refinement.
+The generated module is a self-contained copy produced by foundation's own
+`contracts/generate.py`; importing `campus` never imports Pydantic or server
+code. The `dto` extra pins Pydantic 2.14.3, matching foundation's lockfile.
 
-Reconnect by constructing a new `Client` and calling `wait(job_id)`,
-`get_job(job_id)`, `logs(job_id, cursor=...)`, `cancel(job_id)`, or
-`download(job_id, destination)`. These operations never create a preview or run.
-`JobHandle` offers the same observation/download methods for its existing job.
-`wait` returns the final job object, raises `JobFailedError` or
-`JobCancelledError`, or raises `TimeoutError` without cancelling the job.
-`cancel` explicitly requests cancellation; use `wait`/`get_job` to observe it.
+## Published contract
 
-`logs` returns one bounded page. Retain its `next_cursor` and pass that opaque
-string unchanged to the next call; `None` means the server has no next cursor.
-It is not an automatic infinite log follower.
-Canonical records are objects containing `text`; metadata such as `sequence`
-is preserved. For compatibility, the SDK converts old `message` objects and
-plain strings to `text` records, dropping the old `message` alias. Malformed
-records raise `ProtocolError`.
+This SDK targets foundation commit
+`5a5bd297dfc0c9fd704e408a929d56643042c4ba`. Its exact OpenAPI document and
+scenario fixtures are stored in `tests/fixtures/foundation`, with original
+SHA-256 hashes in `SOURCE.json`. The generated module records the same source.
+The upstream production application was absent from that commit. Verification
+against these published fixtures does not establish deployed-server readiness.
 
-## Provisional wire contract and integration gate
+All routes begin with `/api/v1`. Constructor endpoints may be the origin or
+end in `/api/v1`; other prefixes, credentials in URLs, queries, and fragments
+are rejected. Requests use `Authorization: Bearer <credential>` when supplied.
+Bearer authentication requires neither browser CSRF nor node session headers.
 
-**Foundation/server integration is still required.** This client uses the
-approved plan's route table and runner-owned DTOs; it has not been tested against
-a deployed coordinator or generated foundation contracts. All routes below
-start with `/api/v1`. Constructor endpoints may be the origin or end in
-`/api/v1`; other prefixes, credentials in the URL, query strings, and fragments
-are rejected.
+A lazy cached `GET /protocol` checks numeric `api_version`,
+`min_worker_version`, and `max_worker_version`, each equal to `1`. The published
+schema defaults these fields to `1`, so the client accepts their omission in
+foundation's fixtures. Positive `lease_ms` and `heartbeat_interval_ms` and
+nonnegative `long_poll_ms` are required. Old semantic runner-version fields
+are rejected. The User-Agent is `campus/0.1.0`.
 
-Before any API operation, a lazy, cached `GET /protocol` must return:
+| Operation | Request and response |
+| --- | --- |
+| Create preview | `POST /job-previews` with `PreviewRequest`; `202 Preview` uses UUID `id` |
+| Observe preview | `GET /job-previews/{id}`; `Preview` contains `state`, positive integer `plan_revision`, optional `question`, `plan`, and `plan_digest` |
+| Answer | `POST /job-previews/{id}/answers` with `{question_id,plan_revision,answer}`; `202 Preview` |
+| Run | `POST /jobs` with `{preview_id,plan_revision}` and `Idempotency-Key`; `201 Job` uses UUID `id` |
+| Observe | `GET /jobs/{id}` returns `Job` |
+| Logs | `GET /jobs/{id}/logs?cursor=0` returns `{entries,cursor,truncated}` |
+| Cancel | `POST /jobs/{id}/cancel` with no body returns `Job` |
+| Download | `GET /artifacts/{id}/content` returns immutable bytes; Range is supported |
 
-```json
-{"api_version":"1","min_runner_version":"0.1.0","max_runner_version":"0.1.99"}
-```
+Preview interim states are `inspecting`, `planning`, and `validating`.
+`failed` and `cancelled` raise `PreviewError`. `needs_input`, or an explicit
+question in a ready preview or its plan, raises `NeedsInputError`; the client
+never invents an answer. Unknown states raise `ProtocolError` immediately.
 
-The SDK identifies as `campus/0.1.0`. It requires API version `"1"` and an
-inclusive compatible runner version range. Requests use `Authorization: Bearer
-<credential>` when a credential is supplied. The SDK does not log credentials,
-and removes its credential from exposed API error messages.
+`answer_preview` preserves the public one-entry `[{question_id,value}]`
+convenience format while emitting the exact singular foundation request.
+`value` must be a string of 1–2000 characters, `question_id` a valid foundation
+identifier of at most 64 characters, and the revision a positive integer.
+Multiple answers, JSON numbers/objects/null, and automatic string coercion are
+rejected. Passing an answer `idempotency_key` is rejected because this contract
+defines no idempotency guarantee for that operation. `submit_preview` observes
+the same preview and runs its current ready revision; it creates no preview.
 
-Submission is exactly this sequence:
+Only the job creation operation declares idempotency. Its key is 1–128
+printable ASCII characters. After a transient or lost job ACK, retries replay
+only the exact original preview/revision/key. The SDK performs no filtered
+job-list lookup: foundation's `GET /jobs` has no key filter or idempotency echo.
+Exhaustion or a malformed successful ACK raises `SubmissionUnknownError`
+with the original coordinates. `resume_submission` replays those same
+coordinates, without planning again or advancing the revision. The server
+must enforce key/body idempotency for that replay to be safe.
 
-1. `POST /job-previews`, with the caller's request JSON and a stable
-   `Idempotency-Key`, returns `202 {"preview_id":"preview-1"}`.
-2. `GET /job-previews/preview-1` is polled until a terminal planning state:
-   `{"preview_id":"preview-1","state":"ready","plan_revision":3}`.
-   `plan_revision` is a nonnegative integer or a nonempty opaque string.
-   Recognized interim states are `pending`, `queued`, `analyzing`, `planning`,
-   and `preparing`; they are observed without executing anything.
-3. `needs_input`, or a nonempty `questions` array even in a `ready` response,
-   raises `NeedsInputError(preview_id, plan_revision, questions)`. No answer
-   endpoint is called automatically. `failed`, `cancelled`, `expired`, and
-   `rejected` immediately raise `PreviewError`; no run is submitted. A terminal
-   response may omit `plan_revision`, in which case the exception's revision
-   is `None`. Empty, unknown, or malformed states raise `ProtocolError` after
-   that response, even when no observation timeout was supplied.
-4. A ready preview produces `POST /jobs` with exactly
-   `{"preview_id":"preview-1","plan_revision":3}` and the submission's
-   `Idempotency-Key`. A successful response must contain `{"job_id":"job-1"}`;
-   it normally also contains `"state":"queued"`.
+Preview creation, answer mutation, and cancellation make one attempt because
+foundation does not declare replay semantics for them. After an uncertain
+preview or answer ACK, inspect coordinator state before making another
+mutation; the SDK cannot safely recover a lost preview creation identity.
+These missing replay guarantees are contract limits, not silently assumed
+capabilities.
 
-To continue a needs-input preview, call
-`answer_preview(preview_id, plan_revision, answers, idempotency_key=None)`.
-It posts exactly this body to `POST /job-previews/preview-1/answers`:
+Reconnect with `get_job`, `wait`, `logs`, `cancel`, or `download` using a
+persisted job UUID; observation never creates another preview or job.
+`wait` returns a succeeded job, raises `JobFailedError` for `failed` or
+`partial` (available as `error.state`), raises `JobCancelledError` for
+`cancelled`, or raises `TimeoutError` without cancellation. Partial jobs never
+publish an apparently complete download directory.
 
-```json
-{"plan_revision":3,"answers":[{"question_id":"dataset","value":"selected-dataset-id"}]}
-```
+Logs use a nonnegative signed 64-bit integer cursor. Retain the returned
+`cursor` for the next request; the server chooses the page size. Each entry
+preserves its `cursor`, `attempt_id`, `sequence`, `occurred_at`, `text`, and
+`gap`; `truncated` signals a gap in retained logs. Legacy `records`,
+`next_cursor`, string records, and `message` aliases are not accepted.
 
-The answer list must have 1–100 entries, each containing exactly `question_id`
-and `value`, with unique API question IDs (1–128 ASCII letters/digits/dot/dash/
-underscore, starting with a letter or digit). The entire encoded POST body is
-limited to 64 KiB, or the configured JSON limit if lower, and 16 levels of
-nesting, counting its root at depth 0. Values must be finite JSON values with
-string object keys. Invalid inputs fail before network I/O. The method returns
-the answer receipt, which may be `{}`/`204` or contain a matching `preview_id`
-and optional updated planning state/revision. It does not run a job.
-
-Then call `submit_preview(preview_id, idempotency_key=..., timeout=...)` to poll
-that same preview and submit its **current ready revision**. It never creates
-another preview. For example, answers against revision 3 may lead to planning
-and then ready revision 4; only revision 4 is sent in the subsequent job POST.
-
-The server **must** persist idempotency for preview creation, answer mutation,
-and job creation: identical key/body replays return the original identity or
-receipt; a different body with the same key must conflict. Answer mutations
-must also enforce `plan_revision` and reject stale answers or edits after job
-submission. These are required even when an acknowledgement is lost.
-Answer retries retain the exact canonical body and key. With no caller key,
-the SDK derives `answers:<sha256>` from the preview ID and canonical answer
-body; replaying the exact same batch/revision after reconnect derives the same
-key. A caller may supply and persist an explicit key instead. After an unknown
-answer ACK, replay only the original batch/revision/key; do not invent a new
-batch or silently advance its revision.
-
-The SDK reuses the original preview/revision/body/key for every run retry.
-It never creates a new preview while retrying or resuming a run.
-
-After an uncertain run ACK, the SDK optionally reconciles through
-`GET /jobs?idempotency_key=<encoded-key>`. The provisional receipt shape is:
-
-```json
-{"jobs":[{"job_id":"job-1","state":"queued","idempotency_key":"original-key"}]}
-```
-
-Only a receipt that echoes the exact key is accepted; an unfiltered job list
-cannot attach an unrelated job. Unsupported lookup responses (`400`, `404`,
-`405`, `501`), malformed/unknown lookup DTOs, or transient lookup errors fall
-back to the exact original idempotent POST. Thus this optional query is not a
-prerequisite when the server implements normal POST idempotency. HTTP 401/403
-and fencing errors still stop immediately. Exhaustion raises
-`SubmissionUnknownError` containing the preview ID, revision, and original key.
-Persist these and call `resume_submission` explicitly. That method first
-reconciles and then, if needed, replays only that same run request. It does not
-poll planning, answer questions, or refresh the frozen revision. Use
-`submit_preview` for a preview that has not yet been submitted, including one
-just refined with explicit answers; use `resume_submission` for an unknown job
-POST acknowledgement.
-
-Remaining response contracts:
-
-| Operation | Request | Response |
-| --- | --- | --- |
-| Observe | `GET /jobs/job-1` | `{"job_id":"job-1","state":"running","artifacts":[]}`; terminal states are `succeeded`, `failed`, `cancelled` |
-| Logs | `GET /jobs/job-1/logs?limit=1000&cursor=<opaque>` | `{"records":[{"text":"training"}],"next_cursor":"opaque-or-null"}`; `next_cursor` may be JSON `null` |
-| Cancel | `POST /jobs/job-1/cancel` with `{}` and `Idempotency-Key: cancel:job-1` | `{"job_id":"job-1","state":"cancelling"}` or `204` |
-| Download | `GET /artifacts/artifact-1/content`, optionally `Range: bytes=N-` | Raw immutable bytes, `200` or a matching `206`/`Content-Range` |
-
-A succeeded job must contain every downloadable output in `artifacts`:
-
-```json
-{
-  "job_id":"job-1",
-  "state":"succeeded",
-  "artifacts":[{
-    "artifact_id":"artifact-1",
-    "digest":"a2d42c4aa884e21216cbb8da4c7ba2fcf9b6033b2331666e666145c24caf7a38",
-    "size_bytes":13,
-    "path":"model.pt"
-  }]
-}
-```
-
-`digest` is a lowercase, unprefixed SHA-256 hex string. This mirrors
-`runner/internal/client/wire.go`'s `Artifact` fields. Before foundation
-integration, reconcile request schemas, the preview `state`/revision/questions
-DTO, job/terminal-state DTOs, log pagination, cancellation receipts, artifact
-authorization/Range behavior, and optional idempotency lookup against generated
-contracts. The SDK currently does not implement project upload; explicit
-answer/refinement entry and same-preview continuation are implemented above.
+A job's downloadable artifacts use exactly `id`, `name`, `size_bytes`,
+`sha256`, and `media_type`. `name` supplies the relative output path and
+`sha256` is lowercase unprefixed SHA-256. Wire aliases from the old provisional
+contract are not accepted.
 
 ## Transfer and retry policy
 
-HTTPS uses the system's normal certificate verification. HTTP is accepted only
-for loopback development/test endpoints. Every redirect is refused, including
-artifact redirects, so bearer credentials cannot follow a different origin.
+HTTPS uses normal system certificate verification. HTTP is accepted only on
+loopback. All redirects are refused, including artifact redirects, to prevent
+forwarding bearer credentials. Exposed API error messages redact credentials.
 
 Defaults are 3 attempts, 40 seconds per socket operation, exponential retry
-backoff starting at 0.2 seconds plus up to 50% random jitter, and a 0.5-second
-poll interval. Only transient network errors and HTTP
-`408/425/429/500/502/503/504` are retried. Certificate failures, malformed JSON,
-other HTTP failures, HTTP 401/403, and
-`STALE_ATTEMPT/LEASE_EXPIRED/SESSION_REPLACED` are terminal. A malformed
-successful run ACK is reconciled but is never blindly retried as a transient
-response. JSON objects are bounded to 8 MiB and reject duplicate keys,
-non-finite numbers, and nesting beyond 64 levels.
+backoff starting at 0.2 seconds plus up to 50% jitter, and 0.5 seconds between
+polls. Safe observations and exact idempotent job replays retry transient
+network failures and HTTP `408/425/429/500/502/503/504`. Certificate failures,
+HTTP 401/403, and `STALE_ATTEMPT/LEASE_EXPIRED/SESSION_REPLACED` stop immediately.
+JSON is bounded to 8 MiB and rejects duplicate keys, non-finite numbers, and
+nesting beyond 64 levels. Preview and job observation timeouts bound socket
+inactivity and are checked after bounded reads; they never issue cancellation.
 
-`submit(..., timeout=...)` and `submit_preview(..., timeout=...)` bound preview observation;
-`wait(..., timeout=...)` bounds job observation and reduces the socket timeout
-to the remaining observation budget. These timeouts never issue cancellation.
-Socket timeouts are inactivity limits; a slowly trickling HTTP body is still
-subject to the response byte limit and is checked against the observation
-deadline when the bounded response read completes.
-
-Downloads default to at most 1000 artifact files, 1 GiB total, and 1 GiB per
-artifact. Change these explicitly with `max_download_files`,
-`max_download_bytes`, and `max_artifact_bytes` on the constructor. Negative or
-noninteger sizes, invalid identities/digests, and a manifest exceeding bounds
+Downloads default to at most 1000 files, 1 GiB total, and 1 GiB per artifact.
+Override `max_download_files`, `max_download_bytes`, and `max_artifact_bytes`
+explicitly. Invalid identity/digest/size, unsafe paths, and quota violations
 are rejected before artifact bytes are fetched.
 
 Paths must be canonical relative POSIX paths: no traversal, absolute paths,
-backslashes, streams, control characters, Windows device names, trailing dots
-or spaces, or names that collide across case/Unicode normalization. Paths are
-limited to 4096 UTF-8 bytes, 255 bytes per component, and 64 components.
-File/directory prefix collisions, symlink/reparse ancestors, and linked staged
-files are rejected.
+backslashes, streams, controls, Windows device names, trailing dots/spaces,
+case/Unicode collisions, file/directory collisions, or symlink/reparse
+ancestors. Limits are 4096 UTF-8 bytes per path, 255 per component, and 64
+components. Transfers stream to private sibling staging. Interrupted transfers
+resume with Range; `206` must match the expected offset and full size. A `200`
+response restarts that file. Content encodings are forbidden. Sizes and SHA-256
+are checked, then the entire staging tree is verified before atomic no-replace
+publication. Failures remove staging and leave the destination unpublished.
+Staging is not persisted across calls. The destination parent should be
+controlled by the caller; checks do not isolate a hostile same-user process
+mutating the directory tree concurrently.
 
-Each artifact is streamed to a private sibling staging directory. Interrupted
-transfers resume with `Range`; a resumed `206` must match the expected offset
-and complete size. A server that responds with `200` restarts that file.
-Encoding transformations are forbidden. Complete file sizes and SHA-256 digests
-are checked, and all staged outputs are verified again before publication.
-Only then is the whole new destination directory published using an atomic,
-no-replace OS operation. A concurrently created destination is preserved.
-Windows, Linux with `renameat2`, and macOS with `renamex_np` are supported by
-that publication path; other platforms fail closed.
+## Verification and regeneration
 
-Failure removes staging and leaves the requested destination unpublished.
-Range resumption occurs within the active download call; partial staging is not
-retained for another process/call. The destination parent should be controlled
-by the caller: these path checks do not claim to isolate an attacker running as
-the same OS user and concurrently mutating the caller's directory tree.
-
-## Verification
+The SDK suite installs only its lightweight test/DTO dependencies, without
+workload, PyTorch, or server dependencies:
 
 ```console
-uv run --project workloads --extra cpu pytest sdk/python/tests -q
-uv run --project workloads --extra cpu pytest workloads/tests sdk/python/tests -q
+uv run --project sdk/python --no-sync --with pytest==8.4.2 --with pydantic==2.14.3 pytest sdk/python/tests -q
+python sdk/python/tools/sync_foundation.py --source PATH_TO_PINNED_FOUNDATION_CHECKOUT
 ```
 
-Tests use real local `ThreadingHTTPServer` requests and real filesystem output.
-They cover preview/run payloads, same-preview answer/refinement and revised
-ready submission, terminal/unknown preview states, reconnect observation, explicit questions,
-lost ACKs, stable keys, terminal errors, bounded retries/JSON, opaque cursors,
-cancellation, partial transfers, SHA-256 failures, traversal/alias/quota checks,
-symlink rejection, and atomic publication. They do not substitute for a real
-coordinator run or cross-platform release testing. The HTTP fixture suppresses
-only expected broken-pipe/connection-reset peer disconnects; all other handler
-failures, including test assertions, are recorded and fail fixture teardown.
+The regeneration tool verifies the recorded upstream hashes before running
+foundation's generator and writes only within `sdk/python`. Tests exercise
+real local HTTP sockets and filesystem publication, including exact published
+fixtures/DTOs, request boundaries, unknown ACKs, bounded retries, checksums,
+Range recovery, hostile paths, quotas, and fixture handler error reporting.
+Actual coordinator integration and Mac/second-device execution remain release
+gates.

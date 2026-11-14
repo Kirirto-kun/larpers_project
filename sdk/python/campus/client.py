@@ -1,7 +1,7 @@
-"""Synchronous, standard-library client for the provisional Campus v1 API.
+"""Synchronous, standard-library client for the published Campus v1 contract.
 
-Wire DTOs remain runner-owned until foundation publishes generated contracts.
-See the accompanying README for the exact payloads and integration gate.
+Optional exact foundation DTOs live in campus.generated.api. The runtime does
+not import Pydantic or the coordinator application.
 """
 from __future__ import annotations
 
@@ -32,12 +32,14 @@ from urllib.request import HTTPRedirectHandler, Request, build_opener
 import uuid
 
 VERSION = "0.1.0"
-_ID = re.compile(r"[A-Za-z0-9][A-Za-z0-9._-]{0,127}\Z")
+_ID = re.compile(r"[a-fA-F0-9]{8}(?:-[a-fA-F0-9]{4}){3}-[a-fA-F0-9]{12}\Z")
+_IDENTIFIER = re.compile(r"[A-Za-z0-9][A-Za-z0-9._-]{0,63}\Z")
 _DIGEST = re.compile(r"[a-f0-9]{64}\Z")
 _TRANSIENT_STATUS = {408, 425, 429, 500, 502, 503, 504}
 _FENCE_CODES = {"STALE_ATTEMPT", "LEASE_EXPIRED", "SESSION_REPLACED"}
-_PREVIEW_INTERIM = {"pending", "queued", "analyzing", "planning", "preparing"}
-_PREVIEW_TERMINAL = {"failed", "cancelled", "expired", "rejected"}
+_PREVIEW_INTERIM = {"inspecting", "planning", "validating"}
+_PREVIEW_TERMINAL = {"failed", "cancelled"}
+_JOB_STATES = {"queued", "running", "waiting_for_capacity", "succeeded", "partial", "failed", "cancelled"}
 
 
 class CampusError(Exception):
@@ -75,7 +77,7 @@ class StaleAttemptError(APIError):
 
 
 class PreviewError(CampusError):
-    def __init__(self, preview_id: str, plan_revision: int | str | None, state: str):
+    def __init__(self, preview_id: str, plan_revision: int | None, state: str):
         self.preview_id = preview_id
         self.plan_revision = plan_revision
         self.state = state
@@ -83,7 +85,7 @@ class PreviewError(CampusError):
 
 
 class NeedsInputError(PreviewError):
-    def __init__(self, preview_id: str, plan_revision: int | str, questions: list):
+    def __init__(self, preview_id: str, plan_revision: int, questions: list):
         self.questions = questions
         super().__init__(preview_id, plan_revision, "needs_input")
 
@@ -91,7 +93,7 @@ class NeedsInputError(PreviewError):
 class SubmissionUnknownError(CampusError):
     """A run may have committed; resume using these coordinates and the same key."""
 
-    def __init__(self, preview_id: str, plan_revision: int | str, idempotency_key: str):
+    def __init__(self, preview_id: str, plan_revision: int, idempotency_key: str):
         self.preview_id = preview_id
         self.plan_revision = plan_revision
         self.idempotency_key = idempotency_key
@@ -99,9 +101,10 @@ class SubmissionUnknownError(CampusError):
 
 
 class JobFailedError(CampusError):
-    def __init__(self, job_id: str):
+    def __init__(self, job_id: str, state: str = "failed"):
         self.job_id = job_id
-        super().__init__(f"job {job_id} failed")
+        self.state = state
+        super().__init__(f"job {job_id} is {state}")
 
 
 class JobCancelledError(CampusError):
@@ -126,7 +129,7 @@ class UnsafePathError(DownloadError):
 class JobHandle:
     job_id: str
     preview_id: str
-    plan_revision: int | str
+    plan_revision: int
     idempotency_key: str
     _client: Client = field(repr=False, compare=False)
 
@@ -155,18 +158,17 @@ def _identity(value, *, server: bool = False) -> str:
     return value
 
 
-def _revision(value) -> int | str:
-    if type(value) is int and value >= 0:
+def _revision(value, *, server: bool = False) -> int:
+    if type(value) is int and value > 0:
         return value
-    if isinstance(value, str) and 0 < len(value) <= 256 and all(ord(c) >= 32 for c in value):
-        return value
-    raise ProtocolError("invalid preview plan_revision")
+    error = ProtocolError if server else ValueError
+    raise error("plan_revision must be a positive integer")
 
 
 def _key(value: str | None) -> str:
     value = uuid.uuid4().hex if value is None else value
-    if not isinstance(value, str) or not re.fullmatch(r"[!-~]{1,200}", value):
-        raise ValueError("idempotency_key must contain 1 to 200 visible ASCII characters")
+    if not isinstance(value, str) or not re.fullmatch(r"[ -~]{1,128}", value):
+        raise ValueError("idempotency_key must contain 1 to 128 printable ASCII characters")
     return value
 
 
@@ -394,15 +396,18 @@ class Client:
             if self._protocol is None:
                 protocol = self._json("GET", "/protocol", deadline=deadline)
 
-                def version(value):
-                    if not isinstance(value, str) or not re.fullmatch(r"(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)", value):
+                # These three fields have literal defaults in the foundation
+                # Protocol DTO; its published fixtures legitimately omit them.
+                for name in ("api_version", "min_worker_version", "max_worker_version"):
+                    value = protocol.get(name, 1)
+                    if type(value) is not int or value != 1:
                         raise ProtocolError("incompatible coordinator protocol version")
-                    return tuple(map(int, value.split(".")))
-
-                low = version(protocol.get("min_runner_version"))
-                high = version(protocol.get("max_runner_version"))
-                if protocol.get("api_version") != "1" or not low <= version(VERSION) <= high:
+                if any(name in protocol for name in ("min_runner_version", "max_runner_version")):
                     raise ProtocolError("incompatible coordinator protocol version")
+                for name in ("lease_ms", "heartbeat_interval_ms", "long_poll_ms"):
+                    value = protocol.get(name)
+                    if type(value) is not int or value < (0 if name == "long_poll_ms" else 1):
+                        raise ProtocolError("invalid coordinator protocol timing")
                 self._protocol = protocol
             return dict(self._protocol)
 
@@ -414,65 +419,50 @@ class Client:
         """
         if not isinstance(request, dict):
             raise ValueError("request must be a JSON object")
+        allowed = {"prompt", "recipe_id", "project_artifact_id", "inputs", "selected_files", "share_with_llm", "accelerator", "prepared_plan"}
+        if request.keys() - allowed:
+            raise ValueError("request contains fields outside the foundation PreviewRequest contract")
         key = _key(idempotency_key)
         deadline = _deadline(timeout)
         self.handshake(timeout=_remaining_timeout(deadline))
-        preview = self._json("POST", "/job-previews", request, key, deadline=deadline)
-        preview_id = _identity(preview.get("preview_id"), server=True)
+        # Foundation defines idempotency only for POST /jobs. Repeating a
+        # preview creation after a lost ACK could create an unrelated preview.
+        preview = self._json("POST", "/job-previews", request, attempts=1, deadline=deadline)
+        preview_id = _identity(preview.get("id"), server=True)
         return self._submit_preview(preview_id, key, deadline)
 
-    def answer_preview(self, preview_id: str, plan_revision: int | str, answers: list[dict], *, idempotency_key: str | None = None) -> dict:
-        """Apply only the owner's explicit answers to one fenced preview.
+    def answer_preview(self, preview_id: str, plan_revision: int, answers: list[dict], *, idempotency_key: str | None = None) -> dict:
+        """Apply one owner-authored text answer to a fenced preview.
 
-        Does not submit a job. Call submit_preview afterward to observe the
-        same preview's new ready revision. Replaying the exact same batch uses
-        the same derived key unless the caller supplies a persisted key.
+        The existing one-entry answers list is a convenience API; foundation's
+        wire request is one PreviewAnswer. Its POST has no replay guarantee.
         """
         preview_id = _identity(preview_id)
         revision = _revision(plan_revision)
-        if not isinstance(answers, list) or not 1 <= len(answers) <= 100:
-            raise ValueError("answers must contain 1 to 100 explicit answers")
-        seen = set()
-        for answer in answers:
-            if not isinstance(answer, dict) or set(answer) != {"question_id", "value"}:
-                raise ValueError("each answer requires only question_id and value")
-            question_id = _identity(answer["question_id"])
-            if question_id in seen:
-                raise ValueError("duplicate answer question_id")
-            seen.add(question_id)
-        payload = {"plan_revision": revision, "answers": answers}
-        pending = [(payload, 0)]
-        while pending:
-            value, depth = pending.pop()
-            if depth > 16:
-                raise ValueError("answer JSON nesting exceeds limit")
-            if type(value) is dict:
-                if not all(isinstance(key, str) for key in value):
-                    raise ValueError("answer JSON object keys must be strings")
-                pending.extend((item, depth + 1) for item in value.values())
-            elif type(value) is list:
-                pending.extend((item, depth + 1) for item in value)
-            elif type(value) is float:
-                if not math.isfinite(value):
-                    raise ValueError("answer JSON numbers must be finite")
-            elif value is not None and type(value) not in {str, bool, int}:
-                raise ValueError("answers must contain only JSON values")
+        if not isinstance(answers, list) or len(answers) != 1:
+            raise ValueError("foundation accepts exactly one explicit text answer")
+        answer = answers[0]
+        if not isinstance(answer, dict) or set(answer) != {"question_id", "value"}:
+            raise ValueError("answer requires only question_id and value")
+        question_id, value = answer["question_id"], answer["value"]
+        if not isinstance(question_id, str) or not _IDENTIFIER.fullmatch(question_id):
+            raise ValueError("invalid question_id")
+        if not isinstance(value, str) or not 1 <= len(value) <= 2000:
+            raise ValueError("answer must contain 1 to 2000 text characters")
+        payload = {"plan_revision": revision, "question_id": question_id, "answer": value}
         try:
             raw = json.dumps(payload, ensure_ascii=False, sort_keys=True, separators=(",", ":"), allow_nan=False).encode("utf-8")
         except (ValueError, TypeError, UnicodeError):
             raise ValueError("answers must contain valid JSON values") from None
         if len(raw) > min(65536, self.max_json_bytes):
             raise ValueError("answer request exceeds 64 KiB or JSON byte limit")
-        # Freeze caller-owned mutable values before deriving a recovery key or
-        # doing network I/O. The same canonical body is used on every retry.
+        # Freeze caller-owned mutable values before doing network I/O.
         payload = json.loads(raw)
-        if idempotency_key is None:
-            identity = json.dumps({"preview_id": preview_id, **payload}, ensure_ascii=False, sort_keys=True, separators=(",", ":")).encode("utf-8")
-            idempotency_key = "answers:" + hashlib.sha256(identity).hexdigest()
-        key = _key(idempotency_key)
+        if idempotency_key is not None:
+            raise ValueError("foundation does not define idempotency for preview answers")
         self.handshake()
-        receipt = self._json("POST", "/job-previews/" + preview_id + "/answers", payload, key)
-        if receipt.get("preview_id", preview_id) != preview_id:
+        receipt = self._json("POST", "/job-previews/" + preview_id + "/answers", payload, attempts=1)
+        if receipt.get("id") != preview_id:
             raise ProtocolError("answer receipt preview identity mismatch")
         return receipt
 
@@ -492,7 +482,7 @@ class Client:
         while True:
             _check_deadline(deadline)
             preview = self._json("GET", "/job-previews/" + preview_id, deadline=deadline)
-            if preview.get("preview_id") != preview_id:
+            if preview.get("id") != preview_id:
                 raise ProtocolError("preview identity mismatch")
             state = preview.get("state")
             if not isinstance(state, str) or state not in _PREVIEW_INTERIM | _PREVIEW_TERMINAL | {"ready", "needs_input"}:
@@ -500,43 +490,36 @@ class Client:
             if state in _PREVIEW_TERMINAL:
                 revision = preview.get("plan_revision")
                 if revision is not None:
-                    revision = _revision(revision)
+                    revision = _revision(revision, server=True)
                 raise PreviewError(preview_id, revision, state)
-            questions = preview.get("questions", [])
-            if not isinstance(questions, list):
-                raise ProtocolError("invalid preview questions")
+            question = preview.get("question")
+            questions = [] if question is None else [question]
+            plan = preview.get("plan")
+            if plan is not None:
+                if not isinstance(plan, dict) or not isinstance(plan.get("questions", []), list):
+                    raise ProtocolError("invalid preview plan questions")
+                for item in plan.get("questions", []):
+                    if item not in questions:
+                        questions.append(item)
+            if len(questions) > 1:
+                raise ProtocolError("foundation permits at most one preview question")
+            for item in questions:
+                if (not isinstance(item, dict) or set(item) != {"question_id", "prompt"}
+                        or not isinstance(item["question_id"], str) or not _IDENTIFIER.fullmatch(item["question_id"])
+                        or not isinstance(item["prompt"], str) or not 1 <= len(item["prompt"]) <= 256):
+                    raise ProtocolError("invalid preview question")
             if state in {"ready", "needs_input"} or questions:
-                revision = _revision(preview.get("plan_revision"))
+                revision = _revision(preview.get("plan_revision"), server=True)
                 if state == "needs_input" or questions:
                     raise NeedsInputError(preview_id, revision, questions)
                 return self._submit_ready(preview_id, revision, key)
             self._poll_pause(deadline)
 
     def _handle(self, job, preview_id, revision, key) -> JobHandle:
-        job_id = _identity(job.get("job_id"), server=True)
+        job_id = _identity(job.get("id"), server=True)
+        if not isinstance(job.get("state"), str) or job["state"] not in _JOB_STATES:
+            raise ProtocolError("invalid job state")
         return JobHandle(job_id, preview_id, revision, key, self)
-
-    def _lookup_submission(self, preview_id, revision, key) -> JobHandle | None:
-        # This optional filtered lookup is provisional. An unsupported lookup
-        # falls back to replaying only the exact same POST/body/key.
-        try:
-            result = self._json("GET", "/jobs?" + urlencode({"idempotency_key": key}), attempts=1)
-        except ProtocolError:
-            return None
-        except (APIError, TransportError) as error:
-            if isinstance(error, (AuthenticationError, StaleAttemptError)):
-                raise
-            if error.retryable or isinstance(error, APIError) and error.status in {400, 404, 405, 501}:
-                return None
-            raise
-        jobs = result.get("jobs")
-        if not isinstance(jobs, list):
-            return None
-        # An unfiltered list or an old server must never attach an unrelated job.
-        matches = [job for job in jobs if isinstance(job, dict) and job.get("idempotency_key") == key]
-        if len(matches) > 1:
-            raise ProtocolError("ambiguous submission receipt")
-        return self._handle(matches[0], preview_id, revision, key) if matches else None
 
     def _submit_ready(self, preview_id, revision, key) -> JobHandle:
         for attempt in range(self.max_attempts):
@@ -546,29 +529,25 @@ class Client:
             except (APIError, TransportError, ProtocolError) as error:
                 if isinstance(error, (APIError, TransportError)) and not error.retryable:
                     raise
-                receipt = self._lookup_submission(preview_id, revision, key)
-                if receipt is not None:
-                    return receipt
                 if isinstance(error, ProtocolError) or attempt + 1 == self.max_attempts:
                     raise SubmissionUnknownError(preview_id, revision, key) from None
                 self._pause(attempt)
         raise AssertionError("unreachable")
 
-    def resume_submission(self, preview_id: str, plan_revision: int | str, idempotency_key: str) -> JobHandle:
+    def resume_submission(self, preview_id: str, plan_revision: int, idempotency_key: str) -> JobHandle:
         """Reconcile an unknown run ACK; never create another preview or key."""
         preview_id = _identity(preview_id)
         revision = _revision(plan_revision)
         key = _key(idempotency_key)
         self.handshake()
-        receipt = self._lookup_submission(preview_id, revision, key)
-        return receipt if receipt is not None else self._submit_ready(preview_id, revision, key)
+        return self._submit_ready(preview_id, revision, key)
 
     def get_job(self, job_id: str, *, timeout: float | None = None) -> dict:
         job_id = _identity(job_id)
         deadline = _deadline(timeout)
         self.handshake(timeout=_remaining_timeout(deadline))
         job = self._json("GET", "/jobs/" + job_id, deadline=deadline)
-        if job.get("job_id") != job_id or not isinstance(job.get("state"), str) or not job["state"]:
+        if job.get("id") != job_id or not isinstance(job.get("state"), str) or job["state"] not in _JOB_STATES:
             raise ProtocolError("invalid job identity or state")
         return job
 
@@ -582,43 +561,35 @@ class Client:
             _check_deadline(deadline)
             if job["state"] == "succeeded":
                 return job
-            if job["state"] == "failed":
-                raise JobFailedError(job_id)
+            if job["state"] in {"failed", "partial"}:
+                raise JobFailedError(job_id, job["state"])
             if job["state"] == "cancelled":
                 raise JobCancelledError(job_id)
             self._poll_pause(deadline)
 
-    def logs(self, job_id: str, *, cursor: str | None = None, limit: int = 1000) -> dict:
+    def logs(self, job_id: str, *, cursor: int = 0) -> dict:
         job_id = _identity(job_id)
-        if type(limit) is not int or not 1 <= limit <= 10000 or cursor is not None and (not isinstance(cursor, str) or len(cursor) > 4096):
-            raise ValueError("invalid log cursor or limit")
-        query = {"limit": limit}
-        if cursor is not None:
-            query["cursor"] = cursor
+        if type(cursor) is not int or not 0 <= cursor <= (1 << 63) - 1:
+            raise ValueError("log cursor must be a nonnegative signed 64-bit integer")
         self.handshake()
-        page = self._json("GET", "/jobs/" + job_id + "/logs?" + urlencode(query))
-        if not isinstance(page.get("records"), list) or page.get("next_cursor") is not None and not isinstance(page["next_cursor"], str):
+        page = self._json("GET", "/jobs/" + job_id + "/logs?" + urlencode({"cursor": cursor}))
+        if (not isinstance(page.get("entries"), list) or type(page.get("cursor")) is not int
+                or page["cursor"] < 0 or type(page.get("truncated")) is not bool):
             raise ProtocolError("invalid log page")
-        records = []
-        for record in page["records"]:
-            if isinstance(record, str):
-                records.append({"text": record})
-            elif isinstance(record, dict):
-                text = record.get("text", record.get("message"))
-                if not isinstance(text, str):
-                    raise ProtocolError("invalid log record text")
-                normalized = {key: value for key, value in record.items() if key != "message"}
-                normalized["text"] = text
-                records.append(normalized)
-            else:
+        for record in page["entries"]:
+            if (not isinstance(record, dict) or not isinstance(record.get("text"), str)
+                    or type(record.get("cursor")) is not int or record["cursor"] <= 0
+                    or type(record.get("sequence")) is not int or record["sequence"] < 0
+                    or type(record.get("gap")) is not bool or not isinstance(record.get("occurred_at"), str)):
                 raise ProtocolError("invalid log record")
-        return {**page, "records": records}
+            _identity(record.get("attempt_id"), server=True)
+        return page
 
     def cancel(self, job_id: str) -> dict:
         job_id = _identity(job_id)
         self.handshake()
-        receipt = self._json("POST", "/jobs/" + job_id + "/cancel", {}, "cancel:" + job_id)
-        if receipt.get("job_id", job_id) != job_id:
+        receipt = self._json("POST", "/jobs/" + job_id + "/cancel", attempts=1)
+        if receipt.get("id") != job_id or not isinstance(receipt.get("state"), str) or receipt["state"] not in _JOB_STATES:
             raise ProtocolError("cancel receipt identity mismatch")
         return receipt
 
@@ -630,8 +601,8 @@ class Client:
         removes staging and never exposes a partially verified destination.
         """
         job = self.get_job(job_id)
-        if job["state"] == "failed":
-            raise JobFailedError(job_id)
+        if job["state"] in {"failed", "partial"}:
+            raise JobFailedError(job_id, job["state"])
         if job["state"] == "cancelled":
             raise JobCancelledError(job_id)
         if job["state"] != "succeeded":
@@ -673,7 +644,7 @@ class Client:
         for entry in entries:
             if not isinstance(entry, dict):
                 raise DownloadError("malformed artifact manifest")
-            path = _safe_path(entry.get("path"))
+            path = _safe_path(entry.get("name"))
             parts = PurePosixPath(path).parts
             parent = ""
             for index, part in enumerate(parts):
@@ -691,7 +662,7 @@ class Client:
                 else:
                     files.add(key)
                 parent = key
-            artifact_id, digest, size = entry.get("artifact_id"), entry.get("digest"), entry.get("size_bytes")
+            artifact_id, digest, size = entry.get("id"), entry.get("sha256"), entry.get("size_bytes")
             if (not isinstance(artifact_id, str) or not _ID.fullmatch(artifact_id)
                     or not isinstance(digest, str) or not _DIGEST.fullmatch(digest)
                     or type(size) is not int or size < 0 or size > self.max_artifact_bytes):

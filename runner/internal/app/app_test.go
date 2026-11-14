@@ -4,6 +4,7 @@ import (
 	"archive/zip"
 	"bytes"
 	"campus/runner/internal/client"
+	"campus/runner/internal/generated"
 	"campus/runner/internal/session"
 	"campus/runner/internal/worker"
 	"context"
@@ -36,7 +37,7 @@ func testApp(t *testing.T) (*App, *bytes.Buffer, *bytes.Buffer, string) {
 }
 
 func protocol(w http.ResponseWriter) {
-	fmt.Fprint(w, `{"api_version":"1","min_runner_version":"0.1.0","max_runner_version":"0.1.0"}`)
+	fmt.Fprint(w, `{"api_version":1,"min_worker_version":1,"max_worker_version":1,"lease_ms":60000,"heartbeat_interval_ms":10000,"long_poll_ms":25000}`)
 }
 
 func saveIdentity(t *testing.T, dir, endpoint string) {
@@ -81,18 +82,22 @@ func TestJoinHandshakesBeforeRedeemAndPersistsPrivateIdentity(t *testing.T) {
 		case "/api/v1/protocol":
 			protocol(w)
 		case "/api/v1/invitations/redeem":
-			var body map[string]string
+			var body struct {
+				Token           string `json:"token"`
+				InstallationID  string `json:"installation_id"`
+				ProtocolVersion int    `json:"protocol_version"`
+			}
 			if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
 				t.Error(err)
 			}
-			if body["token"] != "invite secret" || body["installation_id"] == "" {
+			if body.Token != "invite secret" || body.InstallationID == "" || body.ProtocolVersion != 1 {
 				t.Errorf("bad redeem body: %#v", body)
 			}
-			installation = body["installation_id"]
+			installation = body.InstallationID
 			if r.Header.Get("Authorization") != "" {
 				t.Error("invitation was treated as member credential")
 			}
-			fmt.Fprint(w, `{"pool_id":"pool-1","node_id":"node-1","credential_id":"cred-1","credential":"device-secret"}`)
+			fmt.Fprint(w, `{"id":"cred-1","token":"device-secret","scope":"device","node_id":"node-1","expires_at":null}`)
 		default:
 			t.Errorf("unexpected %s", r.URL)
 			http.NotFound(w, r)
@@ -152,7 +157,7 @@ func TestVerifiedTLSAndOptionalCA(t *testing.T) {
 			protocol(w)
 			return
 		}
-		fmt.Fprint(w, `{"pool_id":"pool-1","node_id":"node-1","credential_id":"cred-1","credential":"secret"}`)
+		fmt.Fprint(w, `{"id":"cred-1","token":"secret","scope":"device","node_id":"node-1","expires_at":null}`)
 	}))
 	defer s.Close()
 	a, _, _, _ := testApp(t)
@@ -185,7 +190,7 @@ func TestLeaveWritesDistinctLocalControlsWithoutNetwork(t *testing.T) {
 func preparedProfiles(t *testing.T) string {
 	t.Helper()
 	p := filepath.Join(t.TempDir(), "profiles.json")
-	if err := os.WriteFile(p, []byte(`{"schema_version":"1","profiles":[{"id":"cpu","accelerator":"cpu","platform":"linux/amd64","image_digest":"sha256:`+strings.Repeat("a", 64)+`","guard_version":"1"},{"id":"gpu","accelerator":"cuda","platform":"linux/amd64","image_digest":"sha256:`+strings.Repeat("b", 64)+`","guard_version":"1"}]}`), 0600); err != nil {
+	if err := os.WriteFile(p, []byte(`{"schema_version":"1","profiles":[{"id":"cpu","accelerator":"cpu","platform":"linux/amd64","image_digest":"campus/cpu@sha256:`+strings.Repeat("a", 64)+`","guard_version":"1"},{"id":"gpu","accelerator":"cuda","platform":"linux/amd64","image_digest":"campus/cuda@sha256:`+strings.Repeat("b", 64)+`","guard_version":"1"}]}`), 0600); err != nil {
 		t.Fatal(err)
 	}
 	return p
@@ -200,19 +205,27 @@ func TestServeRegistersProbedCapabilitiesAndHoldsSessionLock(t *testing.T) {
 			protocol(w)
 		case "/api/v1/node-sessions":
 			var body struct {
-				InstallationID, NodeID string
-				Capabilities           client.Capabilities `json:"capabilities"`
+				ProtocolVersion int                    `json:"protocol_version"`
+				Capabilities    generated.Capabilities `json:"capabilities"`
 			}
-			if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+			decoder := json.NewDecoder(r.Body)
+			decoder.DisallowUnknownFields()
+			if err := decoder.Decode(&body); err != nil {
 				t.Error(err)
 			}
-			if body.Capabilities.OfferedBudget.VRAMBytes != 0 || len(body.Capabilities.OfferedBudget.GPUIDs) != 0 {
+			if body.ProtocolVersion != 1 {
+				t.Error("missing worker protocol version")
+			}
+			if body.Capabilities.OfferedBudget.VRAMBytes == nil || *body.Capabilities.OfferedBudget.VRAMBytes != 0 || body.Capabilities.OfferedBudget.GPUSlots == nil || *body.Capabilities.OfferedBudget.GPUSlots != 0 {
 				t.Error("GPU offered without opt in")
 			}
+			if len(body.Capabilities.ImageDigests) != 1 || body.Capabilities.ImageDigests[0] != "campus/cpu@sha256:"+strings.Repeat("a", 64) || body.Capabilities.PreflightRevision != 1 {
+				t.Error("unverified image advertised or revision is missing")
+			}
 			registered = true
-			fmt.Fprint(w, `{"node_session_id":"session-1"}`)
+			fmt.Fprint(w, `{"id":"session-1","node_id":"node-1","state":"ready"}`)
 		case "/api/v1/node-sessions/session-1/capabilities":
-			if r.Method != "PUT" || r.Header.Get("X-Node-Session-ID") != "session-1" {
+			if r.Method != "PUT" || r.Header.Get("X-Node-Session") != "session-1" {
 				t.Errorf("bad update request %s", r.Method)
 			}
 			updated = true
@@ -225,7 +238,7 @@ func TestServeRegistersProbedCapabilitiesAndHoldsSessionLock(t *testing.T) {
 	defer s.Close()
 	saveIdentity(t, dir, s.URL)
 	a.Discover = func(context.Context) (client.Capabilities, error) {
-		return client.Capabilities{OS: "windows", Arch: "amd64", CPULogical: 8, MemoryAvailableBytes: 8 << 30, DiskAvailableBytes: 8 << 30, Runtime: client.Runtime{Healthy: true}, GPUs: []client.GPU{{ID: "0", VRAMBytes: 8 << 30}}}, nil
+		return client.Capabilities{OS: "windows", Arch: "amd64", CPULogical: 8, MemoryAvailableBytes: 8 << 30, DiskAvailableBytes: 8 << 30, Runtime: client.Runtime{Type: "docker", Version: "29.2.1", Healthy: true}, PowerState: "unknown", PreflightRevision: "1", ImageDigests: []string{"unverified@sha256:" + strings.Repeat("c", 64)}, GPUs: []client.GPU{{ID: "0", Vendor: "nvidia", Driver: "test-driver", VRAMBytes: 8 << 30}}}, nil
 	}
 	var probes int
 	a.Probe = func(_ context.Context, image, platform string, gpu bool) error {
@@ -239,6 +252,9 @@ func TestServeRegistersProbedCapabilitiesAndHoldsSessionLock(t *testing.T) {
 	a.Serve = func(_ context.Context, r *worker.Runner, c client.Capabilities, gpu bool) error {
 		if r.Client.SessionID != "session-1" || !registered || !updated {
 			t.Error("session was not registered")
+		}
+		if len(r.AllowedImages) != 1 || len(c.ImageDigests) != 1 {
+			t.Error("unprobed profiles entered the worker allowlist")
 		}
 		if unlock, err := session.Lock(dir); err == nil {
 			unlock()
@@ -296,6 +312,7 @@ func TestRunPackagesSecretsDataAndReusesSubmissionKeyAfterLostACK(t *testing.T) 
 	}
 	type upload struct {
 		digest   string
+		name     string
 		size     int64
 		contents []byte
 	}
@@ -312,13 +329,14 @@ func TestRunPackagesSecretsDataAndReusesSubmissionKeyAfterLostACK(t *testing.T) 
 			protocol(w)
 		case route == "/uploads":
 			var body struct {
-				Digest string `json:"digest"`
+				Digest string `json:"sha256"`
+				Name   string `json:"name"`
 				Size   int64  `json:"size_bytes"`
 			}
 			json.NewDecoder(r.Body).Decode(&body)
-			id := fmt.Sprintf("upload-%d", len(uploads)+1)
-			uploads[id] = &upload{digest: body.Digest, size: body.Size}
-			fmt.Fprintf(w, `{"upload_id":%q}`, id)
+			id := fmt.Sprintf("00000000-0000-4000-8000-%012d", len(uploads)+1)
+			uploads[id] = &upload{digest: body.Digest, name: body.Name, size: body.Size}
+			fmt.Fprintf(w, `{"id":%q,"state":"pending","part_count":1,"parts":[]}`, id)
 		case strings.HasPrefix(route, "/uploads/"):
 			parts := strings.Split(strings.TrimPrefix(route, "/uploads/"), "/")
 			u := uploads[parts[0]]
@@ -328,20 +346,33 @@ func TestRunPackagesSecretsDataAndReusesSubmissionKeyAfterLostACK(t *testing.T) 
 				return
 			}
 			if len(parts) == 1 {
-				fmt.Fprintf(w, `{"upload_id":%q,"part_size_bytes":16777216,"completed_parts":[]}`, parts[0])
+				fmt.Fprintf(w, `{"id":%q,"state":"pending","part_count":1,"parts":[]}`, parts[0])
 				return
 			}
 			if parts[1] == "parts" {
 				u.contents, _ = io.ReadAll(r.Body)
-				w.WriteHeader(204)
+				fmt.Fprintf(w, `{"number":0,"sha256":%q,"size_bytes":%d}`, u.digest, u.size)
 				return
 			}
-			fmt.Fprintf(w, `{"artifact_id":%q,"digest":%q,"size_bytes":%d}`, "artifact-"+parts[0], u.digest, u.size)
+			fmt.Fprintf(w, `{"id":%q,"sha256":%q,"size_bytes":%d,"name":%q,"media_type":"application/zip"}`, parts[0], u.digest, u.size, u.name)
 		case route == "/job-previews" && r.Method == "POST":
-			json.NewDecoder(r.Body).Decode(&preview)
-			fmt.Fprint(w, `{"preview_id":"preview-1","state":"analyzing"}`)
+			raw, _ := io.ReadAll(r.Body)
+			var typed generated.PreviewRequest
+			decoder := json.NewDecoder(bytes.NewReader(raw))
+			decoder.DisallowUnknownFields()
+			if err := decoder.Decode(&typed); err != nil {
+				t.Error(err)
+			}
+			json.Unmarshal(raw, &preview)
+			fmt.Fprint(w, `{"id":"preview-1","state":"inspecting","plan_revision":1}`)
 		case route == "/job-previews/preview-1":
-			fmt.Fprint(w, `{"preview_id":"preview-1","state":"ready","plan_revision":2,"plan":{"device":"cuda"}}`)
+			var intent map[string]any
+			prompt, _ := preview["prompt"].(string)
+			_, encoded, _ := strings.Cut(prompt, "Command intent: ")
+			if err := json.Unmarshal([]byte(encoded), &intent); err != nil {
+				t.Error(err)
+			}
+			json.NewEncoder(w).Encode(map[string]any{"id": "preview-1", "state": "ready", "plan_revision": 2, "plan": map[string]any{"schema_version": "1", "plan_revision": 2, "input_manifest_digest": strings.Repeat("a", 64), "execution_kind": "single", "job_deadline_at": "2026-11-14T23:00:00Z", "retry_policy": map[string]any{}, "stages": []any{map[string]any{"stage_id": "run", "adapter": map[string]any{"id": "generic.project", "version": "1"}, "variants": []any{map[string]any{"variant_id": "cuda", "image_digest": "campus/cuda@sha256:" + strings.Repeat("a", 64), "platform": "linux/amd64", "accelerator": "cuda", "resource_requirements": map[string]any{"cpu_millis": 1000, "memory_bytes": 536870912, "disk_bytes": 1073741824}}}, "argv": []string{"python", "train.py", "path with spaces/你好"}, "working_dir": "/workspace", "bindings": intent["bindings"], "outputs": []any{map[string]any{"path": "model.pt", "required": true, "max_bytes": 1048576}}, "network_policy": "none", "task_deadline_ms": 30000, "validation_policy": "unverified", "resume_policy": "restart"}}}})
 		case route == "/jobs":
 			submitKeys = append(submitKeys, r.Header.Get("Idempotency-Key"))
 			var body map[string]any
@@ -358,7 +389,7 @@ func TestRunPackagesSecretsDataAndReusesSubmissionKeyAfterLostACK(t *testing.T) 
 				conn.Close()
 				return
 			}
-			fmt.Fprint(w, `{"job_id":"job-1","state":"queued"}`)
+			fmt.Fprint(w, `{"id":"job-1","state":"queued"}`)
 		default:
 			t.Errorf("unexpected %s %s", r.Method, route)
 			http.NotFound(w, r)
@@ -372,11 +403,16 @@ func TestRunPackagesSecretsDataAndReusesSubmissionKeyAfterLostACK(t *testing.T) 
 	if len(submitKeys) != 2 || submitKeys[0] == "" || submitKeys[0] != submitKeys[1] {
 		t.Fatalf("unstable submission keys %#v", submitKeys)
 	}
-	request := preview["request"].(map[string]any)
-	if request["requires_gpu"] != true || len(request["argv"].([]any)) != 3 {
+	var request map[string]any
+	prompt, _ := preview["prompt"].(string)
+	_, encoded, _ := strings.Cut(prompt, "Command intent: ")
+	if err := json.Unmarshal([]byte(encoded), &request); err != nil {
+		t.Fatal(err)
+	}
+	if preview["accelerator"] != "cuda" || request["requires_gpu"] != true || len(request["argv"].([]any)) != 3 {
 		t.Fatalf("argv/GPU corrupted: %#v", request)
 	}
-	if preview["project"].(map[string]any)["manifest_digest"] == "" {
+	if preview["project_artifact_id"] == "" || preview["project_artifact_id"] == nil {
 		t.Fatalf("missing manifest: %#v", preview)
 	}
 	if len(preview["inputs"].([]any)) != 1 {
@@ -420,7 +456,7 @@ func TestNeedsInputNeverSubmitsAJob(t *testing.T) {
 		case "/api/v1/protocol":
 			protocol(w)
 		case "/api/v1/job-previews/preview-1":
-			fmt.Fprint(w, `{"preview_id":"preview-1","state":"needs_input","questions":[{"field":"dataset","message":"Choose the labeled dataset"}]}`)
+			fmt.Fprint(w, `{"id":"preview-1","state":"needs_input","plan_revision":1,"question":{"question_id":"dataset","prompt":"Choose the labeled dataset"}}`)
 		default:
 			t.Errorf("unexpected submission %s", r.URL)
 			http.NotFound(w, r)
@@ -457,7 +493,7 @@ func TestFetchPublishesOnlyCompleteChecksumVerifiedDirectory(t *testing.T) {
 				case "/api/v1/protocol":
 					protocol(w)
 				case "/api/v1/jobs/job-1":
-					fmt.Fprintf(w, `{"job_id":"job-1","state":"succeeded","artifacts":[{"artifact_id":"file-1","digest":%q,"size_bytes":5,"path":"workspace/model.pt"}]}`, digest)
+					fmt.Fprintf(w, `{"id":"job-1","state":"succeeded","artifacts":[{"id":"file-1","sha256":%q,"size_bytes":5,"name":"workspace/model.pt","media_type":"application/octet-stream"}]}`, digest)
 				case "/api/v1/artifacts/file-1/content":
 					if bad {
 						fmt.Fprint(w, "wrong")
@@ -514,7 +550,7 @@ func TestFetchRejectsTraversalAndCaseCollisionsBeforeDownloading(t *testing.T) {
 				for i, p := range paths {
 					files = append(files, client.Artifact{ArtifactID: fmt.Sprintf("f-%d", i), Digest: strings.Repeat("a", 64), SizeBytes: 1, Path: p})
 				}
-				json.NewEncoder(w).Encode(map[string]any{"job_id": "job-1", "state": "succeeded", "artifacts": files})
+				json.NewEncoder(w).Encode(map[string]any{"id": "job-1", "state": "succeeded", "artifacts": files})
 				return
 			}
 			t.Errorf("unsafe manifest caused content request %s", r.URL)
@@ -546,16 +582,18 @@ func TestLogsPaginationAndCancelUseMemberAPI(t *testing.T) {
 			protocol(w)
 		case "/api/v1/jobs/job-1/logs":
 			if r.URL.Query().Get("cursor") == "" {
-				fmt.Fprint(w, `{"records":[{"text":"first"}],"next_cursor":"cursor/2"}`)
+				fmt.Fprint(w, `{"entries":[{"cursor":1,"attempt_id":"attempt-1","sequence":0,"occurred_at":"2026-11-14T06:00:00Z","text":"first","gap":false}],"cursor":1,"truncated":true}`)
+			} else if r.URL.Query().Get("cursor") == "1" {
+				fmt.Fprint(w, `{"entries":[{"cursor":2,"attempt_id":"attempt-1","sequence":1,"occurred_at":"2026-11-14T06:00:01Z","text":"second","gap":false}],"cursor":2,"truncated":false}`)
 			} else {
-				fmt.Fprint(w, `{"records":[{"text":"second"}],"next_cursor":null}`)
+				fmt.Fprint(w, `{"entries":[],"cursor":2,"truncated":false}`)
 			}
 		case "/api/v1/jobs/job-1/cancel":
 			if r.Method != "POST" {
 				t.Error("cancel not POST")
 			}
 			cancelled = true
-			fmt.Fprint(w, `{"job_id":"job-1","state":"cancelled"}`)
+			fmt.Fprint(w, `{"id":"job-1","state":"cancelled"}`)
 		default:
 			t.Errorf("unexpected URL %s", r.URL)
 			http.NotFound(w, r)
@@ -587,7 +625,7 @@ func TestPollingRespectsContext(t *testing.T) {
 		if r.URL.Path == "/api/v1/protocol" {
 			protocol(w)
 		} else {
-			fmt.Fprint(w, `{"preview_id":"preview-1","state":"analyzing"}`)
+			fmt.Fprint(w, `{"id":"preview-1","state":"inspecting"}`)
 		}
 	}))
 	defer s.Close()
@@ -623,7 +661,7 @@ func TestResumeUnknownAcknowledgementPostsFrozenRevisionWithoutReplanning(t *tes
 			if body["preview_id"] != "preview-1" || body["plan_revision"] != float64(7) || r.Header.Get("Idempotency-Key") != "saved-key" {
 				t.Errorf("changed submission: %#v key=%q", body, r.Header.Get("Idempotency-Key"))
 			}
-			fmt.Fprint(w, `{"job_id":"job-1","state":"queued"}`)
+			fmt.Fprint(w, `{"id":"job-1","state":"queued"}`)
 		default:
 			t.Errorf("a committed preview must not be polled/replanned during acknowledgement recovery: %s", r.URL)
 			http.NotFound(w, r)
@@ -676,7 +714,7 @@ func TestDoctorOffersOnlyTheGPUActuallyAddressedByCUDAProbe(t *testing.T) {
 }
 
 func TestMalformedReadyPreviewNeverSubmits(t *testing.T) {
-	for _, revision := range []string{`null`, `true`, `-1`, `{}`} {
+	for _, revision := range []string{`null`, `true`, `-1`, `{}`, `0`, `"revision-1"`} {
 		t.Run(revision, func(t *testing.T) {
 			a, _, _, dir := testApp(t)
 			a.Getenv = func(k string) string {
@@ -695,7 +733,7 @@ func TestMalformedReadyPreviewNeverSubmits(t *testing.T) {
 					return
 				}
 				if r.URL.Path == "/api/v1/job-previews/preview-1" {
-					fmt.Fprintf(w, `{"preview_id":"preview-1","state":"ready","plan_revision":%s}`, revision)
+					fmt.Fprintf(w, `{"id":"preview-1","state":"ready","plan_revision":%s}`, revision)
 					return
 				}
 				t.Errorf("malformed preview submitted %s", r.URL)
@@ -732,7 +770,7 @@ func TestTerminalPreviewIsPersistedAndDoesNotBlockFreshRun(t *testing.T) {
 				case "/api/v1/protocol":
 					protocol(w)
 				case "/api/v1/job-previews/preview-1":
-					fmt.Fprintf(w, `{"preview_id":"preview-1","state":%q}`, terminal)
+					fmt.Fprintf(w, `{"id":"preview-1","state":%q}`, terminal)
 				case "/api/v1/uploads":
 					freshUploads++
 					w.WriteHeader(400)
@@ -796,7 +834,7 @@ func TestResumeAnswersSamePreviewAndSubmitsItsNewRevision(t *testing.T) {
 	}
 	os.WriteFile(filepath.Join(dir, "submission.json"), []byte(`{"preview_id":"preview-1","idempotency_key":"saved-key"}`), 0600)
 	file := filepath.Join(t.TempDir(), "answers.json")
-	os.WriteFile(file, []byte(`{"answers":[{"question_id":"batch","value":4},{"question_id":"note","value":"explicit answer"}]}`), 0600)
+	os.WriteFile(file, []byte(`{"question_id":"batch","answer":"4"}`), 0600)
 	var gets, answers, jobs int
 	var key string
 	s := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -805,22 +843,24 @@ func TestResumeAnswersSamePreviewAndSubmitsItsNewRevision(t *testing.T) {
 			protocol(w)
 		case "/api/v1/job-previews/preview-1":
 			gets++
-			if gets == 1 {
-				fmt.Fprint(w, `{"preview_id":"preview-1","state":"needs_input","plan_revision":3,"questions":[{"question_id":"batch"},{"question_id":"note"}]}`)
+			if answers == 0 {
+				fmt.Fprint(w, `{"id":"preview-1","state":"needs_input","plan_revision":3,"question":{"question_id":"batch","prompt":"Choose a batch size"}}`)
 			} else {
-				fmt.Fprint(w, `{"preview_id":"preview-1","state":"ready","plan_revision":4}`)
+				fmt.Fprint(w, `{"id":"preview-1","state":"ready","plan_revision":4}`)
 			}
 		case "/api/v1/job-previews/preview-1/answers":
 			answers++
 			var body struct {
-				Revision int `json:"plan_revision"`
-				Answers  []struct {
-					ID    string `json:"question_id"`
-					Value any    `json:"value"`
-				} `json:"answers"`
+				Revision   int    `json:"plan_revision"`
+				QuestionID string `json:"question_id"`
+				Answer     string `json:"answer"`
 			}
-			json.NewDecoder(r.Body).Decode(&body)
-			if body.Revision != 3 || len(body.Answers) != 2 || body.Answers[0].ID != "batch" || body.Answers[0].Value != float64(4) || body.Answers[1].Value != "explicit answer" {
+			decoder := json.NewDecoder(r.Body)
+			decoder.DisallowUnknownFields()
+			if err := decoder.Decode(&body); err != nil {
+				t.Error(err)
+			}
+			if body.Revision != 3 || body.QuestionID != "batch" || body.Answer != "4" {
 				t.Errorf("answer body changed: %#v", body)
 			}
 			if key == "" {
@@ -838,7 +878,7 @@ func TestResumeAnswersSamePreviewAndSubmitsItsNewRevision(t *testing.T) {
 				conn.Close()
 				return
 			}
-			fmt.Fprint(w, `{"preview_id":"preview-1"}`)
+			fmt.Fprint(w, `{"id":"preview-1"}`)
 		case "/api/v1/jobs":
 			jobs++
 			var body map[string]any
@@ -846,7 +886,7 @@ func TestResumeAnswersSamePreviewAndSubmitsItsNewRevision(t *testing.T) {
 			if body["preview_id"] != "preview-1" || body["plan_revision"] != float64(4) || r.Header.Get("Idempotency-Key") != "saved-key" {
 				t.Errorf("wrong run after answers: %#v", body)
 			}
-			fmt.Fprint(w, `{"job_id":"job-1","state":"queued"}`)
+			fmt.Fprint(w, `{"id":"job-1","state":"queued"}`)
 		default:
 			t.Errorf("answer flow replaced preview or submitted unexpected endpoint %s", r.URL)
 			http.NotFound(w, r)
@@ -854,7 +894,10 @@ func TestResumeAnswersSamePreviewAndSubmitsItsNewRevision(t *testing.T) {
 	}))
 	defer s.Close()
 	saveIdentity(t, dir, s.URL)
-	if code := a.Run(context.Background(), []string{"run", "--resume", "--answers", file}); code != 0 || gets != 2 || answers != 2 || jobs != 1 || !strings.Contains(out.String(), "job-1") {
+	if code := a.Run(context.Background(), []string{"run", "--resume", "--answers", file}); code != 1 || answers != 1 || jobs != 0 {
+		t.Fatalf("unknown answer was retried: code=%d answers=%d jobs=%d %s", code, answers, jobs, errout)
+	}
+	if code := a.Run(context.Background(), []string{"run", "--resume"}); code != 0 || gets != 2 || answers != 1 || jobs != 1 || !strings.Contains(out.String(), "job-1") {
 		t.Fatalf("answer roundtrip failed code=%d gets=%d answers=%d jobs=%d %s", code, gets, answers, jobs, errout)
 	}
 }
@@ -879,7 +922,7 @@ func TestUnknownJobAcknowledgementCannotBeChangedByAnswersOrTerminalFlag(t *test
 		}
 		if r.URL.Path == "/api/v1/jobs" {
 			jobPosts++
-			fmt.Fprint(w, `{"job_id":"job-1"}`)
+			fmt.Fprint(w, `{"id":"job-1"}`)
 			return
 		}
 		t.Errorf("frozen job mutation %s", r.URL)
@@ -898,7 +941,7 @@ func TestUnknownJobAcknowledgementCannotBeChangedByAnswersOrTerminalFlag(t *test
 	}
 }
 
-func TestLogsTextCanonicalAndMessageCompatibilityAlias(t *testing.T) {
+func TestLogsPreservesTextAndReportsRetentionGaps(t *testing.T) {
 	a, out, errout, dir := testApp(t)
 	a.Getenv = func(k string) string {
 		if k == "CAMPUS_STATE_DIR" {
@@ -914,11 +957,15 @@ func TestLogsTextCanonicalAndMessageCompatibilityAlias(t *testing.T) {
 			protocol(w)
 			return
 		}
-		fmt.Fprint(w, `{"records":[{"text":"canonical","message":"ignored"},{"message":"legacy"},"string"],"next_cursor":null}`)
+		if r.URL.Query().Get("cursor") == "" {
+			fmt.Fprint(w, `{"entries":[{"cursor":4,"attempt_id":"attempt-1","sequence":3,"occurred_at":"2026-11-14T06:00:01Z","text":"canonical","gap":true}],"cursor":4,"truncated":false}`)
+		} else {
+			fmt.Fprint(w, `{"entries":[],"cursor":4,"truncated":false}`)
+		}
 	}))
 	defer s.Close()
 	saveIdentity(t, dir, s.URL)
-	if code := a.Run(context.Background(), []string{"logs", "job-1"}); code != 0 || out.String() != "canonical\nlegacy\nstring\n" {
+	if code := a.Run(context.Background(), []string{"logs", "job-1"}); code != 0 || out.String() != "canonical\n" || !strings.Contains(errout.String(), "gap") {
 		t.Fatalf("log DTO mismatch %d %s %s", code, out, errout)
 	}
 }
@@ -942,9 +989,9 @@ func TestRejectedAnswersCanBeCorrectedOnTheSamePreview(t *testing.T) {
 			protocol(w)
 		case "/api/v1/job-previews/preview-1":
 			if answers < 2 {
-				fmt.Fprint(w, `{"preview_id":"preview-1","state":"needs_input","plan_revision":3}`)
+				fmt.Fprint(w, `{"id":"preview-1","state":"needs_input","plan_revision":3,"question":{"question_id":"choice","prompt":"Choose an option"}}`)
 			} else {
-				fmt.Fprint(w, `{"preview_id":"preview-1","state":"ready","plan_revision":4}`)
+				fmt.Fprint(w, `{"id":"preview-1","state":"ready","plan_revision":4}`)
 			}
 		case "/api/v1/job-previews/preview-1/answers":
 			answers++
@@ -952,11 +999,11 @@ func TestRejectedAnswersCanBeCorrectedOnTheSamePreview(t *testing.T) {
 				w.WriteHeader(422)
 				fmt.Fprint(w, `{"code":"INVALID_ANSWER","message":"expected a different value"}`)
 			} else {
-				fmt.Fprint(w, `{"preview_id":"preview-1"}`)
+				fmt.Fprint(w, `{"id":"preview-1"}`)
 			}
 		case "/api/v1/jobs":
 			jobs++
-			fmt.Fprint(w, `{"job_id":"job-1"}`)
+			fmt.Fprint(w, `{"id":"job-1"}`)
 		default:
 			t.Errorf("replacement preview created %s", r.URL)
 			http.NotFound(w, r)
@@ -980,7 +1027,7 @@ func TestAnswerLimitsRejectInvalidValuesBeforeNetwork(t *testing.T) {
 		`{"answers":[{"question_id":"q"}]}`,
 		`{"answers":[{"question_id":"q","value":1e1000}]}`,
 		`{"answers":[{"question_id":"q","value":` + strings.Repeat("[", 20) + `0` + strings.Repeat("]", 20) + `}]}`,
-		`{"answers":[{"question_id":"q","value":"` + strings.Repeat("x", 65536) + `"}]}`,
+		`{"question_id":"q","answer":"` + strings.Repeat("x", 2001) + `"}`,
 	} {
 		a, _, errout, _ := testApp(t)
 		file := filepath.Join(t.TempDir(), "answers.json")
@@ -991,7 +1038,7 @@ func TestAnswerLimitsRejectInvalidValuesBeforeNetwork(t *testing.T) {
 	}
 }
 
-func TestUnknownAnswerAcknowledgementReplaysSavedBatchBeforePolling(t *testing.T) {
+func TestUnknownAnswerAcknowledgementReadsWithoutRepeatingMutation(t *testing.T) {
 	a, _, errout, dir := testApp(t)
 	a.Getenv = func(k string) string {
 		if k == "CAMPUS_STATE_DIR" {
@@ -1004,6 +1051,7 @@ func TestUnknownAnswerAcknowledgementReplaysSavedBatchBeforePolling(t *testing.T
 	}
 	os.WriteFile(filepath.Join(dir, "submission.json"), []byte(`{"preview_id":"preview-1","idempotency_key":"job-key"}`), 0600)
 	var answerPosts, gets, jobs int
+	advanced := false
 	var answerKey string
 	s := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
@@ -1011,10 +1059,10 @@ func TestUnknownAnswerAcknowledgementReplaysSavedBatchBeforePolling(t *testing.T
 			protocol(w)
 		case "/api/v1/job-previews/preview-1":
 			gets++
-			if answerPosts < 4 {
-				fmt.Fprint(w, `{"preview_id":"preview-1","state":"needs_input","plan_revision":3}`)
+			if !advanced {
+				fmt.Fprint(w, `{"id":"preview-1","state":"needs_input","plan_revision":3,"question":{"question_id":"choice","prompt":"Choose an option"}}`)
 			} else {
-				fmt.Fprint(w, `{"preview_id":"preview-1","state":"ready","plan_revision":4}`)
+				fmt.Fprint(w, `{"id":"preview-1","state":"ready","plan_revision":4}`)
 			}
 		case "/api/v1/job-previews/preview-1/answers":
 			answerPosts++
@@ -1029,15 +1077,11 @@ func TestUnknownAnswerAcknowledgementReplaysSavedBatchBeforePolling(t *testing.T
 			if body["plan_revision"] != float64(3) {
 				t.Errorf("answer replay replanned: %#v", body)
 			}
-			if answerPosts < 4 {
-				w.WriteHeader(503)
-				fmt.Fprint(w, `{"code":"ACK_UNKNOWN","message":"unavailable"}`)
-			} else {
-				fmt.Fprint(w, `{}`)
-			}
+			w.WriteHeader(503)
+			fmt.Fprint(w, `{"code":"ACK_UNKNOWN","message":"unavailable"}`)
 		case "/api/v1/jobs":
 			jobs++
-			fmt.Fprint(w, `{"job_id":"job-1"}`)
+			fmt.Fprint(w, `{"id":"job-1"}`)
 		default:
 			t.Errorf("unexpected answer recovery URL %s", r.URL)
 			http.NotFound(w, r)
@@ -1045,10 +1089,14 @@ func TestUnknownAnswerAcknowledgementReplaysSavedBatchBeforePolling(t *testing.T
 	}))
 	defer s.Close()
 	saveIdentity(t, dir, s.URL)
-	if a.Run(context.Background(), []string{"run", "--resume", "--answer", "choice=explicit"}) != 1 || answerPosts != 3 {
-		t.Fatalf("expected unknown answer acknowledgement: posts=%d %s", answerPosts, errout)
+	if a.Run(context.Background(), []string{"run", "--resume", "--answer", "choice=explicit"}) != 1 || answerPosts != 1 {
+		t.Fatalf("answer mutation was automatically repeated: posts=%d %s", answerPosts, errout)
 	}
-	if code := a.Run(context.Background(), []string{"run", "--resume"}); code != 0 || answerPosts != 4 || gets != 2 || jobs != 1 {
-		t.Fatalf("answer ACK recovery failed: code=%d posts=%d gets=%d jobs=%d %s", code, answerPosts, gets, jobs, errout)
+	if code := a.Run(context.Background(), []string{"run", "--resume"}); code != 1 || answerPosts != 1 || gets != 2 || jobs != 0 {
+		t.Fatalf("unresolved answer was repeated: code=%d posts=%d gets=%d jobs=%d %s", code, answerPosts, gets, jobs, errout)
+	}
+	advanced = true
+	if code := a.Run(context.Background(), []string{"run", "--resume"}); code != 0 || answerPosts != 1 || gets != 3 || jobs != 1 {
+		t.Fatalf("new revision failed to resolve answer acknowledgement: code=%d posts=%d gets=%d jobs=%d %s", code, answerPosts, gets, jobs, errout)
 	}
 }

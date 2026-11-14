@@ -1,5 +1,53 @@
 # Local validation and remaining acceptance gates
 
+## Update after foundation publication
+
+Upstream `codex/control-plane` subsequently appeared at `5a5bd29`, with shared
+contracts/DTOs and a mock API. The earlier statement that contracts were absent
+describes the initial pass below. There is still no production coordinator.
+See [the current integration record](PROTOCOL.md) for exact boundaries/gaps.
+
+Current reconciled-source verification:
+
+- Full Go tests and race tests pass; `go vet ./...` exits 0. All Linux/amd64
+  package test binaries also pass under WSL when launched from their respective
+  package working directories (required for testdata paths).
+- Full locked Python CPU suite: **347 passed, 1 opt-in Docker E5 skip in142.67 s**.
+  This includes193 SDK tests and actual upstream fixture/DTO validation. Pydantic
+  is pinned as development tooling; normal SDK imports remain stdlib-only.
+- The actual unmodified upstream `contracts/mock_server.py` runs locally through
+  its locked Uvicorn/FastAPI environment. SDK ready submit/wait/log/cancel and
+  needs-input/answer flows pass against it. The process is stopped afterward.
+  Its handler does not validate requests or implement production state changes;
+  separate strict DTO boundary tests cover outgoing shapes.
+- Typed upload/proof/completion/log/telemetry transport passes the real Docker
+  worker test, returning the same1563-byte model SHA-256 as below:11 renewals,
+  1 log request,4 telemetry posts,1 committed completion and1 receipt lookup.
+  Its assignment includes the local bounded-runtime extension; the real
+  published Assignment safety gate is tested separately and intentionally blocks.
+- Registered standalone training and new-container checkpoint resume pass again.
+  The API Artifact migration initially lost the local dataset ZIP kind and
+  failed provenance preflight. Isolating the local input descriptor fixed the
+  same real standalone check (24.02 s). A separate review found old local HMAC
+  records could lose output fields; an independent local output descriptor and
+  a legacy signed-record regression preserve schema1 bytes/signatures.
+- Final new five-minute idle measurement: **300 parent-observed native samples**,
+  duration300000871100 ns, average **0.343749% of one logical CPU**, peak current
+  RSS **22437888 bytes (21.40 MiB)**, owner Stop succeeds. CPU/RSS now come directly
+  from the actual child PID, independent of API timing or telemetry DTO fields.
+  Measured binary SHA-256:
+  `da333ce332da976e0e7582764b2dd30f75802388212890e4384bce3e75b1a86d`.
+  The prior0.415308% raw record is retained as `idle-before-foundation.json`.
+
+Production worker execution still needs an agreed relative hard deadline and
+bounded sandbox/compatibility policy. A complete Assignment validated by the
+actual upstream model is rejected before `/started` or Docker Create. Adapter
+invocation envelopes, formal StandaloneRecord provenance/config matching and
+UI-generated DTO integration also remain unresolved with the other owners.
+Native Mac, actual GPU and physical multi-device acceptance are still deferred.
+
+## Initial local pass (before foundation)
+
 Date: 2026-11-14. Branch: `codex/runner-cli`, based on `f1914dd`.
 Scope: implementation-plan part 4 only. The owner requested all available
 first-notebook checks now and deferred the physical Apple Silicon notebook test.

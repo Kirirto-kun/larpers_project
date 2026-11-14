@@ -38,7 +38,9 @@ session package's owner ACL; on Unix it uses private permissions. Do not copy on
 installation's state to another device. Join takes the process lock before
 creating an installation ID, and serve holds it for its entire lifetime.
 
-Join negotiates `/api/v1/protocol` before redeeming an invitation. Serving
+Join negotiates `/api/v1/protocol` before redeeming an invitation. Credential
+redemption and node-session creation each send one POST per explicit command;
+unknown acknowledgements are reported without an automatic mutation retry. Serving
 registers a fresh node session, publishes capabilities, then enters the worker
 loop. `leave` writes local control without requiring coordinator connectivity:
 `--drain` finishes active attempts; `--stop` stops them. The device credential
@@ -61,14 +63,22 @@ Profiles come from `--profiles FILE`, `CAMPUS_PROFILES`, a checkout's
     "id": "python-ml-cpu-v1",
     "accelerator": "cpu",
     "platform": "linux/amd64",
-    "image_digest": "sha256:REPLACE_WITH_64_LOWERCASE_HEX_DIGITS",
+    "image_digest": "campus/python-ml-cpu-v1@sha256:REPLACE_WITH_64_LOWERCASE_HEX_DIGITS",
     "guard_version": "1"
   }]
 }
 ```
 
-Use `cuda` for CUDA profiles. OCI repository digests `name@sha256:...` and local
-Docker content digests `sha256:...` are supported. A null digest marks an
+Use `cuda` for CUDA profiles. Participation publishes canonical OCI repository
+digests `name@sha256:...`. A local
+Docker content ID `sha256:...` is resolved through that cached image's own
+`RepoDigests`; an image without one requires local preparation before serving.
+`doctor` and `benchmark-local` can use the verified local ID without a repository
+digest, including images loaded from an offline archive. Doctor reports missing
+canonical participation metadata as a diagnostic. Resolution never pulls an image.
+Only selected images whose architecture, guard
+contract and computation probe passed are advertised or allowed for work. A null
+digest marks an
 unprepared profile and causes an actionable error when that profile is needed.
 Image architecture and the guard contract are verified before probing; no
 unapproved image is probed. Cross-architecture emulation is not enabled.
@@ -96,24 +106,32 @@ files/256 MiB; the separate dataset limit is 10,000 files/1 GiB. A dataset must 
 a directory and only one read-only `/data` binding is supported. Splitting on the
 last colon preserves Windows paths such as `C:\data set:/data`.
 
-The program and each argument after `--` travel as argv, including spaces and
-Unicode. No host shell command is constructed. Repeat `--output RELATIVE_PATH`
-to declare outputs. The guard also captures changed/new workspace files within
-its quota, so a simple `torch.save(..., 'model.pt')` can be returned. GPU
-requirements are retained; the CLI never silently changes a GPU run to CPU.
+The program and each argument after `--` are encoded literally in a bounded
+planner prompt, including spaces and Unicode. No host shell command is
+constructed. Before submitting a ready plan, the CLI checks the exact argv,
+working directory, generic adapter, archive bindings, accelerator, offline
+network policy and every declared required output. A changed command is refused.
+Repeat `--output RELATIVE_PATH` to declare outputs. The planner is also asked to
+capture changed/new workspace files within the guard quota. Commands accept at
+most 64 arguments of 4,096 characters each and must fit the complete
+8,000-character planner prompt. GPU requirements never silently become CPU.
 
 The CLI uploads a `project.zip` artifact and a separate `data.zip` artifact when
 requested, asks for a preview, prints the ready plan and submits its revision.
-An unresolved preview prints its ID and questions and exits with status 3. It
-does not invent missing inputs or answers.
+An unresolved preview prints its ID, positive plan revision and single question,
+and exits with status 3. It does not invent missing inputs or answers.
 
 ```text
 campus run --resume
 ```
 
-The latest preview request, preview ID, frozen plan revision, idempotency keys,
-pending explicit answers and job receipt are persisted in `submission.json`. Resume reconciles an interrupted
-preview. Once job submission starts, resume sends the exact saved
+The latest preview request, exact command intent, preview ID, frozen plan
+revision, request keys, pending explicit answer and job receipt are persisted in
+`submission.json`. Resume reads a known preview. Preview creation has no
+published idempotency guarantee: if its acknowledgement is lost before the ID is
+known, resume does not repeat the mutation. `run --discard` can abandon that
+never-submitted preview before a fresh run. Once job submission starts, resume
+sends the exact saved
 `POST /jobs {preview_id, plan_revision}` with the same key, even after an unknown
 acknowledgement. It does not replan that submission. A second new run is refused
 while a submission remains unresolved. Failed/cancelled/expired/rejected planning
@@ -125,23 +143,27 @@ After a `needs_input` exit, answer the saved preview explicitly:
 
 ```text
 campus run --resume --answers ./answers.json
-campus run --resume --answer dataset=training-set --answer precision=float32
+campus run --resume --answer dataset=training-set
 ```
 
-The canonical answers file is a JSON object; a bare answers array is also accepted:
+The canonical answers file contains one explicit string answer:
 
 ```json
-{"answers":[{"question_id":"batch_size","value":16},{"question_id":"dataset","value":"training-set"}]}
+{"question_id":"dataset","answer":"training-set"}
 ```
 
-Use the question IDs returned by the preview. Repeated `--answer question_id=value`
-options supply strings; use `--answers` for typed JSON numbers, objects or arrays.
-The CLI posts these explicit values against the current `plan_revision`, polls the
-same preview and submits its new ready revision. It never creates another preview
-or guesses values. An answer batch/key is saved before transmission and replayed
-by `run --resume` after an unknown acknowledgement. A definitive 4xx rejection
-(except rate limiting) permits corrected answers on that same preview. New answers
-are refused after job submission has started, preserving unknown-job recovery.
+A one-entry array or `{"answers":[...]}` wrapper is also accepted locally. Use the
+current question ID returned by the preview. `--answer question_id=value` supplies
+the same string format; text must contain 1–2,000 characters. Multiple answers
+and typed JSON values are rejected before network access. The CLI posts
+`{question_id, plan_revision, answer}` once, against the positive current revision,
+then inspects the same preview and submits its ready revision after checking the
+command intent. An answer request/key is saved before transmission. After an
+unknown acknowledgement, resume reads the preview without repeating the answer;
+a strictly newer revision or terminal state resolves that uncertainty. If the
+saved revision remains unchanged, the answer stays unresolved. A definitive 4xx
+rejection (except rate limiting) permits corrected answers on that same preview.
+New answers are refused after job submission starts.
 
 ```text
 campus run --discard
@@ -152,10 +174,10 @@ network mutation and permits a new run. It refuses previews whose job submission
 started or whose job receipt exists. An unknown submitted job must be reconciled
 with `run --resume`.
 
-Logs use canonical `{records:[{text:"..."}], next_cursor}` responses and accept
-the older `message` alias and string records for compatibility (`text` wins when
-both object fields exist). They follow pages until the
-current end, with a 4 MiB/1,000-page bound. Fetch reads the job's artifact list,
+Logs read `{entries:[{cursor,text,gap,...}], cursor, truncated}` with numeric,
+strictly increasing cursors until an empty page, within a 4 MiB/1,000-page bound.
+Reported retention gaps and truncation are printed to stderr. Fetch reads the
+job's artifact list,
 checks all paths, case aliases, file/directory conflicts and download staging
 collisions before requesting bytes, then verifies every SHA-256/declared size.
 It publishes a complete staged directory by rename. The destination must not
@@ -167,46 +189,47 @@ the system CA trust. There is no insecure TLS option. Plain HTTP is accepted
 only for loopback development endpoints. Credential-bearing redirects are not
 followed.
 
-## Provisional API boundary
+## Foundation API boundary
 
-The detailed preview/upload request composition is runner-owned and provisional
-until generated foundation DTOs are available. Integration must reconcile this
-shape explicitly; it is not a claim that a production server already supports it.
+The network DTOs follow foundation commit
+`5a5bd297dfc0c9fd704e408a929d56643042c4ba` and its generated Go types.
+`run` sends the published `PreviewRequest`, for example:
 
 ```json
 {
-  "request": {
-    "argv": ["python", "train.py"],
-    "requires_gpu": true,
-    "working_dir": "/workspace",
-    "outputs": ["model.pt"],
-    "bindings": [{"artifact_id": "DATA_ID", "target": "/data", "read_only": true}],
-    "network_policy": "none"
-  },
-  "project": {
-    "artifact": {"artifact_id": "PROJECT_ID", "digest": "SHA256", "size_bytes": 123, "kind": "project", "path": "project.zip"},
-    "manifest_digest": "SHA256",
-    "manifest": {"schema_version": "1", "files": [], "total_bytes": 0, "digest": "SHA256"}
-  },
-  "inputs": [{"artifact_id": "DATA_ID", "digest": "SHA256", "size_bytes": 123, "kind": "dataset", "path": "data.zip"}]
+  "prompt": "Prepare the exact JSON command intent carried in this bounded prompt...",
+  "project_artifact_id": "00000000-0000-4000-8000-000000000001",
+  "accelerator": "cuda",
+  "inputs": [{
+    "artifact_id": "00000000-0000-4000-8000-000000000002",
+    "mount_path": "/data",
+    "archive": true
+  }],
+  "share_with_llm": false
 }
 ```
 
 The endpoints are `POST /job-previews`, `GET /job-previews/{id}`, then
-`POST /jobs {preview_id, plan_revision}` with a stable `Idempotency-Key`.
-Explicit missing-input answers use
-`POST /job-previews/{id}/answers {plan_revision, answers:[{question_id,value}]}`
-with a separately persisted stable key. It accepts 1–100 unique question IDs,
-finite JSON values, at most 16 nesting levels across the entire body and at most
-64 KiB encoded body. Answer receipts may be empty/ID-only; if supplied their
-preview ID must match. The CLI then polls that same preview. Recognized interim
-states are pending/queued/analyzing/planning/preparing; terminal states are
-failed/cancelled/expired/rejected. Unexpected or empty polled states fail.
-Revisions accept a nonnegative integer or a bounded nonempty string. Member
-uploads use the existing resumable `/uploads` transport with an empty attempt
-fence; finalization must return the artifact's verified digest/size. The transport
-supports member authorization, but the foundation server must enforce member
-scope separately from device/attempt scope.
+`POST /jobs {preview_id, plan_revision}`. Preview and job responses use `id`;
+preview responses use a singular `question`. Revisions must be positive integers.
+Planning states are `inspecting`, `planning` and `validating`; server terminal
+states are `failed` and `cancelled`. Older saved terminal flags remain recoverable.
+Unknown job acknowledgements retain the exact frozen request and stable
+`Idempotency-Key`; this is local recovery behavior, not proof of production
+exactly-once handling. Preview and answer mutations have no automatic replay.
+
+Member upload creation uses `name`, `sha256`, `size_bytes`, `media_type`, bounded
+`part_size_bytes` and `kind` (`project` or `input`), without worker attempt proof.
+Upload responses use `id`, `state`, `part_count` and part descriptors. Finalized
+and job artifacts use `{id, name, sha256, size_bytes, media_type}`; checksum and
+size verification still precede publishing any downloaded directory.
+
+The published foundation currently supplies DTOs, fixtures and a fixture server,
+with no production coordinator entry point. The published assignment also lacks
+the worker's relative task hard-deadline and detailed sandbox quota contract.
+Worker execution fails closed at that boundary. Passing HTTP integration tests
+establishes request/response compatibility, not live enrollment, distributed
+execution, server-side idempotency or a completed two-device benchmark.
 
 ## Local baseline
 

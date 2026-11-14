@@ -1,76 +1,120 @@
-# v1 foundation handoff
+# Published foundation integration
 
-The route groups and required Assignment/Capabilities fields follow the existing
-implementation plan. The control-plane owner has not published foundation yet;
-these are proposed detailed payloads, exercised through actual HTTP/TLS boundary
-tests. They must be agreed against foundation before the branches are integrated.
+Foundation became available after the first local validation pass:
+`codex/control-plane`, commit `5a5bd297dfc0c9fd704e408a929d56643042c4ba`.
+Its committed `contracts/openapi-v1.yaml` is JSON and has SHA-256
+`f6811226468f3dcba58e734654044b4710687b0e942f849430ee8b2411b1ace8`.
+The unmodified upstream schema/fixture checker passes. This commit contains
+DTOs, a generator and a deterministic mock API, but no `server/campus/main.py`
+or production coordinator. Do not confuse a successful fixture exchange with
+enrolment, scheduling, transactional acceptance or credits.
 
-## Common rules
+Go DTOs are generated into `internal/generated/api.go`; their provenance and
+regeneration command are in `internal/generated/PROVENANCE.md`. The Python SDK
+contains an exact generated DTO copy as an optional dependency and pinned
+source/fixture snapshots. Its normal client remains stdlib-only.
 
-All API calls use `/api/v1`, snake_case JSON, SHA-256 digests and durations in ms.
-Times are UTC RFC3339. Production IDs are UUIDs; fixture IDs are readable tokens.
-Version handshake precedes invitation redemption. `Authorization: Bearer ...`
-and `X-Node-Session-ID` supply identity. Attempt mutations carry attempt_id,
-generation and lease_token in the body; upload part requests carry the equivalent
-X-Attempt-ID/X-Generation/X-Lease-Token headers. Receipts are queried after an
-uncertain complete response before any application-level complete replay.
+## Implemented request boundaries
 
-Protocol response: `{api_version:"1", min_runner_version:"0.1.0",
-max_runner_version:"0.1.99"}`. Production must publish its actual compatibility
-range. Errors use the plan's `{code,message,field_errors,retryable,request_id}`.
-Authentication/session failures and stale attempts stop their respective work.
+All routes are under `/api/v1`; HTTPS is required except on loopback. Redirects
+are rejected. Bearer credentials stay scoped to member or device authority.
 
-## Relative deadlines
+| Boundary | Published representation |
+| --- | --- |
+| Protocol | Integer `api_version`, `min_worker_version`, `max_worker_version`; omitted defaults are1. Required lease, heartbeat and long-poll durations are validated. CLI binary version remains0.1.0. |
+| Worker session | `X-Node-Session` header; SessionCreate uses `protocol_version:1` and generated capabilities. Credentials/sessions return `id`. |
+| Capabilities | Integer preflight revision; server Budget uses CPU/RAM/disk bytes, GPU slots and VRAM. Local diagnostics and detailed sandbox limits are kept separately. Only verified canonical repository image digests are advertised. |
+| Preview | Actual PreviewRequest fields, UUID `id`, one optional `question`; answers are one `{question_id,plan_revision,answer:string}`. |
+| Job submission | Frozen `{preview_id,plan_revision}` and the same Idempotency-Key after uncertain job acknowledgement. Unsupported job-list lookup is not used. |
+| Logs/cancel | LogPage has `entries`, integer cursor and truncation indicator. Cancellation sends no invented body. |
+| Artifact | `{id,name,size_bytes,sha256,media_type}`. Download still verifies safe paths, byte counts, Range and SHA-256 before atomic publication. |
+| Upload | UploadCreate uses name/hash/size/kind/selected part size and optional nested attempt proof. Upload status has id/state/part_count/part descriptors. PUT checksums and retained bytes are verified. Finalize has no body. |
+| Work poll | Generated WorkRequest contains only `wait_ms`; node authority is in the authenticated session header. |
 
-Assignments include the plan's absolute server times plus `lease_remaining_ms`
-and **task_remaining_ms**. Renew responses repeat both relative durations plus an
-optional control. This additional relative task bound is required to avoid using
-the laptop's wall clock for the hard task deadline. RTT and a 250 ms safety margin
-are subtracted; confirmed renewals cannot extend the original hard task bound.
+No idempotency guarantee is published for preview, answer, credential redemption,
+session creation or upload creation. Those mutations make one attempt. Unknown
+acknowledgements remain explicit; a known preview may be read back, and only a
+newer revision or terminal state resolves an unknown answer. CLI keeps its
+durable submission state and safe never-submitted discard path. A file finalize
+with a lost acknowledgement is reconciled through verified ready upload status.
+Part PUTs can be retried with identical bytes and checksum.
 
-## Artifacts and execution
+The command CLI retains `campus run --gpu -- python train.py`. It submits the
+literal command intent through the published planner API, then verifies the
+ready single-stage plan's argv, adapter, working directory, bindings, network,
+accelerator and declared outputs before creating a job. It never silently
+accepts a substituted shell command. Actual planner/LLM execution remains
+unavailable until the coordinator exists.
 
-An artifact reference is `{artifact_id,digest,size_bytes,path,kind?}`. Paths are
-safe relative POSIX paths. Project snapshots bind to `project.zip` (`kind=project`);
-one separately uploaded dataset archive (`kind=dataset`) is safely unpacked and
-mounted read-only at `/data`. Other inputs live read-only under `/inputs`. A resume
-artifact is a ZIP checkpoint envelope whose explicit code/input/environment/trainer
-binding is supplied as `validator_policy.resume_binding` and checked before use.
+## Worker safety contract still required
 
-POST uploads uses digest, size_bytes and optional attempt fence, returning
-`{upload_id,part_size_bytes}`. GET upload repeats those fields and completed_parts
-(zero-based integers). PUT parts supplies X-Content-SHA256. Finalize returns an
-immutable artifact reference only after storage checksums succeed. Artifact GET
-supports Range and exact Content-Range for interrupted downloads.
+The published Assignment is not sufficient for this runner's full execution
+contract. In particular:
 
-Complete supplies `{attempt_id,generation,lease_token,result_manifest}`. The result
-has schema_version, files, quality, benchmark_eligible, compute_duration_ms and
-overhead_duration_ms. Initial generic quality is unverified; the server's isolated
-validator decides acceptance/correctness. Attempt status returns state/receipt_id.
-Checkpoint publication finalizes its ZIP first, then sends artifact, binding and
-manifest_digest through the fenced checkpoints endpoint. No local READY marker
-alone is a server-published checkpoint.
+- It has absolute `task_deadline_at`, but no relative `task_remaining_ms`.
+  The runner must not derive its hard limit from the laptop's wall clock.
+- Resources has a single `disk_bytes`; the approved PID/workspace/output/
+  checkpoint/tmp limits and precise GPU admission mapping need an agreed
+  representation or named administrator policy.
+- Assignment inputs use nested artifacts/mount bindings; outputs are structured
+  declarations and validator policy is an identifier. The rich local execution
+  model has different representations. Conversion must preserve binding,
+  output quotas, checkpoint compatibility and registered validator authority.
 
-Resource limits are cpu_millis, memory_bytes, pids, workspace_bytes, output_bytes,
-checkpoint_bytes, tmp_bytes, gpu_ids and vram_bytes. CPU/GPU queues share one budget.
-Only locally approved immutable image IDs/digests, a verified guard label, a native
-Linux architecture, and network_policy=none are admitted. Models and adapters have
-separate version/digest identity; a model cache never supplies benchmark answers.
+`ClaimWork` fails closed with `ErrWorkerContractIncomplete` when the required
+relative bound/policy is absent. A complete fixture validated by the actual
+foundation Assignment DTO is checked by a worker regression: no `/started`
+mutation or container creation occurs, and polling stops with the explicit
+error. Safe container functionality demonstrated locally does not prove that
+this published assignment can run through a real coordinator.
 
-## User and observer payloads
+The typed attempt transport uses generated proof, completion, lease receipt and
+checkpoint DTOs. Completion outputs reference finalized artifacts; local
+quality/provenance diagnostics do not become server correctness claims. A lost
+completion response is reconciled against matching attempt/generation and its
+nested receipt before any retry. Renewals never extend the original local hard
+bound. Checkpoint publication keeps the complete verified envelope and explicit
+unknown-acknowledgement behavior.
 
-CLI.md describes the preview submission request and persisted idempotency state.
-The SDK accepts the same JSON preview request rather than constructing another
-planner protocol. Both consume `{job_id,state,artifacts:[artifact reference]}` and
-cursor log pages; the exact log record fields must be shared by all clients.
+Checkpoint compatibility is proposed as SHA-256 of the canonical sorted JSON
+map containing exactly code/input/environment/trainer digest fields. Foundation
+currently gives the field a SHA-256 type without defining that algorithm; this
+must be agreed before cross-device pointer/resume interoperability is claimed.
 
-The JSON adapter executable uses versioned AdapterRequest/AdapterResponse, a
-static registered adapter ID/version and operation/payload. Full request formats
-and validator-only reference boundaries are in workloads/README.md. Heavy ML code
-is not imported into the API process and user validators are never imported.
+## Measurement and adapter handoff
 
-StandaloneRecord and benchmark import schema/scopes remain an explicit foundation
-handoff. Preserve manifest/model/image/adapter/resource/quality equivalence and
-the distinction between container computation, validation and overhead timings.
-Only a real registered validator may mark a record eligible for formal correctness
-throughput; arbitrary caller labels cannot establish provenance.
+The foundation's telemetry body has sequence, optional CPU/GPU percentages and
+memory bytes, and a phase. It has no raw measurement-window or stream-kind
+fields. Wire percentages must use documented denominators and missing values
+remain absent. Raw local samples/windows are distinct evidence; the current
+schema does not prove their retention by a coordinator. Concurrent attempt
+CPU/GPU senders share one monotonic sequence.
+
+Local standalone manifests/records retain their original schema1 file binding
+and output descriptors. These are distinct from server Artifact DTOs: changing
+API names must not lose archive kinds or invalidate existing HMAC records.
+Foundation StandaloneRecord represents one repetition and differs from the
+local aggregate evidence export. Its config-digest definition, registered-node
+authority, units, adapter-source identity and accepted comparison policy still
+need coordinator agreement. No automatic import or formal benchmark claim is
+made by a local record.
+
+Foundation AdapterRequest has only operation/payload and AdapterResponse has
+object result/string error. The current trusted adapter executable also binds
+schema version and a static registered adapter ID/version, with richer error
+details. The coordinator invocation must explicitly bind that trusted identity
+and adapt the envelope; never infer a Python module/validator from user input.
+The upstream commit does not yet contain that invoker.
+
+## Other project parts
+
+`codex/portal-console` commit `874e0529ab2b83f8353b20be6968545f289b10c9`
+still declares provisional UI models in its own integration handoff. Examples
+include uploaded-part inventory, artifact digest/ready fields, preview question
+collections and utilization windows. Those apps must consume their generated
+foundation DTOs and be tested against the real API by their integration owner.
+This runner branch does not overwrite their source, generated clients or locks.
+
+See `VALIDATION.md` for actual local commands/results. Full acceptance still
+needs the production server, native Mac run, two physical devices, CUDA hardware,
+trusted references and matched final-source standalone/pooled measurements.

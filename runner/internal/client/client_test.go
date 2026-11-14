@@ -1,6 +1,7 @@
 package client
 
 import (
+	"campus/runner/internal/generated"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -18,7 +19,7 @@ func TestClientHandshakeAndAuthNeverFollowRedirect(t *testing.T) {
 	defer other.Close()
 	server := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path == "/api/v1/protocol" {
-			json.NewEncoder(w).Encode(map[string]any{"api_version": "1", "min_runner_version": "0.1.0", "max_runner_version": "0.1.99"})
+			json.NewEncoder(w).Encode(map[string]any{"api_version": 1, "min_worker_version": 1, "max_worker_version": 1, "lease_ms": 60000, "heartbeat_interval_ms": 10000, "long_poll_ms": 25000})
 			return
 		}
 		if r.Header.Get("Authorization") != "Bearer secret" {
@@ -67,12 +68,18 @@ func TestCompleteRecoversReceiptAfterLostACK(t *testing.T) {
 	s := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
 		case "/api/v1/attempts/attempt/complete":
+			var body generated.Complete
+			decoder := json.NewDecoder(r.Body)
+			decoder.DisallowUnknownFields()
+			if err := decoder.Decode(&body); err != nil || body.Generation != 2 || body.LeaseToken != "lease" || len(body.Manifest.Outputs) != 1 || body.Manifest.Outputs[0].Path != "model.pt" {
+				t.Errorf("completion does not match v1: %+v, %v", body, err)
+			}
 			completes.Add(1)
 			hj := w.(http.Hijacker)
 			conn, _, _ := hj.Hijack()
 			conn.Close()
 		case "/api/v1/attempts/attempt":
-			json.NewEncoder(w).Encode(map[string]any{"attempt_id": "attempt", "state": "verifying", "receipt_id": "receipt"})
+			fmt.Fprint(w, `{"attempt_id":"attempt","task_id":"task","generation":2,"state":"verifying","receipt":{"attempt_id":"attempt","task_id":"task","state":"verifying","submitted_at":"2026-11-14T00:00:00Z"}}`)
 		default:
 			t.Error(r.URL.Path)
 		}
@@ -80,8 +87,11 @@ func TestCompleteRecoversReceiptAfterLostACK(t *testing.T) {
 	defer s.Close()
 	c, _ := New(s.URL, "token", "s", s.Client())
 	c.Backoff = time.Millisecond
-	receipt, err := c.Complete(context.Background(), Fence{AttemptID: "attempt", Generation: 2, LeaseToken: "lease"}, map[string]any{"files": []any{}})
-	if err != nil || receipt.ReceiptID != "receipt" || completes.Load() != 1 {
+	receipt, err := c.Complete(context.Background(), Fence{AttemptID: "attempt", Generation: 2, LeaseToken: "lease"}, generated.ResultManifest{Outputs: []generated.OutputRef{{Path: "model.pt", ArtifactID: "artifact"}}})
+	raw, _ := json.Marshal(receipt)
+	var fields map[string]any
+	json.Unmarshal(raw, &fields)
+	if err != nil || fields["task_id"] != "task" || fields["submitted_at"] != "2026-11-14T00:00:00Z" || completes.Load() != 1 {
 		t.Fatalf("lost ACK was not reconciled: %+v, %v, calls=%d", receipt, err, completes.Load())
 	}
 }

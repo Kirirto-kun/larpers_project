@@ -72,6 +72,10 @@ func readProfiles(path string) (profiles, map[string]string, error) {
 }
 
 func (a *App) preflight(ctx context.Context, path string, gpu bool) (client.Capabilities, map[string]string, error) {
+	return a.preflightWithCanonical(ctx, path, gpu, false)
+}
+
+func (a *App) preflightWithCanonical(ctx context.Context, path string, gpu, requireCanonical bool) (client.Capabilities, map[string]string, error) {
 	caps, err := a.Discover(ctx)
 	if err != nil {
 		return caps, nil, fmt.Errorf("discover host: %w", err)
@@ -79,8 +83,10 @@ func (a *App) preflight(ctx context.Context, path string, gpu bool) (client.Capa
 	for i := range caps.GPUs {
 		caps.GPUs[i].CUDAVerified = false
 	}
+	caps.ImageDigests = []string{}
 	caps.OfferedBudget = discovery.Budget(caps, false)
-	p, allowed, err := readProfiles(path)
+	p, _, err := readProfiles(path)
+	allowed := map[string]string{}
 	if err != nil {
 		return caps, allowed, err
 	}
@@ -117,8 +123,34 @@ func (a *App) preflight(ctx context.Context, path string, gpu bool) (client.Capa
 		if err = a.VerifyImage(ctx, *v.ImageDigest, v.Platform); err != nil {
 			return caps, allowed, fmt.Errorf("profile %s: %w", v.ID, err)
 		}
+		// Offline archives can preserve the immutable local image ID without a
+		// registry RepoDigest. Verify and exercise that approved identity first;
+		// canonical admission metadata must not make local work unavailable.
 		if err = a.Probe(ctx, *v.ImageDigest, v.Platform, kind == "cuda"); err != nil {
 			return caps, allowed, fmt.Errorf("profile %s: %w", v.ID, err)
+		}
+		allowed[*v.ImageDigest] = v.Platform
+		canonical, resolveErr := a.ResolveImage(ctx, *v.ImageDigest)
+		if ctx.Err() != nil {
+			return caps, allowed, ctx.Err()
+		}
+		if resolveErr == nil && (len(canonical) > 256 || !repositoryDigest.MatchString(canonical)) {
+			resolveErr = errors.New("cached canonical RepoDigest is unavailable")
+		}
+		if resolveErr == nil && canonical != *v.ImageDigest {
+			resolveErr = a.VerifyImage(ctx, canonical, v.Platform)
+			if ctx.Err() != nil {
+				return caps, allowed, ctx.Err()
+			}
+		}
+		if resolveErr != nil {
+			if requireCanonical {
+				return caps, allowed, fmt.Errorf("profile %s: participation requires a verified canonical RepoDigest; offline doctor and benchmark-local can use the approved local image: %w", v.ID, resolveErr)
+			}
+			caps.Diagnostics = append(caps.Diagnostics, fmt.Sprintf("Profile %s is verified for offline use; participation canonical RepoDigest is not ready: %v", v.ID, resolveErr))
+		} else {
+			allowed[canonical] = v.Platform
+			caps.ImageDigests = append(caps.ImageDigests, canonical)
 		}
 		if kind == "cuda" {
 			// The current real probe addresses CUDA's default device. Never

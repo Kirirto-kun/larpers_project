@@ -4,11 +4,10 @@ import (
 	"campus/runner/internal/client"
 	"campus/runner/internal/telemetry"
 	"context"
-	"sync/atomic"
 	"time"
 )
 
-func (r *Runner) gpuMetrics(ctx context.Context, a client.Assignment, sequence *atomic.Int64, fail func(error)) {
+func (r *Runner) gpuMetrics(ctx context.Context, a client.Assignment, sender *attemptTelemetrySender, fail func(error)) {
 	tick := time.NewTicker(time.Second)
 	defer tick.Stop()
 	for {
@@ -22,9 +21,9 @@ func (r *Runner) gpuMetrics(ctx context.Context, a client.Assignment, sequence *
 			cancel()
 			end := time.Now()
 			values := map[string]any{"gpus": gpus, "available": e == nil, "desired_interval_ms": 1000, "source": "nvidia-smi device samples; collection window, not integrated energy"}
-			sample := telemetry.NewSample(sequence.Add(1), "attempt/gpu", start, end, values)
+			sample := telemetry.NewSample(0, "attempt/gpu", start, end, values)
 			sendCtx, close := context.WithTimeout(ctx, 900*time.Millisecond)
-			e = r.Client.Do(sendCtx, "POST", "/attempts/"+a.AttemptID+"/telemetry", map[string]any{"attempt_id": a.AttemptID, "generation": a.Generation, "lease_token": a.LeaseToken, "sample": sample}, nil, "")
+			e = sender.Send(sendCtx, sample, "compute", float64(a.ResourceLimits.CPUMillis)/1000)
 			close()
 			if client.Terminal(e) {
 				fail(e)

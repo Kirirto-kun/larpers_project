@@ -2,6 +2,7 @@ package client
 
 import (
 	"bytes"
+	"campus/runner/internal/generated"
 	"context"
 	"encoding/json"
 	"errors"
@@ -49,12 +50,13 @@ func SessionFatal(err error) bool {
 }
 
 type Client struct {
-	BaseURL    string
-	Credential string
-	SessionID  string
-	HTTP       *http.Client
-	Attempts   int
-	Backoff    time.Duration
+	BaseURL        string
+	Credential     string
+	SessionID      string
+	HTTP           *http.Client
+	Attempts       int
+	Backoff        time.Duration
+	UploadPartSize int64
 }
 
 func New(endpoint, credential, session string, h *http.Client) (*Client, error) {
@@ -93,7 +95,7 @@ func (c *Client) Request(ctx context.Context, method, route string, body io.Read
 		req.Header.Set("Authorization", "Bearer "+c.Credential)
 	}
 	if c.SessionID != "" {
-		req.Header.Set("X-Node-Session-ID", c.SessionID)
+		req.Header.Set("X-Node-Session", c.SessionID)
 	}
 	if key != "" {
 		req.Header.Set("Idempotency-Key", key)
@@ -196,6 +198,11 @@ func (c *Client) Do(ctx context.Context, method, route string, input, output any
 	return c.do(ctx, method, route, input, output, key, c.Attempts)
 }
 
+// DoOnce keeps mutations without a published idempotency guarantee from replay.
+func (c *Client) DoOnce(ctx context.Context, method, route string, input, output any, key string) error {
+	return c.do(ctx, method, route, input, output, key, 1)
+}
+
 func parseVersion(v string) ([3]int, error) {
 	var result [3]int
 	parts := strings.Split(v, ".")
@@ -223,31 +230,42 @@ func compareVersion(a, b [3]int) int {
 	return 0
 }
 func (c *Client) Handshake(ctx context.Context) error {
-	var p struct {
-		APIVersion string `json:"api_version"`
-		Min        string `json:"min_runner_version"`
-		Max        string `json:"max_runner_version"`
-	}
+	var p generated.Protocol
 	if err := c.Do(ctx, "GET", "/protocol", nil, &p, ""); err != nil {
 		return err
 	}
-	v, _ := parseVersion(Version)
-	low, e1 := parseVersion(p.Min)
-	high, e2 := parseVersion(p.Max)
-	if p.APIVersion != "1" || e1 != nil || e2 != nil || compareVersion(v, low) < 0 || compareVersion(v, high) > 0 {
+	value := func(p *int64) int64 {
+		if p == nil {
+			return 1
+		}
+		return *p
+	}
+	if value(p.APIVersion) != 1 || value(p.MinWorkerVersion) != 1 || value(p.MaxWorkerVersion) != 1 || p.LeaseMs <= 0 || p.HeartbeatIntervalMs <= 0 || p.HeartbeatIntervalMs >= p.LeaseMs || p.LongPollMs < 0 {
 		return errors.New("incompatible coordinator protocol version")
 	}
 	return nil
 }
 
-func (c *Client) Complete(ctx context.Context, fence Fence, result any) (Receipt, error) {
+func (c *Client) Complete(ctx context.Context, fence Fence, result generated.ResultManifest) (Receipt, error) {
 	route := "/attempts/" + url.PathEscape(fence.AttemptID)
 	var receipt Receipt
+	validReceipt := func(receipt Receipt, taskID string) error {
+		_, err := time.Parse(time.RFC3339Nano, receipt.SubmittedAt)
+		if receipt.AttemptID != fence.AttemptID || receipt.TaskID == "" || taskID != "" && receipt.TaskID != taskID || err != nil || receipt.State != generated.TaskStateVerifying && receipt.State != generated.TaskStateSucceeded {
+			return errors.New("invalid completion receipt identity, state, or submission time")
+		}
+		return nil
+	}
+	body := generated.Complete{Generation: fence.Generation, LeaseToken: fence.LeaseToken, Manifest: result}
 	// A complete request may have committed even if its response was lost. Reconcile
 	// before ever retrying it. The same fenced body/key is used for any retry.
 	for i := 0; i < max(1, c.Attempts); i++ {
-		err := c.do(ctx, "POST", route+"/complete", map[string]any{"attempt_id": fence.AttemptID, "generation": fence.Generation, "lease_token": fence.LeaseToken, "result_manifest": result}, &receipt, "complete:"+fence.AttemptID+":"+strconv.FormatInt(fence.Generation, 10), 1)
+		receipt = Receipt{}
+		err := c.do(ctx, "POST", route+"/complete", body, &receipt, "complete:"+fence.AttemptID+":"+strconv.FormatInt(fence.Generation, 10), 1)
 		if err == nil {
+			if err := validReceipt(receipt, ""); err != nil {
+				return Receipt{}, err
+			}
 			return receipt, nil
 		}
 		if Terminal(err) {
@@ -257,15 +275,28 @@ func (c *Client) Complete(ctx context.Context, fence Fence, result any) (Receipt
 		if errors.As(err, &api) && api.Status < 500 && api.Status != 429 {
 			return receipt, err
 		}
-		if statusErr := c.Do(ctx, "GET", route, nil, &receipt, ""); statusErr == nil {
-			switch receipt.State {
-			case "verifying", "succeeded":
-				return receipt, nil
-			case "failed", "cancelled", "retry_wait":
-				return receipt, errors.New("attempt is no longer active")
+		var status generated.AttemptStatus
+		if statusErr := c.Do(ctx, "GET", route, nil, &status, ""); statusErr != nil {
+			return Receipt{}, errors.Join(err, statusErr)
+		}
+		if status.AttemptID != fence.AttemptID || status.Generation != fence.Generation || status.TaskID == "" {
+			return Receipt{}, errors.New("completion reconciliation attempt/generation mismatch")
+		}
+		switch status.State {
+		case generated.TaskStateVerifying, generated.TaskStateSucceeded:
+			if status.Receipt == nil {
+				return Receipt{}, errors.New("completion reconciliation has no receipt")
 			}
-		} else if Terminal(statusErr) {
-			return receipt, statusErr
+			if err := validReceipt(*status.Receipt, status.TaskID); err != nil {
+				return Receipt{}, err
+			}
+			return *status.Receipt, nil
+		case generated.TaskStateLeased, generated.TaskStateRunning:
+			if status.Receipt != nil {
+				return Receipt{}, errors.New("active attempt unexpectedly has a completion receipt")
+			}
+		default:
+			return Receipt{}, errors.New("attempt is no longer active or status is invalid")
 		}
 		if i+1 >= c.Attempts {
 			return receipt, err

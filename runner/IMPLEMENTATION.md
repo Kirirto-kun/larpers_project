@@ -28,3 +28,13 @@ For each task: write meaningful boundary/failure tests, observe failure, impleme
 ## Validation
 
 Commands and observed outcomes are recorded in `VALIDATION.md`. Do not interpret an engineering target, a fixture response, or a test double as measured pool performance.
+
+## Foundation publication after the first pass
+
+Remote commit `5a5bd29` subsequently supplied the shared OpenAPI, generator,
+DTOs and fixture server. Go and SDK types are generated from that pinned source;
+CLI/SDK/upload boundaries have been reconciled. `PROTOCOL.md` supersedes the
+initial provisional payloads and records remaining safety/integration gaps.
+The remote still has no production coordinator. Full compatibility is unproven;
+neither client fixture tests nor two locally running processes replace the
+required physical multi-device/CUDA acceptance.

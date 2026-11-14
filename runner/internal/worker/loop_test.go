@@ -23,7 +23,7 @@ func TestDrainDuringHeldPollCannotStartNewWork(t *testing.T) {
 		io.Copy(io.Discard, req.Body)
 		switch {
 		case req.URL.Path == "/api/v1/protocol":
-			fmt.Fprint(w, `{"api_version":"1","min_runner_version":"0.1.0","max_runner_version":"0.1.99"}`)
+			fmt.Fprint(w, `{"lease_ms":60000,"heartbeat_interval_ms":10000,"long_poll_ms":25000}`)
 		case req.URL.Path == "/api/v1/work/next":
 			entered <- struct{}{}
 			select {

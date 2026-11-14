@@ -3,12 +3,15 @@ package artifacts
 import (
 	"bytes"
 	"campus/runner/internal/client"
+	"campus/runner/internal/generated"
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
+	"net/http"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -149,101 +152,209 @@ func Download(ctx context.Context, c *client.Client, a client.Artifact, dest str
 	return os.Rename(part, dest)
 }
 
-type uploadState struct {
-	UploadID  string `json:"upload_id"`
-	PartSize  int64  `json:"part_size_bytes"`
-	Completed []int  `json:"completed_parts"`
+func Upload(ctx context.Context, c *client.Client, path string, fence client.Fence) (client.Artifact, error) {
+	kind := "input"
+	if fence.AttemptID != "" {
+		kind = "output"
+	}
+	return UploadAs(ctx, c, path, fence, kind)
 }
 
-func Upload(ctx context.Context, c *client.Client, path string, fence client.Fence) (client.Artifact, error) {
+// UploadAs selects the foundation artifact purpose independently of its local name.
+func UploadAs(ctx context.Context, c *client.Client, path string, fence client.Fence, kind string) (client.Artifact, error) {
 	var result client.Artifact
+	switch kind {
+	case "input", "project", "output", "checkpoint":
+	default:
+		return result, errors.New("invalid upload kind")
+	}
+	partSize := c.UploadPartSize
+	if partSize == 0 {
+		partSize = 4 << 20
+	}
+	if partSize < 1 || partSize > 8<<20 {
+		return result, errors.New("unsupported upload part size")
+	}
 	digest, size, err := HashFile(path)
 	if err != nil {
 		return result, err
 	}
-	body := map[string]any{"digest": digest, "size_bytes": size, "attempt_id": fence.AttemptID, "generation": fence.Generation, "lease_token": fence.LeaseToken}
-	var state uploadState
-	key := "upload:" + fence.AttemptID + ":" + strconv.FormatInt(fence.Generation, 10) + ":" + digest
-	if err = c.Do(ctx, "POST", "/uploads", body, &state, key); err != nil {
+	name := filepath.Base(path)
+	mediaType := "application/octet-stream"
+	body := generated.UploadCreate{Name: name, SHA256: digest, SizeBytes: size, PartSizeBytes: &partSize, Kind: &kind, MediaType: &mediaType}
+	if fence.AttemptID != "" || fence.Generation != 0 || fence.LeaseToken != "" {
+		if !client.IDPattern.MatchString(fence.AttemptID) || fence.Generation < 1 || strings.TrimSpace(fence.LeaseToken) == "" {
+			return result, errors.New("invalid upload attempt proof")
+		}
+		body.AttemptID = &fence.AttemptID
+		body.Proof = &generated.AttemptProof{Generation: fence.Generation, LeaseToken: fence.LeaseToken}
+	}
+	var state generated.Upload
+	// The foundation does not promise idempotency for creation. An unknown
+	// acknowledgement must reach the caller rather than creating another upload.
+	if err = c.DoOnce(ctx, "POST", "/uploads", body, &state, ""); err != nil {
 		return result, err
 	}
-	if !client.IDPattern.MatchString(state.UploadID) {
+	if !client.IDPattern.MatchString(state.ID) {
 		return result, errors.New("invalid upload ID")
 	}
-	route := "/uploads/" + state.UploadID
+	uploadID := state.ID
+	partCount := size / partSize
+	if size%partSize != 0 {
+		partCount++
+	}
+	if err = validateUpload(state, uploadID, partCount); err != nil {
+		return result, err
+	}
+	route := "/uploads/" + uploadID
+	// A status response must stand on its own; omitted fields cannot inherit
+	// their earlier values from the create acknowledgement.
+	state = generated.Upload{}
 	if err = c.Do(ctx, "GET", route, nil, &state, ""); err != nil {
 		return result, err
 	}
-	if state.PartSize <= 0 || state.PartSize > 16<<20 {
-		return result, errors.New("unsupported upload part size")
-	}
-	done := map[int]bool{}
-	for _, p := range state.Completed {
-		done[p] = true
+	if err = validateUpload(state, uploadID, partCount); err != nil {
+		return result, err
 	}
 	f, err := os.Open(path)
 	if err != nil {
 		return result, err
 	}
 	defer f.Close()
-	for part, offset := 0, int64(0); offset < size; part, offset = part+1, offset+state.PartSize {
-		if done[part] {
-			continue
+	done := map[int64]bool{}
+	// The server's inventory is only reusable when it describes these local
+	// bytes. Check every retained part before sending any further mutations.
+	for _, p := range state.Parts {
+		if p.Number < 0 || p.Number >= partCount || done[p.Number] {
+			return result, errors.New("invalid retained upload part number")
 		}
-		buf := make([]byte, min(state.PartSize, size-offset))
+		offset := p.Number * partSize
+		if p.SizeBytes != min(partSize, size-offset) {
+			return result, errors.New("retained upload part size mismatch")
+		}
+		buf := make([]byte, p.SizeBytes)
 		if _, err = f.ReadAt(buf, offset); err != nil {
 			return result, err
 		}
 		sum := sha256.Sum256(buf)
-		for attempt := 0; attempt < max(1, c.Attempts); attempt++ {
-			req, e := c.Request(ctx, "PUT", route+"/parts/"+strconv.Itoa(part), bytes.NewReader(buf), key+":"+strconv.Itoa(part))
-			if e != nil {
-				return result, e
-			}
-			req.Header.Set("Content-Type", "application/octet-stream")
-			req.Header.Set("X-Content-SHA256", hex.EncodeToString(sum[:]))
-			req.Header.Set("X-Attempt-ID", fence.AttemptID)
-			req.Header.Set("X-Generation", strconv.FormatInt(fence.Generation, 10))
-			req.Header.Set("X-Lease-Token", fence.LeaseToken)
-			resp, e := c.HTTP.Do(req)
-			if e == nil {
-				io.Copy(io.Discard, io.LimitReader(resp.Body, 4096))
-				resp.Body.Close()
-				if resp.StatusCode >= 200 && resp.StatusCode < 300 {
-					err = nil
-					break
-				}
-				if resp.StatusCode == 401 || resp.StatusCode == 403 || resp.StatusCode == 409 || resp.StatusCode == 410 {
-					return result, &client.APIError{Status: resp.StatusCode, Code: "STALE_ATTEMPT", Message: "upload rejected"}
-				}
-				e = fmt.Errorf("upload part HTTP %d", resp.StatusCode)
-				if resp.StatusCode < 500 && resp.StatusCode != 429 {
-					return result, e
-				}
-			}
-			err = e
-			if attempt+1 < c.Attempts {
-				if e = c.Wait(ctx, attempt); e != nil {
-					return result, e
-				}
-			}
+		if p.SHA256 != hex.EncodeToString(sum[:]) {
+			return result, errors.New("retained upload part checksum mismatch")
 		}
-		if err != nil {
+		done[p.Number] = true
+	}
+	if state.State == "ready" {
+		if err = unchangedArtifact(path, digest, size); err != nil {
+			return result, err
+		}
+		return uploadedArtifact(state.Artifact, digest, size, name, kind)
+	}
+	for part, offset := int64(0), int64(0); offset < size; part, offset = part+1, offset+partSize {
+		if done[part] {
+			continue
+		}
+		buf := make([]byte, min(partSize, size-offset))
+		if _, err = f.ReadAt(buf, offset); err != nil {
+			return result, err
+		}
+		sum := sha256.Sum256(buf)
+		if err = putUploadPart(ctx, c, route, part, buf, hex.EncodeToString(sum[:])); err != nil {
 			return result, err
 		}
 	}
 	// Detect local mutation between checksum and upload/finalize.
-	current, n, e := HashFile(path)
-	if e != nil || current != digest || n != size {
-		return result, errors.New("artifact changed during upload")
-	}
-	if err = c.Do(ctx, "POST", route+"/finalize", body, &result, key+":finalize"); err != nil {
+	if err = unchangedArtifact(path, digest, size); err != nil {
 		return result, err
 	}
-	if !client.IDPattern.MatchString(result.ArtifactID) || result.Digest != digest || result.SizeBytes != size {
-		return result, errors.New("finalized artifact checksum/size mismatch")
+	var finalized generated.Artifact
+	if err = c.DoOnce(ctx, "POST", route+"/finalize", nil, &finalized, ""); err != nil {
+		var api *client.APIError
+		if errors.As(err, &api) && api.Status < 500 && api.Status != 429 {
+			return result, err
+		}
+		// Finalization may have committed despite a lost response. Its published
+		// status resource can prove completion without replaying the mutation.
+		var status generated.Upload
+		if statusErr := c.Do(ctx, "GET", route, nil, &status, ""); statusErr != nil {
+			return result, errors.Join(err, statusErr)
+		}
+		if statusErr := validateUpload(status, uploadID, partCount); statusErr != nil {
+			return result, errors.Join(err, statusErr)
+		}
+		if status.State != "ready" {
+			return result, fmt.Errorf("upload finalization acknowledgement unknown: %w", err)
+		}
+		return uploadedArtifact(status.Artifact, digest, size, name, kind)
 	}
-	result.Path = filepath.ToSlash(filepath.Base(path))
-	result.Kind = strings.TrimSpace(result.Kind)
-	return result, nil
+	return uploadedArtifact(&finalized, digest, size, name, kind)
+}
+
+func validateUpload(state generated.Upload, id string, parts int64) error {
+	if state.ID != id || state.PartCount != parts {
+		return errors.New("upload identity/part count mismatch")
+	}
+	if state.State != "pending" && state.State != "ready" {
+		return errors.New("upload is not pending or ready")
+	}
+	return nil
+}
+
+func unchangedArtifact(path, digest string, size int64) error {
+	current, n, err := HashFile(path)
+	if err != nil || current != digest || n != size {
+		return errors.New("artifact changed during upload")
+	}
+	return nil
+}
+
+func uploadedArtifact(a *generated.Artifact, digest string, size int64, name, kind string) (client.Artifact, error) {
+	if a == nil || !client.IDPattern.MatchString(a.ID) || a.SHA256 != digest || a.SizeBytes != size || a.Name != name || strings.TrimSpace(a.MediaType) == "" {
+		return client.Artifact{}, errors.New("finalized artifact descriptor/checksum/size mismatch")
+	}
+	return client.Artifact{ArtifactID: a.ID, Digest: a.SHA256, SizeBytes: a.SizeBytes, Path: name, Kind: kind, MediaType: a.MediaType}, nil
+}
+
+func putUploadPart(ctx context.Context, c *client.Client, route string, part int64, buf []byte, digest string) error {
+	var last error
+	for attempt := 0; attempt < max(1, c.Attempts); attempt++ {
+		req, err := c.Request(ctx, "PUT", route+"/parts/"+strconv.FormatInt(part, 10), bytes.NewReader(buf), "")
+		if err != nil {
+			return err
+		}
+		req.Header.Set("Content-Type", "application/octet-stream")
+		req.Header.Set("X-Content-SHA256", digest)
+		resp, err := c.HTTP.Do(req)
+		if err == nil {
+			raw, readErr := io.ReadAll(io.LimitReader(resp.Body, 65537))
+			resp.Body.Close()
+			if resp.StatusCode >= 200 && resp.StatusCode < 300 {
+				if readErr == nil {
+					var ack generated.UploadPart
+					if len(raw) > 65536 || json.Unmarshal(raw, &ack) != nil || ack.Number != part || ack.SHA256 != digest || ack.SizeBytes != int64(len(buf)) {
+						return errors.New("upload part acknowledgement mismatch")
+					}
+					return nil
+				}
+				err = readErr
+			} else {
+				api := &client.APIError{Status: resp.StatusCode, Code: http.StatusText(resp.StatusCode), Message: "upload part rejected"}
+				if readErr == nil && len(raw) <= 65536 {
+					json.Unmarshal(raw, api)
+				}
+				err = api
+				if client.Terminal(api) || resp.StatusCode < 500 && resp.StatusCode != 429 {
+					return err
+				}
+			}
+		}
+		last = err
+		if ctx.Err() != nil {
+			return ctx.Err()
+		}
+		if attempt+1 < c.Attempts {
+			if err = c.Wait(ctx, attempt); err != nil {
+				return err
+			}
+		}
+	}
+	return last
 }

@@ -1,0 +1,46 @@
+{
+  "generation": 1,
+  "lease_token": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+  "job_id": "00000000-0000-4000-8000-000000000001",
+  "stage_id": "compute",
+  "task_id": "00000000-0000-4000-8000-000000000001",
+  "attempt_id": "00000000-0000-4000-8000-000000000001",
+  "variant_id": "cpu",
+  "lease_expires_at": "2026-11-14T12:00:00Z",
+  "lease_remaining_ms": 60000,
+  "heartbeat_interval_ms": 10000,
+  "task_deadline_at": "2026-11-14T13:00:00Z",
+  "manifest_digest": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+  "adapter": {
+    "id": "generic.project",
+    "version": "1"
+  },
+  "image_digest": "campus/cpu@sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+  "platform": "linux/amd64",
+  "accelerator": "cpu",
+  "argv": [
+    "python",
+    "train.py"
+  ],
+  "working_dir": "/workspace",
+  "inputs": [],
+  "outputs": [
+    {
+      "path": "model.pt",
+      "required": true,
+      "max_bytes": 1048576
+    }
+  ],
+  "resource_limits": {
+    "cpu_millis": 1000,
+    "memory_bytes": 1073741824,
+    "disk_bytes": 1073741824,
+    "gpu_slots": 0,
+    "vram_bytes": 0
+  },
+  "network_policy": "none",
+  "resume_checkpoint": null,
+  "validator_policy": "generic-unverified",
+  "item_ids": [],
+  "parameters": {}
+}

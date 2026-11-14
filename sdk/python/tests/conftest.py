@@ -102,7 +102,7 @@ class APIServer:
         self.thread = threading.Thread(target=self.httpd.serve_forever, kwargs={"poll_interval": 0.01}, daemon=True)
         self.thread.start()
         self.url = f"http://127.0.0.1:{self.httpd.server_port}"
-        self.respond("GET", "/protocol", {"api_version": "1", "min_runner_version": "0.1.0", "max_runner_version": "0.1.99"})
+        self.respond("GET", "/protocol", {"api_version": 1, "min_worker_version": 1, "max_worker_version": 1, "lease_ms": 60000, "heartbeat_interval_ms": 10000, "long_poll_ms": 25000})
 
     def respond(self, method, path, body=None, *, status=200, headers=None):
         self.routes[(method, "/api/v1" + path)] = Response(status, {} if body is None else body, headers or {})

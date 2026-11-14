@@ -18,6 +18,16 @@ type OriginSignature struct {
 	Scope        string `json:"scope"`
 	Value        string `json:"value"`
 }
+
+// Local schema1 records predate the API Artifact DTO. Their bytes are signed,
+// so keep this descriptor independent from transport naming/version changes.
+type LocalOutput struct {
+	ArtifactID string `json:"artifact_id"`
+	Digest     string `json:"digest"`
+	SizeBytes  int64  `json:"size_bytes"`
+	Path       string `json:"path,omitempty"`
+	Kind       string `json:"kind,omitempty"`
+}
 type Measurement struct {
 	Repetition           int                `json:"repetition"`
 	ColdWarm             string             `json:"cold_warm"`
@@ -31,7 +41,7 @@ type Measurement struct {
 	Units                int64              `json:"units"`
 	Validation           map[string]any     `json:"validation,omitempty"`
 	Utilization          []telemetry.Sample `json:"utilization_samples"`
-	Outputs              []client.Artifact  `json:"outputs"`
+	Outputs              []LocalOutput      `json:"outputs"`
 }
 type StandaloneRecord struct {
 	SchemaVersion        string                `json:"schema_version"`

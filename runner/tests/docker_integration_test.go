@@ -6,6 +6,7 @@ import (
 	"bytes"
 	"campus/runner/internal/client"
 	"campus/runner/internal/containers"
+	"campus/runner/internal/generated"
 	"campus/runner/internal/leaseguard"
 	"campus/runner/internal/packaging"
 	"campus/runner/internal/session"
@@ -160,6 +161,7 @@ func (d *observedDocker) captured() string { d.mu.Lock(); defer d.mu.Unlock(); r
 type upload struct {
 	Artifact client.Artifact
 	Parts    map[int][]byte
+	PartSize int64
 }
 type coordinator struct {
 	t                                          *testing.T
@@ -168,7 +170,7 @@ type coordinator struct {
 	mu                                         sync.Mutex
 	uploads                                    map[string]*upload
 	stored                                     map[string][]byte
-	complete                                   worker.ResultManifest
+	complete                                   generated.ResultManifest
 	completes, receipts, renews, logs, metrics int
 	logText                                    string
 }
@@ -176,7 +178,7 @@ type coordinator struct {
 func (f *coordinator) fenced(w http.ResponseWriter, r *http.Request) bool {
 	var fence client.Fence
 	raw, err := io.ReadAll(io.LimitReader(r.Body, 8<<20))
-	if err != nil || json.Unmarshal(raw, &fence) != nil || fence != f.a.Fence {
+	if err != nil || json.Unmarshal(raw, &fence) != nil || fence.Generation != f.a.Generation || fence.LeaseToken != f.a.LeaseToken || (fence.AttemptID != "" && fence.AttemptID != f.a.AttemptID) {
 		f.t.Errorf("wrong JSON attempt fence for %s: %s", r.URL.Path, raw)
 		http.Error(w, "bad fence", 403)
 		return false
@@ -185,14 +187,14 @@ func (f *coordinator) fenced(w http.ResponseWriter, r *http.Request) bool {
 	return true
 }
 func (f *coordinator) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	if r.Header.Get("Authorization") != "Bearer integration-device" || r.Header.Get("X-Node-Session-ID") != "session-integration" {
+	if r.Header.Get("Authorization") != "Bearer integration-device" || r.Header.Get("X-Node-Session") != "session-integration" {
 		f.t.Errorf("missing authenticated node session: %s", r.URL)
 		http.Error(w, "auth", 403)
 		return
 	}
 	route := strings.TrimPrefix(r.URL.Path, "/api/v1")
 	if route == "/protocol" {
-		fmt.Fprint(w, `{"api_version":"1","min_runner_version":"0.1.0","max_runner_version":"0.1.0"}`)
+		fmt.Fprint(w, `{"lease_ms":60000,"heartbeat_interval_ms":10000,"long_poll_ms":25000}`)
 		return
 	}
 	if route == "/work/next" && r.Method == "POST" {
@@ -209,23 +211,22 @@ func (f *coordinator) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if route == "/uploads" && r.Method == "POST" {
-		if !f.fenced(w, r) {
-			return
-		}
-		var body struct {
-			Digest string `json:"digest"`
-			Size   int64  `json:"size_bytes"`
-		}
+		var body generated.UploadCreate
 		if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
 			f.t.Error(err)
 			http.Error(w, "json", 400)
 			return
 		}
+		if body.AttemptID == nil || *body.AttemptID != f.a.AttemptID || body.Proof == nil || body.Proof.Generation != f.a.Generation || body.Proof.LeaseToken != f.a.LeaseToken || body.PartSizeBytes == nil {
+			f.t.Error("upload lost nested attempt proof")
+			http.Error(w, "proof", 403)
+			return
+		}
 		f.mu.Lock()
 		id := fmt.Sprintf("upload-%d", len(f.uploads)+1)
-		f.uploads[id] = &upload{Artifact: client.Artifact{ArtifactID: "artifact-" + id, Digest: body.Digest, SizeBytes: body.Size}, Parts: map[int][]byte{}}
+		f.uploads[id] = &upload{Artifact: client.Artifact{ArtifactID: "artifact-" + id, Path: body.Name, MediaType: *body.MediaType, Digest: body.SHA256, SizeBytes: body.SizeBytes}, Parts: map[int][]byte{}, PartSize: *body.PartSizeBytes}
 		f.mu.Unlock()
-		fmt.Fprintf(w, `{"upload_id":%q}`, id)
+		json.NewEncoder(w).Encode(generated.Upload{ID: id, State: "pending", PartCount: (body.SizeBytes + *body.PartSizeBytes - 1) / *body.PartSizeBytes, Parts: []generated.UploadPart{}})
 		return
 	}
 	if strings.HasPrefix(route, "/uploads/") {
@@ -239,15 +240,10 @@ func (f *coordinator) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		if len(parts) == 1 && r.Method == "GET" {
-			json.NewEncoder(w).Encode(map[string]any{"upload_id": parts[0], "part_size_bytes": 512, "completed_parts": []int{}})
+			json.NewEncoder(w).Encode(generated.Upload{ID: parts[0], State: "pending", PartCount: (u.Artifact.SizeBytes + u.PartSize - 1) / u.PartSize, Parts: []generated.UploadPart{}})
 			return
 		}
 		if len(parts) == 3 && parts[1] == "parts" && r.Method == "PUT" {
-			if r.Header.Get("X-Attempt-ID") != f.a.AttemptID || r.Header.Get("X-Generation") != "4" || r.Header.Get("X-Lease-Token") != f.a.LeaseToken {
-				f.t.Error("upload part lost fence")
-				http.Error(w, "fence", 403)
-				return
-			}
 			n, err := strconv.Atoi(parts[2])
 			body, readErr := io.ReadAll(io.LimitReader(r.Body, 513))
 			if err != nil || readErr != nil || len(body) > 512 || digest(body) != r.Header.Get("X-Content-SHA256") {
@@ -256,11 +252,13 @@ func (f *coordinator) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 				return
 			}
 			u.Parts[n] = body
-			w.WriteHeader(204)
+			json.NewEncoder(w).Encode(generated.UploadPart{Number: int64(n), SHA256: digest(body), SizeBytes: int64(len(body))})
 			return
 		}
 		if len(parts) == 2 && parts[1] == "finalize" && r.Method == "POST" {
-			if !f.fenced(w, r) {
+			if r.ContentLength > 0 {
+				f.t.Error("finalize unexpectedly has a body")
+				http.Error(w, "body", 400)
 				return
 			}
 			var numbers []int
@@ -294,7 +292,7 @@ func (f *coordinator) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		if count != 1 {
 			f.t.Error("receipt requested without one committed completion")
 		}
-		json.NewEncoder(w).Encode(client.Receipt{AttemptID: f.a.AttemptID, State: "verifying", ReceiptID: "receipt-integration"})
+		json.NewEncoder(w).Encode(generated.AttemptStatus{AttemptID: f.a.AttemptID, TaskID: f.a.TaskID, Generation: f.a.Generation, State: generated.TaskStateVerifying, Receipt: &generated.CompletionReceipt{AttemptID: f.a.AttemptID, TaskID: f.a.TaskID, State: generated.TaskStateVerifying, SubmittedAt: time.Now().UTC().Format(time.RFC3339Nano)}})
 		return
 	}
 	if strings.HasPrefix(route, base+"/") {
@@ -306,7 +304,7 @@ func (f *coordinator) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			f.mu.Lock()
 			f.renews++
 			f.mu.Unlock()
-			json.NewEncoder(w).Encode(client.Renewal{LeaseRemainingMS: 30000, TaskRemainingMS: 90000})
+			json.NewEncoder(w).Encode(generated.LeaseReceipt{AttemptID: f.a.AttemptID, LeaseRemainingMs: 30000, LeaseExpiresAt: time.Now().Add(30 * time.Second).UTC().Format(time.RFC3339Nano), State: generated.TaskStateRunning})
 			return
 		case "logs":
 			var body struct {
@@ -320,22 +318,12 @@ func (f *coordinator) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			w.WriteHeader(204)
 			return
 		case "telemetry":
-			var body struct {
-				Sample struct {
-					Kind        string         `json:"kind"`
-					WindowStart string         `json:"window_start_at"`
-					WindowEnd   string         `json:"window_end_at"`
-					DurationMS  int64          `json:"duration_ms"`
-					Values      map[string]any `json:"values"`
-				} `json:"sample"`
-			}
+			var body generated.AttemptTelemetry
 			if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
 				f.t.Error(err)
 			}
-			start, e1 := time.Parse(time.RFC3339Nano, body.Sample.WindowStart)
-			end, e2 := time.Parse(time.RFC3339Nano, body.Sample.WindowEnd)
-			if body.Sample.Kind != "attempt/container" || body.Sample.DurationMS <= 0 || e1 != nil || e2 != nil || !end.After(start) || len(body.Sample.Values) == 0 {
-				f.t.Errorf("missing real telemetry window/values: %#v", body.Sample)
+			if body.Sequence < 1 || body.Phase != "compute" || body.CPUPercent == nil || *body.CPUPercent < 0 || *body.CPUPercent > 100 || body.MemoryBytes == nil || *body.MemoryBytes < 1 {
+				f.t.Errorf("missing real typed container metrics: %#v", body)
 			}
 			f.mu.Lock()
 			f.metrics++
@@ -343,15 +331,13 @@ func (f *coordinator) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			w.WriteHeader(204)
 			return
 		case "complete":
-			var body struct {
-				Result worker.ResultManifest `json:"result_manifest"`
-			}
+			var body generated.Complete
 			if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
 				f.t.Error(err)
 			}
 			f.mu.Lock()
 			f.completes++
-			f.complete = body.Result
+			f.complete = body.Manifest
 			f.mu.Unlock()
 			want := "complete:" + f.a.AttemptID + ":4"
 			if r.Header.Get("Idempotency-Key") != want {
@@ -427,13 +413,15 @@ func TestDockerWorkerExecutesFencedAssignmentAndReconcilesLostCompleteACK(t *tes
 		t.Fatal(err)
 	}
 	c.Backoff = 10 * time.Millisecond
+	c.UploadPartSize = 512
 	ctx, cancel := context.WithTimeout(context.Background(), 90*time.Second)
 	defer cancel()
 	if err = c.Handshake(ctx); err != nil {
 		t.Fatal(err)
 	}
 	var assigned client.Assignment
-	if err = c.Do(ctx, "POST", "/work/next", map[string]any{"node_session_id": "session-integration", "wait_ms": 0}, &assigned, ""); err != nil {
+	waitMS := int64(0)
+	if err = c.Do(ctx, "POST", "/work/next", generated.WorkRequest{WaitMs: &waitMS}, &assigned, ""); err != nil {
 		t.Fatal(err)
 	}
 	installation := "integration-" + session.UUID()
@@ -463,10 +451,10 @@ func TestDockerWorkerExecutesFencedAssignmentAndReconcilesLostCompleteACK(t *tes
 		t.Fatal("generic execution was incorrectly promoted to correctness")
 	}
 	var proofRaw, model []byte
-	for _, file := range f.complete.Files {
+	for _, file := range f.complete.Outputs {
 		body := f.stored[file.ArtifactID]
-		if digest(body) != file.Digest || int64(len(body)) != file.SizeBytes {
-			t.Fatalf("result checksum/size mismatch: %#v", file)
+		if len(body) == 0 {
+			t.Fatalf("result references missing uploaded bytes: %#v", file)
 		}
 		switch file.Path {
 		case "outputs/proof.json":
@@ -476,7 +464,7 @@ func TestDockerWorkerExecutesFencedAssignmentAndReconcilesLostCompleteACK(t *tes
 		}
 	}
 	if len(proofRaw) == 0 || len(model) == 0 {
-		t.Fatalf("model/proof not captured: %#v\nlogs:%s", f.complete.Files, observed.captured())
+		t.Fatalf("model/proof not captured: %#v\nlogs:%s", f.complete.Outputs, observed.captured())
 	}
 	var proof struct {
 		UID                                                            int    `json:"uid"`

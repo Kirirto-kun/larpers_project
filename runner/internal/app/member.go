@@ -3,15 +3,16 @@ package app
 import (
 	"campus/runner/internal/artifacts"
 	"campus/runner/internal/client"
+	"campus/runner/internal/generated"
 	"campus/runner/internal/packaging"
 	"campus/runner/internal/session"
 	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
-	"net/url"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"time"
 )
@@ -21,8 +22,8 @@ type stringList []string
 func (v *stringList) String() string     { return strings.Join(*v, ", ") }
 func (v *stringList) Set(s string) error { *v = append(*v, s); return nil }
 
-// These request DTOs are provisional until foundation publishes generated API v1
-// contracts. The CLI and Python SDK use the same preview -> jobs boundary.
+// runRequest records the user's exact command intent locally. The planner only
+// receives the published PreviewRequest, with this intent in its bounded prompt.
 type runRequest struct {
 	Argv          []string  `json:"argv"`
 	RequiresGPU   bool      `json:"requires_gpu"`
@@ -33,31 +34,23 @@ type runRequest struct {
 }
 type binding struct {
 	ArtifactID string `json:"artifact_id"`
-	Target     string `json:"target"`
-	ReadOnly   bool   `json:"read_only"`
+	MountPath  string `json:"mount_path"`
+	Archive    bool   `json:"archive"`
 }
-type projectInput struct {
-	Artifact       client.Artifact           `json:"artifact"`
-	ManifestDigest string                    `json:"manifest_digest"`
-	Manifest       packaging.ProjectManifest `json:"manifest"`
-}
-type previewRequest struct {
-	Request runRequest        `json:"request"`
-	Project projectInput      `json:"project"`
-	Inputs  []client.Artifact `json:"inputs"`
-}
+type previewRequest = generated.PreviewRequest
 type preview struct {
-	ID        string          `json:"preview_id"`
-	State     string          `json:"state"`
-	Revision  json.RawMessage `json:"plan_revision"`
-	Questions json.RawMessage `json:"questions"`
-	Plan      json.RawMessage `json:"plan"`
+	ID       string          `json:"id"`
+	State    string          `json:"state"`
+	Revision json.RawMessage `json:"plan_revision"`
+	Question json.RawMessage `json:"question"`
+	Plan     json.RawMessage `json:"plan"`
 }
 type submission struct {
 	Endpoint          string          `json:"endpoint,omitempty"`
 	PreviewID         string          `json:"preview_id"`
 	Key               string          `json:"idempotency_key"`
 	PreviewKey        string          `json:"preview_key,omitempty"`
+	PreviewStarted    bool            `json:"preview_started,omitempty"`
 	Revision          json.RawMessage `json:"plan_revision,omitempty"`
 	JobID             string          `json:"job_id,omitempty"`
 	SubmissionStarted bool            `json:"submission_started,omitempty"`
@@ -65,6 +58,7 @@ type submission struct {
 	TerminalState     string          `json:"terminal_state,omitempty"`
 	PendingAnswers    *pendingAnswers `json:"pending_answers,omitempty"`
 	Request           *previewRequest `json:"preview_request,omitempty"`
+	Intent            *runRequest     `json:"command_intent,omitempty"`
 }
 
 func validID(id string) bool { return client.IDPattern.MatchString(id) && !strings.Contains(id, "..") }
@@ -103,7 +97,11 @@ func snapshot(ctx context.Context, c *client.Client, root, destination, kind str
 	if closeErr != nil {
 		return artifact, m, closeErr
 	}
-	artifact, err = artifacts.Upload(ctx, c, destination, client.Fence{})
+	uploadKind := "input"
+	if kind == "project" {
+		uploadKind = "project"
+	}
+	artifact, err = artifacts.UploadAs(ctx, c, destination, client.Fence{}, uploadKind)
 	artifact.Kind = kind
 	artifact.Path = kind + ".zip"
 	if kind == "dataset" {
@@ -168,12 +166,15 @@ func (a *App) run(ctx context.Context, cfg config, args []string) error {
 		if separator < 0 || len(argv) == 0 {
 			return usageError("run requires -- followed by a program and its arguments")
 		}
-		if len(argv) > 1024 {
+		if len(argv) > 64 {
 			return usageError("command has too many arguments")
 		}
 		var total int
 		for _, arg := range argv {
 			total += len(arg)
+			if len([]rune(arg)) > 4096 {
+				return usageError("command argument exceeds 4096 characters")
+			}
 			if strings.ContainsRune(arg, 0) {
 				return usageError("NUL in command argument")
 			}
@@ -185,6 +186,12 @@ func (a *App) run(ctx context.Context, cfg config, args []string) error {
 			if err = packaging.SafePath(output); err != nil {
 				return usageError(err.Error())
 			}
+		}
+		if len(outputs) > 32 {
+			return usageError("at most 32 declared outputs are supported")
+		}
+		if _, err = commandPrompt(runRequest{Argv: argv, RequiresGPU: *gpu, WorkingDir: "/workspace", Outputs: outputs, NetworkPolicy: "none"}); err != nil {
+			return err
 		}
 	}
 	var dataRoot string
@@ -285,23 +292,34 @@ func (a *App) run(ctx context.Context, cfg config, args []string) error {
 				return errors.New("project root must not be the runner state directory")
 			}
 		}
-		artifact, manifest, err := snapshot(ctx, c, root, filepath.Join(temp, "project.zip"), "project", packaging.Rules{MaxFiles: 10000, MaxBytes: 256 << 20, Ignore: ignored})
+		artifact, _, err := snapshot(ctx, c, root, filepath.Join(temp, "project.zip"), "project", packaging.Rules{MaxFiles: 10000, MaxBytes: 256 << 20, Ignore: ignored})
 		if err != nil {
 			return err
 		}
-		request := &previewRequest{Request: runRequest{Argv: argv, RequiresGPU: *gpu, WorkingDir: "/workspace", Outputs: outputs, Bindings: []binding{}, NetworkPolicy: "none"}, Project: projectInput{Artifact: artifact, ManifestDigest: manifest.Digest, Manifest: manifest}, Inputs: []client.Artifact{}}
-		if request.Request.Outputs == nil {
-			request.Request.Outputs = []string{}
+		accelerator, share, archive := "cpu", false, true
+		if *gpu {
+			accelerator = "cuda"
+		}
+		projectID := artifact.ArtifactID
+		request := &previewRequest{ProjectArtifactID: &projectID, Accelerator: &accelerator, ShareWithLlm: &share, SelectedFiles: []string{}, Inputs: []generated.InputBinding{}}
+		intent := &runRequest{Argv: argv, RequiresGPU: *gpu, WorkingDir: "/workspace", Outputs: outputs, Bindings: []binding{{ArtifactID: projectID, MountPath: "/workspace", Archive: true}}, NetworkPolicy: "none"}
+		if intent.Outputs == nil {
+			intent.Outputs = []string{}
 		}
 		if dataRoot != "" {
 			artifact, _, err = snapshot(ctx, c, dataRoot, filepath.Join(temp, "data.zip"), "dataset", packaging.Rules{MaxFiles: 10000, MaxBytes: 1 << 30})
 			if err != nil {
 				return err
 			}
-			request.Inputs = append(request.Inputs, artifact)
-			request.Request.Bindings = append(request.Request.Bindings, binding{ArtifactID: artifact.ArtifactID, Target: "/data", ReadOnly: true})
+			request.Inputs = append(request.Inputs, generated.InputBinding{ArtifactID: artifact.ArtifactID, MountPath: "/data", Archive: &archive})
+			intent.Bindings = append(intent.Bindings, binding{ArtifactID: artifact.ArtifactID, MountPath: "/data", Archive: true})
 		}
-		state = submission{Endpoint: c.BaseURL, Key: session.UUID(), PreviewKey: session.UUID(), Request: request}
+		prompt, err := commandPrompt(*intent)
+		if err != nil {
+			return err
+		}
+		request.Prompt = &prompt
+		state = submission{Endpoint: c.BaseURL, Key: session.UUID(), PreviewKey: session.UUID(), Request: request, Intent: intent}
 		if err = session.AtomicJSON(statePath, state); err != nil {
 			return err
 		}
@@ -310,23 +328,30 @@ func (a *App) run(ctx context.Context, cfg config, args []string) error {
 	if state.PendingAnswers != nil {
 		if len(answers) > 0 {
 			supplied, _ := json.Marshal(answers)
-			saved, _ := json.Marshal(state.PendingAnswers.Request.Answers)
+			saved, _ := json.Marshal([]previewAnswer{{QuestionID: state.PendingAnswers.Request.QuestionID, Value: state.PendingAnswers.Request.Answer}})
 			if string(supplied) != string(saved) {
-				return errors.New("an answer acknowledgement is unresolved; run --resume without new answers to replay the saved batch")
+				return errors.New("an answer acknowledgement is unresolved; run --resume without new answers to inspect the saved preview")
 			}
 		}
-		analysis, err = a.sendAnswers(ctx, c, &state, statePath)
+		analysis, err = a.reconcileAnswers(ctx, c, &state, statePath)
 		if err != nil {
 			return err
 		}
 		answers = nil
 	}
 	if state.PreviewID == "" {
-		if state.Request == nil || !validID(state.PreviewKey) {
+		if state.PreviewStarted {
+			return errors.New("preview creation acknowledgement is unknown; the API does not promise idempotent replay; use run --discard for this never-submitted preview before starting a new run")
+		}
+		if state.Request == nil || state.Request.Prompt == nil || *state.Request.Prompt == "" || !validID(state.PreviewKey) {
 			return errors.New("persisted submission has no preview request")
 		}
-		if err = c.Do(ctx, "POST", "/job-previews", state.Request, &analysis, state.PreviewKey); err != nil {
-			return fmt.Errorf("preview response unknown; retry campus run --resume with the saved request/key: %w", err)
+		state.PreviewStarted = true
+		if err = session.AtomicJSON(statePath, state); err != nil {
+			return err
+		}
+		if err = c.DoOnce(ctx, "POST", "/job-previews", state.Request, &analysis, state.PreviewKey); err != nil {
+			return fmt.Errorf("preview creation acknowledgement unknown or rejected; no automatic replay is supported; use run --discard before starting another never-submitted preview: %w", err)
 		}
 		if !validID(analysis.ID) {
 			return errors.New("coordinator returned an invalid preview_id")
@@ -351,7 +376,13 @@ func (a *App) run(ctx context.Context, cfg config, args []string) error {
 		switch analysis.State {
 		case "needs_input":
 			if len(answers) > 0 {
-				request := answerRequest{Revision: analysis.Revision, Answers: answers}
+				var question struct {
+					ID string `json:"question_id"`
+				}
+				if json.Unmarshal(analysis.Question, &question) != nil || question.ID != answers[0].QuestionID {
+					return errors.New("answer question_id does not match the current preview question")
+				}
+				request := answerRequest{Revision: analysis.Revision, QuestionID: answers[0].QuestionID, Answer: answers[0].Value}
 				if err = validateAnswers(request); err != nil {
 					return err
 				}
@@ -372,7 +403,7 @@ func (a *App) run(ctx context.Context, cfg config, args []string) error {
 					return err
 				}
 			}
-			if err = json.NewEncoder(a.Stdout).Encode(map[string]any{"preview_id": state.PreviewID, "state": "needs_input", "questions": analysis.Questions}); err != nil {
+			if err = json.NewEncoder(a.Stdout).Encode(map[string]any{"id": state.PreviewID, "state": "needs_input", "plan_revision": analysis.Revision, "question": analysis.Question}); err != nil {
 				return err
 			}
 			return &statusError{3, errors.New("")}
@@ -382,6 +413,11 @@ func (a *App) run(ctx context.Context, cfg config, args []string) error {
 			}
 			if !validRevision(analysis.Revision) {
 				return errors.New("ready preview has invalid plan_revision")
+			}
+			if state.Intent != nil {
+				if err = validateCommandPlan(analysis, *state.Intent); err != nil {
+					return fmt.Errorf("ready plan changed the requested command; no job submitted: %w; discard this preview or correct the planner", err)
+				}
 			}
 			// Freeze the revision before POST. A lost acknowledgement is retried
 			// with precisely the same preview, revision and idempotency key.
@@ -401,7 +437,7 @@ func (a *App) run(ctx context.Context, cfg config, args []string) error {
 				return err
 			}
 			return fmt.Errorf("preview %s is %s", state.PreviewID, analysis.State)
-		case "pending", "queued", "analyzing", "planning", "preparing":
+		case "inspecting", "planning", "validating":
 		default:
 			return fmt.Errorf("unsupported preview state %q", analysis.State)
 		}
@@ -421,16 +457,12 @@ func validRevision(raw json.RawMessage) bool {
 		return false
 	}
 	var integer int64
-	if json.Unmarshal(raw, &integer) == nil {
-		return integer >= 0
-	}
-	var value string
-	return json.Unmarshal(raw, &value) == nil && value != "" && len(value) <= 128 && !strings.ContainsAny(value, "\x00\r\n")
+	return json.Unmarshal(raw, &integer) == nil && integer > 0
 }
 
 func (a *App) submit(ctx context.Context, c *client.Client, state submission, path string) error {
 	var job struct {
-		JobID string `json:"job_id"`
+		JobID string `json:"id"`
 	}
 	if err := c.Do(ctx, "POST", "/jobs", map[string]any{"preview_id": state.PreviewID, "plan_revision": state.Revision}, &job, state.Key); err != nil {
 		return fmt.Errorf("job acknowledgement unknown or rejected; use campus run --resume (same saved idempotency key): %w", err)
@@ -459,39 +491,44 @@ func (a *App) logs(ctx context.Context, cfg config, args []string) error {
 	if err != nil {
 		return err
 	}
-	cursor := ""
-	seen := map[string]bool{}
+	var cursor int64
 	var total int
 	for page := 0; page < 1000; page++ {
 		route := "/jobs/" + rest[0] + "/logs"
-		if cursor != "" {
-			route += "?cursor=" + strings.ReplaceAll(url.QueryEscape(cursor), ".", "%2E")
+		if cursor != 0 {
+			route += "?cursor=" + strconv.FormatInt(cursor, 10)
 		}
 		var response struct {
-			Records    []json.RawMessage `json:"records"`
-			NextCursor *string           `json:"next_cursor"`
+			Entries *[]struct {
+				Cursor int64   `json:"cursor"`
+				Text   *string `json:"text"`
+				Gap    bool    `json:"gap"`
+			} `json:"entries"`
+			Cursor    *int64 `json:"cursor"`
+			Truncated *bool  `json:"truncated"`
 		}
 		if err = c.Do(ctx, "GET", route, nil, &response, ""); err != nil {
 			return err
 		}
-		for _, record := range response.Records {
-			var text string
-			if json.Unmarshal(record, &text) != nil {
-				var line struct {
-					Text    *string `json:"text"`
-					Message *string `json:"message"`
-				}
-				if err = json.Unmarshal(record, &line); err != nil {
-					return err
-				}
-				if line.Text == nil {
-					line.Text = line.Message
-				}
-				if line.Text == nil {
-					return errors.New("log record has no text")
-				}
-				text = *line.Text
+		if response.Entries == nil || response.Cursor == nil || response.Truncated == nil {
+			return errors.New("malformed log page: entries, cursor and truncated are required")
+		}
+		if *response.Cursor < cursor {
+			return errors.New("log cursor moved backwards")
+		}
+		if *response.Truncated {
+			fmt.Fprintln(a.Stderr, "campus: coordinator reports truncated job logs")
+		}
+		previous := cursor
+		for _, record := range *response.Entries {
+			if record.Cursor <= previous || record.Cursor > *response.Cursor || record.Text == nil {
+				return errors.New("invalid or repeated log entry cursor")
 			}
+			previous = record.Cursor
+			if record.Gap {
+				fmt.Fprintln(a.Stderr, "campus: coordinator reports a gap in job logs")
+			}
+			text := *record.Text
 			total += len(text) + 1
 			if total > 4<<20 {
 				return errors.New("log output exceeds 4 MiB; use a narrower server-side log export")
@@ -500,14 +537,13 @@ func (a *App) logs(ctx context.Context, cfg config, args []string) error {
 				return err
 			}
 		}
-		if response.NextCursor == nil || *response.NextCursor == "" {
+		if len(*response.Entries) == 0 {
 			return nil
 		}
-		cursor = *response.NextCursor
-		if len(cursor) > 4096 || seen[cursor] {
+		if *response.Cursor <= cursor {
 			return errors.New("invalid or repeated log cursor")
 		}
-		seen[cursor] = true
+		cursor = *response.Cursor
 	}
 	return errors.New("log page limit reached")
 }
@@ -525,8 +561,14 @@ func (a *App) cancel(ctx context.Context, cfg config, args []string) error {
 	if err != nil {
 		return err
 	}
-	if err = c.Do(ctx, "POST", "/jobs/"+rest[0]+"/cancel", map[string]string{}, nil, "cancel:"+rest[0]); err != nil {
+	var job struct {
+		ID string `json:"id"`
+	}
+	if err = c.Do(ctx, "POST", "/jobs/"+rest[0]+"/cancel", nil, &job, "cancel:"+rest[0]); err != nil {
 		return err
+	}
+	if job.ID != rest[0] {
+		return errors.New("coordinator returned a mismatched cancelled job id")
 	}
 	fmt.Fprintln(a.Stdout, rest[0], "cancellation requested")
 	return nil
@@ -559,7 +601,7 @@ func (a *App) fetch(ctx context.Context, cfg config, args []string) error {
 		return err
 	}
 	var job struct {
-		JobID     string            `json:"job_id"`
+		JobID     string            `json:"id"`
 		State     string            `json:"state"`
 		Artifacts []client.Artifact `json:"artifacts"`
 	}

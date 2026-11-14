@@ -1,8 +1,9 @@
-// These runner-owned wire types implement the plan's proposed v1 protocol.
-// They are NOT generated DTOs; reconcile them with foundation before integration.
+// Local execution/state models and a small artifact view. Published API request
+// DTOs are in internal/generated; do not send rich sandbox policy as strict DTOs.
 package client
 
 import (
+	"campus/runner/internal/generated"
 	"campus/runner/internal/packaging"
 	"errors"
 	"fmt"
@@ -19,11 +20,12 @@ type Fence struct {
 	LeaseToken string `json:"lease_token"`
 }
 type Artifact struct {
-	ArtifactID string `json:"artifact_id"`
-	Digest     string `json:"digest"`
+	ArtifactID string `json:"id"`
+	Digest     string `json:"sha256"`
 	SizeBytes  int64  `json:"size_bytes"`
-	Path       string `json:"path,omitempty"`
-	Kind       string `json:"kind,omitempty"`
+	Path       string `json:"name"`
+	Kind       string `json:"-"`
+	MediaType  string `json:"media_type"`
 }
 type Adapter struct {
 	ID      string `json:"id"`
@@ -64,12 +66,9 @@ type Assignment struct {
 	NetworkPolicy       string         `json:"network_policy"`
 	ResumeCheckpoint    *Artifact      `json:"resume_checkpoint"`
 	ValidatorPolicy     map[string]any `json:"validator_policy"`
+	ItemIDs             []string       `json:"item_ids,omitempty"`
 }
-type Receipt struct {
-	AttemptID string `json:"attempt_id"`
-	State     string `json:"state"`
-	ReceiptID string `json:"receipt_id"`
-}
+type Receipt = generated.CompletionReceipt
 type Renewal struct {
 	LeaseRemainingMS int64  `json:"lease_remaining_ms"`
 	TaskRemainingMS  int64  `json:"task_remaining_ms"`
@@ -99,6 +98,8 @@ type Capabilities struct {
 	OfferedBudget        ResourceLimits `json:"offered_budget"`
 	PreflightRevision    string         `json:"preflight_revision"`
 	Diagnostics          []string       `json:"diagnostics,omitempty"`
+	ImageDigests         []string       `json:"image_digests,omitempty"`
+	AllowOnBattery       bool           `json:"allow_on_battery"`
 }
 
 var DigestPattern = regexp.MustCompile(`^[a-f0-9]{64}$`)

@@ -97,34 +97,29 @@ func (a *App) join(ctx context.Context, cfg config, args []string) error {
 		return err
 	}
 	var response struct {
-		Endpoint     string `json:"endpoint"`
-		PoolID       string `json:"pool_id"`
-		NodeID       string `json:"node_id"`
-		CredentialID string `json:"credential_id"`
-		Credential   string `json:"credential"`
+		ID     string `json:"id"`
+		NodeID string `json:"node_id"`
+		Token  string `json:"token"`
+		Scope  string `json:"scope"`
 	}
-	if err = c.Do(ctx, "POST", "/invitations/redeem", map[string]string{"token": token, "installation_id": identity.InstallationID}, &response, "redeem:"+identity.InstallationID); err != nil {
-		return err
+	if err = c.DoOnce(ctx, "POST", "/invitations/redeem", map[string]any{"token": token, "installation_id": identity.InstallationID, "protocol_version": 1}, &response, "redeem:"+identity.InstallationID); err != nil {
+		return fmt.Errorf("device redemption acknowledgement unknown or rejected; the invitation was not automatically repeated: %w", err)
 	}
-	if !client.IDPattern.MatchString(response.PoolID) || !client.IDPattern.MatchString(response.NodeID) || !client.IDPattern.MatchString(response.CredentialID) || response.Credential == "" {
+	if !validID(response.NodeID) || !validID(response.ID) || response.Token == "" || response.Scope != "device" {
 		return errors.New("coordinator returned an incomplete device identity")
 	}
-	if response.Endpoint != "" {
-		endpoint = response.Endpoint
-	}
-	if _, err = apiClient(cfg, endpoint, response.Credential, ""); err != nil {
+	if _, err = apiClient(cfg, endpoint, response.Token, ""); err != nil {
 		return err
 	}
 	identity.Endpoint = endpoint
-	identity.PoolID = response.PoolID
 	identity.NodeID = response.NodeID
-	identity.CredentialID = response.CredentialID
-	identity.Credential = response.Credential
+	identity.CredentialID = response.ID
+	identity.Credential = response.Token
 	identity.SessionID = ""
 	if err = session.Save(cfg.StateDir, identity); err != nil {
 		return err
 	}
-	fmt.Fprintf(a.Stdout, "Joined pool %s as node %s.\n", identity.PoolID, identity.NodeID)
+	fmt.Fprintf(a.Stdout, "Joined as node %s.\n", identity.NodeID)
 	if *noServe {
 		return nil
 	}
@@ -168,25 +163,30 @@ func (a *App) serveLocked(ctx context.Context, cfg config, identity session.Iden
 	if err = c.Handshake(ctx); err != nil {
 		return err
 	}
-	caps, allowed, err := a.preflight(ctx, profilesPath, gpu)
+	caps, allowed, err := a.preflightWithCanonical(ctx, profilesPath, gpu, true)
 	if err != nil {
 		return err
 	}
-	var response struct {
-		SessionID string `json:"node_session_id"`
+	contractCaps, err := caps.Contract()
+	if err != nil {
+		return fmt.Errorf("publish preflight capabilities: %w", err)
 	}
-	if err = c.Do(ctx, "POST", "/node-sessions", map[string]any{"installation_id": identity.InstallationID, "node_id": identity.NodeID, "capabilities": caps}, &response, "node-session:"+session.UUID()); err != nil {
+	var response struct {
+		SessionID string `json:"id"`
+		NodeID    string `json:"node_id"`
+	}
+	if err = c.DoOnce(ctx, "POST", "/node-sessions", map[string]any{"protocol_version": 1, "capabilities": contractCaps}, &response, "node-session:"+session.UUID()); err != nil {
 		return err
 	}
-	if !client.IDPattern.MatchString(response.SessionID) {
-		return errors.New("coordinator returned an invalid node_session_id")
+	if !validID(response.SessionID) || response.NodeID != identity.NodeID {
+		return errors.New("coordinator returned an invalid node session identity")
 	}
 	c.SessionID = response.SessionID
 	identity.SessionID = response.SessionID
 	if err = session.Save(cfg.StateDir, identity); err != nil {
 		return err
 	}
-	if err = c.Do(ctx, "PUT", "/node-sessions/"+response.SessionID+"/capabilities", caps, nil, ""); err != nil {
+	if err = c.Do(ctx, "PUT", "/node-sessions/"+response.SessionID+"/capabilities", contractCaps, nil, ""); err != nil {
 		return err
 	}
 	r := &worker.Runner{Client: c, Docker: containers.Docker{InstallationID: identity.InstallationID}, StateDir: cfg.StateDir, AllowedImages: allowed, Identity: identity}

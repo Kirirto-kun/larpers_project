@@ -111,7 +111,7 @@ func Run(ctx context.Context, options Options) (StandaloneRecord, error) {
 
 func measure(ctx context.Context, runtime worker.Runtime, stateDir string, manifest Manifest, base string, repetition int) (Measurement, error) {
 	start := time.Now()
-	measurement := Measurement{Repetition: repetition, ColdWarm: "cold_container_first_host_cache_uncontrolled", StartedAt: start.UTC().Format(time.RFC3339Nano), Quality: "unverified", Utilization: []telemetry.Sample{}, Outputs: []client.Artifact{}}
+	measurement := Measurement{Repetition: repetition, ColdWarm: "cold_container_first_host_cache_uncontrolled", StartedAt: start.UTC().Format(time.RFC3339Nano), Quality: "unverified", Utilization: []telemetry.Sample{}, Outputs: []LocalOutput{}}
 	if repetition > 1 {
 		measurement.ColdWarm = "cold_container_subsequent_host_cache_uncontrolled"
 	}
@@ -133,7 +133,7 @@ func measure(ctx context.Context, runtime worker.Runtime, stateDir string, manif
 	measurement.DurationMS = float64(computed.Duration) / float64(time.Millisecond)
 	measurement.Utilization = computed.Samples
 	for _, file := range computed.Files {
-		measurement.Outputs = append(measurement.Outputs, client.Artifact{Digest: file.Digest, SizeBytes: file.SizeBytes, Path: file.Path, Kind: "local_output"})
+		measurement.Outputs = append(measurement.Outputs, LocalOutput{Digest: file.Digest, SizeBytes: file.SizeBytes, Path: file.Path, Kind: "local_output"})
 	}
 	if manifest.Validator != nil {
 		validationStart := time.Now()

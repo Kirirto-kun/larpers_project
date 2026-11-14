@@ -52,6 +52,7 @@ type App struct {
 	Discover       func(context.Context) (client.Capabilities, error)
 	Probe          func(context.Context, string, string, bool) error
 	VerifyImage    func(context.Context, string, string) error
+	ResolveImage   func(context.Context, string) (string, error)
 	Serve          func(context.Context, *worker.Runner, client.Capabilities, bool) error
 }
 
@@ -87,6 +88,11 @@ func (a *App) defaults() {
 	if a.VerifyImage == nil {
 		a.VerifyImage = func(ctx context.Context, image, platform string) error {
 			return (&worker.Runner{}).Docker.VerifyImage(ctx, image, platform)
+		}
+	}
+	if a.ResolveImage == nil {
+		a.ResolveImage = func(ctx context.Context, image string) (string, error) {
+			return resolveImageReference(ctx, image, discovery.Exec)
 		}
 	}
 	if a.Serve == nil {

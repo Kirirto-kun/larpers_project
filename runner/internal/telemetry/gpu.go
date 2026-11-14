@@ -21,16 +21,23 @@ func ParseGPU(data []byte, ids []string) ([]GPUUsage, error) {
 	if e != nil {
 		return nil, e
 	}
-	wanted := map[string]bool{}
-	for _, id := range ids {
-		wanted[id] = true
-	}
+	wanted := map[string]int{}
 	result := []GPUUsage{}
+	for _, id := range ids {
+		if _, exists := wanted[id]; !exists {
+			wanted[id] = len(result)
+			result = append(result, GPUUsage{ID: id})
+		}
+	}
 	for _, record := range records {
-		if len(record) != 3 || !wanted[strings.TrimSpace(record[0])] {
+		if len(record) != 3 {
 			continue
 		}
 		sample := GPUUsage{ID: strings.TrimSpace(record[0])}
+		index, selected := wanted[sample.ID]
+		if !selected {
+			continue
+		}
 		if value, e := strconv.ParseFloat(strings.TrimSpace(record[1]), 64); e == nil && value >= 0 && value <= 100 {
 			sample.UtilizationPercent = &value
 		}
@@ -38,7 +45,7 @@ func ParseGPU(data []byte, ids []string) ([]GPUUsage, error) {
 			bytes := value << 20
 			sample.MemoryUsedBytes = &bytes
 		}
-		result = append(result, sample)
+		result[index] = sample
 	}
 	return result, nil
 }

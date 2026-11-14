@@ -2,8 +2,10 @@
 
 This branch contains the Go CLI/worker, isolated workload runtimes, Python SDK,
 checkpoint helpers and verified bootstrap for the Campus Pool implementation plan.
-It does not contain the control plane, shared generated contracts or the two web
-applications. Those components must be integrated before this is a deployable pool.
+It does not contain the production control plane or the two web applications.
+Published foundation DTOs are now generated into the Go client and optional
+Python SDK types. [Integration status](PROTOCOL.md) records the supported request
+boundaries and the worker safety contract that still prevents deployment.
 
 ## Build and test
 
@@ -70,10 +72,12 @@ it does not prove the owner measured honestly.
 
 ## Integration gates
 
-Foundation is owned by the control-plane branch. Runner-owned wire structs are
-provisional, not generated DTOs. Align the exact payloads in CLI.md and the SDK
-README with the real OpenAPI/schemas/fixtures, run generation, then execute both
-documented integration rounds. Never replace the other owners' lockfiles/configs.
+Foundation is owned by the control-plane branch. Its published OpenAPI and
+fixtures are pinned in PROTOCOL.md; generation and client boundary checks have
+been performed. Rich local execution policy remains separate from those DTOs.
+The production server and relative hard-deadline/sandbox agreement remain
+required before both documented physical integration rounds. Never replace the
+other owners' lockfiles/configs.
 
 CPU amd64/arm64 and CUDA amd64 images have been built locally. Real CPU guard,
 training/resume and pretrained E5 checks are recorded in VALIDATION.md. Release

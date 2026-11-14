@@ -57,17 +57,16 @@ func (r *Runner) pollAssignment(ctx context.Context, caps client.Capabilities) (
 			}
 		}
 	}()
-	var a *client.Assignment
-	e := r.Client.Do(pollCtx, "POST", "/work/next", map[string]any{"node_session_id": r.Client.SessionID, "wait_ms": 25000, "capabilities_revision": caps.PreflightRevision}, &a, "")
+	a, e := r.Client.ClaimWork(pollCtx, 25000)
 	cancel()
 	<-done
 	return a, e
 }
-func (r *Runner) releaseUnstarted(ctx context.Context, a client.Assignment, reason string) {
+func (r *Runner) releaseUnstarted(ctx context.Context, a client.Assignment, _ string) {
 	if !client.IDPattern.MatchString(a.AttemptID) {
 		return
 	}
 	bounded, cancel := context.WithTimeout(ctx, 250*time.Millisecond)
 	defer cancel()
-	r.Client.Do(bounded, "POST", "/attempts/"+a.AttemptID+"/release", map[string]any{"attempt_id": a.AttemptID, "generation": a.Generation, "lease_token": a.LeaseToken, "reason": reason}, nil, "")
+	r.Client.DoOnce(bounded, "POST", "/attempts/"+a.AttemptID+"/release", a.Fence.Proof(), nil, "")
 }

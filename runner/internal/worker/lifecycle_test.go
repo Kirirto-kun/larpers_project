@@ -3,6 +3,7 @@ package worker
 import (
 	"campus/runner/internal/client"
 	"campus/runner/internal/containers"
+	"campus/runner/internal/generated"
 	"campus/runner/internal/session"
 	"context"
 	"crypto/sha256"
@@ -68,41 +69,44 @@ func TestRunAssignmentTransportsOutputAndReconcilesReceipt(t *testing.T) {
 	var uploaded atomic.Bool
 	var fenced atomic.Bool
 	s := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
-		if req.Header.Get("X-Node-Session-ID") != "session" {
+		if req.Header.Get("X-Node-Session") != "session" {
 			t.Error("missing session fencing")
 		}
 		switch req.URL.Path {
 		case "/api/v1/uploads":
-			fmt.Fprint(w, `{"upload_id":"upload","part_size_bytes":1024}`)
+			fmt.Fprint(w, `{"id":"upload","state":"pending","part_count":1,"parts":[]}`)
 		case "/api/v1/uploads/upload":
-			fmt.Fprint(w, `{"upload_id":"upload","part_size_bytes":1024,"completed_parts":[]}`)
+			fmt.Fprint(w, `{"id":"upload","state":"pending","part_count":1,"parts":[]}`)
 		case "/api/v1/uploads/upload/parts/0":
 			b, _ := io.ReadAll(req.Body)
 			if string(b) != string(data) {
 				t.Error("model bytes lost")
 			}
 			uploaded.Store(true)
-			w.WriteHeader(204)
+			json.NewEncoder(w).Encode(map[string]any{"number": 0, "sha256": digest, "size_bytes": len(data)})
 		case "/api/v1/uploads/upload/finalize":
-			json.NewEncoder(w).Encode(client.Artifact{ArtifactID: "artifact", Digest: digest, SizeBytes: int64(len(data))})
+			json.NewEncoder(w).Encode(client.Artifact{ArtifactID: "artifact", Path: "model.pt", MediaType: "application/octet-stream", Digest: digest, SizeBytes: int64(len(data))})
 		case "/api/v1/attempts/attempt/complete":
-			var body struct {
-				client.Fence
-				Result ResultManifest `json:"result_manifest"`
-			}
-			json.NewDecoder(req.Body).Decode(&body)
-			if body.Generation != 2 || body.LeaseToken != "lease-secret" || len(body.Result.Files) != 1 || body.Result.Files[0].Path != "workspace/model.pt" || body.Result.BenchmarkEligible {
-				t.Errorf("incorrect completion %+v", body)
+			var body generated.Complete
+			decoder := json.NewDecoder(req.Body)
+			decoder.DisallowUnknownFields()
+			if err := decoder.Decode(&body); err != nil || body.Generation != 2 || body.LeaseToken != "lease-secret" || len(body.Manifest.Outputs) != 1 || body.Manifest.Outputs[0].Path != "workspace/model.pt" || body.Manifest.Outputs[0].ArtifactID != "artifact" || body.Manifest.ComputeMs == nil {
+				t.Errorf("incorrect completion %+v: %v", body, err)
 			}
 			fenced.Store(true)
 			completed.Add(1)
 			conn, _, _ := w.(http.Hijacker).Hijack()
 			conn.Close()
 		case "/api/v1/attempts/attempt":
-			fmt.Fprint(w, `{"attempt_id":"attempt","state":"verifying","receipt_id":"accepted"}`)
+			fmt.Fprint(w, `{"attempt_id":"attempt","task_id":"task","generation":2,"state":"verifying","receipt":{"attempt_id":"attempt","task_id":"task","state":"verifying","submitted_at":"2026-11-14T00:00:00Z"}}`)
 		case "/api/v1/attempts/attempt/logs":
-			b, _ := io.ReadAll(req.Body)
-			if strings.Contains(string(b), "node-credential") || strings.Contains(string(b), "lease-secret\n") {
+			var body generated.LogWrite
+			decoder := json.NewDecoder(req.Body)
+			decoder.DisallowUnknownFields()
+			if err := decoder.Decode(&body); err != nil || body.Generation != 2 || body.LeaseToken != "lease-secret" || body.Sequence < 1 || len(body.Text) > 8192 {
+				t.Errorf("logs do not match v1: %+v, %v", body, err)
+			}
+			if strings.Contains(body.Text, "node-credential") || strings.Contains(body.Text, "lease-secret") {
 				t.Error("credential logged")
 			}
 			w.WriteHeader(204)
@@ -191,5 +195,38 @@ func TestOwnerStopInterruptsHungRenewBeforeLeaseExpires(t *testing.T) {
 		cancel()
 		<-done
 		t.Fatal("owner stop blocked behind renew HTTP")
+	}
+}
+
+func TestStaleFinalLogFlushNeverCompletes(t *testing.T) {
+	data := []byte("actual transferred model fixture")
+	h := sha256.Sum256(data)
+	digest := hex.EncodeToString(h[:])
+	var completes atomic.Int32
+	s := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
+		switch req.URL.Path {
+		case "/api/v1/uploads", "/api/v1/uploads/upload":
+			fmt.Fprint(w, `{"id":"upload","state":"pending","part_count":1,"parts":[]}`)
+		case "/api/v1/uploads/upload/parts/0":
+			json.NewEncoder(w).Encode(generated.UploadPart{Number: 0, SHA256: digest, SizeBytes: int64(len(data))})
+		case "/api/v1/uploads/upload/finalize":
+			json.NewEncoder(w).Encode(generated.Artifact{ID: "artifact", Name: "model.pt", MediaType: "application/octet-stream", SHA256: digest, SizeBytes: int64(len(data))})
+		case "/api/v1/attempts/attempt/logs":
+			w.WriteHeader(http.StatusConflict)
+			fmt.Fprint(w, `{"code":"STALE_ATTEMPT","message":"replaced","retryable":false}`)
+		case "/api/v1/attempts/attempt/complete":
+			completes.Add(1)
+			w.WriteHeader(http.StatusAccepted)
+		default:
+			w.WriteHeader(http.StatusNoContent)
+		}
+	}))
+	defer s.Close()
+	c, _ := client.New(s.URL, "node", "session", s.Client())
+	a := fixtureAssignment()
+	r := Runner{Client: c, Runtime: &fixtureRuntime{}, StateDir: t.TempDir(), AllowedImages: map[string]string{a.ImageDigest: a.Platform}}
+	_, err := r.RunAssignment(context.Background(), a)
+	if !client.Terminal(err) || completes.Load() != 0 {
+		t.Fatalf("stale final logs allowed completion: err=%v completes=%d", err, completes.Load())
 	}
 }

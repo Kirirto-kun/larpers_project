@@ -77,13 +77,19 @@ func (r *Runner) Serve(ctx context.Context, capabilities client.Capabilities, gp
 					updated.GPUs[i].CUDAVerified = verified[updated.GPUs[i].ID]
 				}
 				updated.OfferedBudget = discovery.Budget(updated, gpu)
+				updated.ImageDigests = append([]string{}, capabilities.ImageDigests...)
+				updated.AllowOnBattery = capabilities.AllowOnBattery
 				if updated.PowerState == "battery" {
 					cancel()
 					return errors.New("participation paused on battery power")
 				}
 				capabilities = updated
 				budget.Update(updated.OfferedBudget)
-				if e = r.Client.Do(runCtx, "PUT", "/node-sessions/"+r.Client.SessionID+"/capabilities", updated, nil, ""); e != nil && client.SessionFatal(e) {
+				wire, err := updated.Contract()
+				if err != nil {
+					return err
+				}
+				if e = r.Client.Do(runCtx, "PUT", "/node-sessions/"+r.Client.SessionID+"/capabilities", wire, nil, ""); e != nil && client.SessionFatal(e) {
 					cancel()
 					return e
 				}
@@ -108,6 +114,9 @@ func (r *Runner) Serve(ctx context.Context, capabilities client.Capabilities, gp
 		var assignment *client.Assignment
 		assignment, e = r.pollAssignment(runCtx, capabilities)
 		if e != nil {
+			if errors.Is(e, client.ErrWorkerContractIncomplete) {
+				return e
+			}
 			if action, _ := session.ReadControl(r.StateDir); action == "drain" || action == "stop" {
 				continue
 			}
@@ -140,7 +149,7 @@ func (r *Runner) Serve(ctx context.Context, capabilities client.Capabilities, gp
 		}
 		release, e := budget.Acquire(a.ResourceLimits)
 		if e != nil {
-			r.Client.Do(runCtx, "POST", "/attempts/"+a.AttemptID+"/release", map[string]any{"attempt_id": a.AttemptID, "generation": a.Generation, "lease_token": a.LeaseToken, "reason": "local_capacity_unavailable"}, nil, "")
+			r.releaseUnstarted(runCtx, a, "local_capacity_unavailable")
 			continue
 		}
 		if e = a.Validate(); e != nil {
@@ -152,7 +161,7 @@ func (r *Runner) Serve(ctx context.Context, capabilities client.Capabilities, gp
 			r.releaseUnstarted(runCtx, a, action)
 			continue
 		}
-		if e = r.Client.Do(runCtx, "POST", "/attempts/"+a.AttemptID+"/started", a.Fence, nil, ""); e != nil {
+		if _, e = r.requestLease(runCtx, a, "started"); e != nil {
 			release()
 			if client.SessionFatal(e) {
 				cancel()
@@ -169,11 +178,7 @@ func (r *Runner) Serve(ctx context.Context, capabilities client.Capabilities, gp
 			_, err := r.RunAssignment(runCtx, a)
 			if err != nil && !client.Terminal(err) {
 				reportCtx, close := context.WithTimeout(context.Background(), 5*time.Second)
-				operation := "fail"
-				if runCtx.Err() != nil {
-					operation = "release"
-				}
-				r.Client.Do(reportCtx, "POST", "/attempts/"+a.AttemptID+"/"+operation, map[string]any{"attempt_id": a.AttemptID, "generation": a.Generation, "lease_token": a.LeaseToken, "code": "EXECUTION_FAILED", "message": "runner could not complete this attempt; inspect local diagnostics", "retryable": false}, nil, "")
+				r.reportAttemptError(reportCtx, a, runCtx.Err() != nil)
 				close()
 			}
 			select {

@@ -20,6 +20,31 @@ type LocalInput struct {
 	client.Artifact
 	Source string `json:"source"`
 }
+
+// Offline manifests are local file bindings, not server Artifact DTOs. Keep
+// their archive kind/path stable when API artifact names change independently.
+type localInputJSON struct {
+	ArtifactID string `json:"artifact_id"`
+	Digest     string `json:"digest"`
+	SizeBytes  int64  `json:"size_bytes"`
+	Path       string `json:"path"`
+	Kind       string `json:"kind,omitempty"`
+	Source     string `json:"source"`
+}
+
+func (in LocalInput) MarshalJSON() ([]byte, error) {
+	return json.Marshal(localInputJSON{in.ArtifactID, in.Digest, in.SizeBytes, in.Path, in.Kind, in.Source})
+}
+func (in *LocalInput) UnmarshalJSON(raw []byte) error {
+	var stored localInputJSON
+	if err := json.Unmarshal(raw, &stored); err != nil {
+		return err
+	}
+	in.Artifact = client.Artifact{ArtifactID: stored.ArtifactID, Digest: stored.Digest, SizeBytes: stored.SizeBytes, Path: stored.Path, Kind: stored.Kind}
+	in.Source = stored.Source
+	return nil
+}
+
 type Validator struct {
 	Adapter     client.Adapter  `json:"adapter"`
 	Manifest    json.RawMessage `json:"manifest"`

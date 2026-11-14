@@ -9,15 +9,17 @@ import (
 	"fmt"
 	"path/filepath"
 	"strings"
+	"unicode/utf8"
 )
 
 type previewAnswer struct {
-	QuestionID string          `json:"question_id"`
-	Value      json.RawMessage `json:"value"`
+	QuestionID string `json:"question_id"`
+	Value      string `json:"answer"`
 }
 type answerRequest struct {
-	Revision json.RawMessage `json:"plan_revision"`
-	Answers  []previewAnswer `json:"answers"`
+	Revision   json.RawMessage `json:"plan_revision"`
+	QuestionID string          `json:"question_id"`
+	Answer     string          `json:"answer"`
 }
 type pendingAnswers struct {
 	Request answerRequest `json:"request"`
@@ -32,80 +34,45 @@ func explicitAnswers(file string, values []string) ([]previewAnswer, error) {
 			return nil, usageError("read answers JSON: " + err.Error())
 		}
 		var object struct {
-			Answers []previewAnswer `json:"answers"`
+			QuestionID string          `json:"question_id"`
+			Answer     string          `json:"answer"`
+			Answers    []previewAnswer `json:"answers"`
 		}
 		if len(raw) > 0 && raw[0] == '[' {
 			if err := json.Unmarshal(raw, &answers); err != nil {
-				return nil, usageError("answers must contain {question_id,value} entries")
+				return nil, usageError("answers must contain {question_id,answer} entries")
 			}
 		} else {
 			if err := json.Unmarshal(raw, &object); err != nil {
-				return nil, usageError("answers file must contain {\"answers\":[{\"question_id\":...,\"value\":...}]}")
+				return nil, usageError("answers file must contain {\"question_id\":...,\"answer\":\"...\"}")
 			}
 			answers = object.Answers
+			if object.QuestionID != "" || object.Answer != "" {
+				answers = append(answers, previewAnswer{QuestionID: object.QuestionID, Value: object.Answer})
+			}
 		}
 	}
 	for _, value := range values {
 		id, text, ok := strings.Cut(value, "=")
 		if !ok {
-			return nil, usageError("--answer requires question_id=value; values are strings, use --answers for typed JSON")
+			return nil, usageError("--answer requires question_id=value")
 		}
-		raw, _ := json.Marshal(text)
-		answers = append(answers, previewAnswer{QuestionID: id, Value: raw})
+		answers = append(answers, previewAnswer{QuestionID: id, Value: text})
 	}
-	if err := validateAnswers(answerRequest{Revision: json.RawMessage(`0`), Answers: answers}); err != nil {
+	if len(answers) != 1 {
+		return nil, usageError("the current preview accepts exactly one explicit string answer")
+	}
+	if err := validateAnswers(answerRequest{Revision: json.RawMessage(`1`), QuestionID: answers[0].QuestionID, Answer: answers[0].Value}); err != nil {
 		return nil, err
 	}
 	return answers, nil
 }
 
 func validateAnswers(request answerRequest) error {
-	if !validRevision(request.Revision) || len(request.Answers) < 1 || len(request.Answers) > 100 {
-		return usageError("answers require a valid revision and 1..100 explicit entries")
-	}
-	seen := map[string]bool{}
-	for _, answer := range request.Answers {
-		if !client.IDPattern.MatchString(answer.QuestionID) || seen[answer.QuestionID] || len(answer.Value) == 0 {
-			return usageError("answers require unique valid question_id values and explicit JSON values")
-		}
-		seen[answer.QuestionID] = true
-	}
-	raw, err := json.Marshal(request)
-	if err != nil {
-		return usageError("answers contain invalid JSON")
-	}
-	if len(raw) > 64<<10 {
-		return usageError("answer request exceeds 64 KiB")
-	}
-	var value any
-	// Decoding into float64 rejects JSON numbers outside the finite range.
-	if err = json.Unmarshal(raw, &value); err != nil {
-		return usageError("answers require finite JSON values")
-	}
-	if !boundedJSONDepth(value, 0) {
-		return usageError("answer request JSON nesting exceeds 16 levels")
+	if !validRevision(request.Revision) || !client.IDPattern.MatchString(request.QuestionID) || len(request.QuestionID) > 64 || utf8.RuneCountInString(request.Answer) < 1 || utf8.RuneCountInString(request.Answer) > 2000 {
+		return usageError("answer requires a positive revision, valid question_id and 1..2000 characters of explicit text")
 	}
 	return nil
-}
-func boundedJSONDepth(value any, depth int) bool {
-	if depth > 16 {
-		return false
-	}
-	switch typed := value.(type) {
-	case []any:
-		for _, child := range typed {
-			if !boundedJSONDepth(child, depth+1) {
-				return false
-			}
-		}
-	case map[string]any:
-		for _, child := range typed {
-			if !boundedJSONDepth(child, depth+1) {
-				return false
-			}
-		}
-	}
-	return true
 }
 
 func (a *App) sendAnswers(ctx context.Context, c *client.Client, state *submission, path string) (preview, error) {
@@ -117,7 +84,7 @@ func (a *App) sendAnswers(ctx context.Context, c *client.Client, state *submissi
 	if err := validateAnswers(pending.Request); err != nil {
 		return result, err
 	}
-	err := c.Do(ctx, "POST", "/job-previews/"+state.PreviewID+"/answers", pending.Request, &result, pending.Key)
+	err := c.DoOnce(ctx, "POST", "/job-previews/"+state.PreviewID+"/answers", pending.Request, &result, pending.Key)
 	if err != nil {
 		var rejected *client.APIError
 		if errors.As(err, &rejected) && rejected.Status >= 400 && rejected.Status < 500 && rejected.Status != 429 {
@@ -128,10 +95,13 @@ func (a *App) sendAnswers(ctx context.Context, c *client.Client, state *submissi
 			}
 			return result, fmt.Errorf("preview answers rejected; correct the explicit values and resume the same preview: %w", err)
 		}
-		return result, fmt.Errorf("preview answer acknowledgement unknown or rejected; run campus run --resume to replay the saved answers/key: %w", err)
+		return result, fmt.Errorf("preview answer acknowledgement unknown; run campus run --resume to inspect the same preview without repeating the answer: %w", err)
 	}
 	if result.ID != "" && result.ID != state.PreviewID {
 		return result, errors.New("answer receipt changed the preview_id; saved answers remain resumable")
+	}
+	if result.ID == "" || result.State == "" || !validRevision(result.Revision) {
+		return a.reconcileAnswers(ctx, c, state, path)
 	}
 	state.PendingAnswers = nil
 	state.Revision = nil
@@ -141,8 +111,30 @@ func (a *App) sendAnswers(ctx context.Context, c *client.Client, state *submissi
 	if err = session.AtomicJSON(path, state); err != nil {
 		return result, err
 	}
-	if result.ID == "" || result.State == "" {
-		return preview{}, nil
+	return result, nil
+}
+
+func (a *App) reconcileAnswers(ctx context.Context, c *client.Client, state *submission, path string) (preview, error) {
+	var result preview
+	if state.PendingAnswers == nil || !validID(state.PreviewID) {
+		return result, errors.New("invalid saved answer reconciliation state")
+	}
+	if err := c.Do(ctx, "GET", "/job-previews/"+state.PreviewID, nil, &result, ""); err != nil {
+		return result, err
+	}
+	if result.ID != state.PreviewID {
+		return result, errors.New("coordinator returned a mismatched preview while reconciling the answer")
+	}
+	var before, after int64
+	json.Unmarshal(state.PendingAnswers.Request.Revision, &before)
+	json.Unmarshal(result.Revision, &after)
+	if !terminalPreviewState(result.State) && (!validRevision(result.Revision) || after <= before) {
+		return result, errors.New("answer acknowledgement remains unknown at the saved revision; no answer was repeated; resume later or discard this never-submitted preview")
+	}
+	state.PendingAnswers = nil
+	state.Revision = result.Revision
+	if err := session.AtomicJSON(path, state); err != nil {
+		return result, err
 	}
 	return result, nil
 }

@@ -1,0 +1,15 @@
+{
+  "commit": "5a5bd297dfc0c9fd704e408a929d56643042c4ba",
+  "sha256": {
+    "contracts/openapi-v1.yaml": "f6811226468f3dcba58e734654044b4710687b0e942f849430ee8b2411b1ace8",
+    "server/campus/dto.py": "b57a7f8b0e6084ccfcf37186f4621954c3678ccb34c2b492dcd13508fc6f535e",
+    "contracts/generate.py": "86646f4235558443ef8127626a58372438ac22ae0616b00e06ee5ac2334d98df",
+    "contracts/fixtures/empty.json": "84a783c1e3674e0a0690190ae3c2cffe447ae2b7cc13f89e194e9679302184cd",
+    "contracts/fixtures/failed.json": "7dc9f35f0fc8cfbdd42a0daea2e3e12bcb2621ff82ed703ee096526a4de9717a",
+    "contracts/fixtures/needs_input.json": "058b0b25f09a8d6ec460bfffa7410344b9aefebd6e2e9d5f8957b1ac3fba1ecd",
+    "contracts/fixtures/offline.json": "4a41fe503b2cc59d70c56c9dbd01082bbe148618da5194ffbb226fad4766f073",
+    "contracts/fixtures/partial.json": "73afb298d6b482ca7628ec2608159632ea6d1869e2a140f40ee63a17a32f5443",
+    "contracts/fixtures/ready.json": "cece799393eca9f5f5214b08776cd932e1a626ea068379c1054aafa6a922f67f",
+    "contracts/fixtures/retrying.json": "4632656f02dbcca5bc30781d77c6242dba99a7a8f6bc09fa2ffe8ee02de7d442"
+  }
+}

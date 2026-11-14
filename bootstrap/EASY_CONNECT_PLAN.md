@@ -70,12 +70,16 @@ index identity. Publish a new output atomically; protect private invitation kits
 ## Integration
 
 - [x] Fresh full Go/race/vet and Python suites; targeted real-container checks.
-- [ ] Generate current native binaries and private Mac/Windows packages with CA
+- [x] Generate current native binaries and private Mac/Windows packages with CA
   and per-device invite; verify all published hashes and launcher syntax.
 - [x] Record live server endpoint, expiry, restart/stop commands and actual gates.
 - [x] Preserve separate local branch and defer native Mac/5050 observations until
   those devices run the package. Do not claim cross-device results from mocks.
 
-First physical Mac launch reported `zsh: killed` before Campus output. Original
-ARM64 Mach-O and its ad-hoc signature page hashes verify locally; diagnosis on
-the target Mac is pending. Physical connection is not marked passed.
+First physical Mac Finder launch reported `zsh: killed` before Campus output.
+The transferred hash and native codesign verification passed. The verified
+`sh ./Connect.command` route then passed native M2 CPU preflight, restored the
+saved identity and connected across the LAN. Owner API confirmed ready and a
+fresh heartbeat at 2026-11-14T11:24:04.648714Z. Physical Mac Ctrl+C returned
+the expected exit 130 and a second saved reconnect passed. RTX5050 CUDA
+remains to check; distributed workloads retain the separate API gate.

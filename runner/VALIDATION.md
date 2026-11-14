@@ -6,9 +6,10 @@ Update on 2026-11-14: upstream control-plane `96bfe6d` is deployed from an
 isolated local snapshot with Docker Compose project `campus-live`. Its LAN
 endpoint is [https://10.4.146.76:8443](https://10.4.146.76:8443), with strict TLS
 and a private client CA. Real Go device enrollment and ready heartbeat passed
-against this service. This supersedes earlier coordinator-absent statements;
-it establishes the tested local device/API path, not peer network reachability
-or distributed workload execution.
+against this service. A physical Apple M2 Mac has now also passed CPU preflight
+and saved reconnect, with a server-observed ready heartbeat over the LAN. This
+supersedes earlier coordinator-absent and Mac-peer-pending statements; it does
+not establish distributed workload execution.
 
 The [native connection package](../bootstrap/connect/README.md) now starts
 `campus connect`, verifies its pinned files and local Docker endpoint, loads
@@ -33,11 +34,39 @@ The private Mac ZIP is 208331587 bytes, SHA-256
 Payload hashes, launcher pins, ZIP CRC and Unix executable modes passed.
 These are candidate binaries built with CGO0/trimpath from the tested working
 tree based on `a694371`; their Go VCS metadata honestly records modified sources.
-The first physical Mac launch subsequently showed `zsh: killed`, before Campus
-output. The original native ARM64 Mach-O has valid signature bounds and all 2417
-ad-hoc SHA-256 page hashes match; the Mac's transferred file hash, system
-signature verification and quarantine diagnostics are still needed. This
-attempt does not establish successful native Mac startup or enrollment.
+The first physical Mac Finder launch showed `zsh: killed`, before Campus output.
+The transferred runner subsequently matched its pinned SHA-256, and macOS
+`codesign` reported valid on disk and satisfying its designated requirement.
+The Edge quarantine attribute was present. The initial Finder failure's cause
+is unconfirmed. The original ARM64 Mach-O's signature bounds and all 2417 ad-hoc
+SHA-256 page hashes also matched on the maker.
+
+On the physical **Apple M2, 8 cores, 8 GiB RAM**, the tested route from the
+extracted folder was:
+
+```sh
+sh ./Connect.command --check-only
+sh ./Connect.command
+```
+
+The first command passed the real CPU probe. The normal connection printed an
+observed offer of 2 CPU and 0.38 GiB RAM, restored the saved identity and entered
+Serving. A strict-CA owner API read independently observed `MacBook Apple Silicon`
+(`50b752cf-f13f-4f76-ae0c-0b23f7666d35`) as ready, OS `darwin`, architecture
+`arm64`, logical CPUs 8, last seen **2026-11-14T11:24:04.648714Z**. This establishes
+actual Mac CPU preflight, saved reconnect and LAN peer communication. A later
+heartbeat was observed at 11:26:37 UTC before the physical Ctrl+C test. Ctrl+C
+printed `campus: context canceled` and returned the expected exit **130**; rerunning
+the same `sh` launcher restored the saved connection and entered Serving again.
+The owner API then confirmed the same Mac ready after restart, last seen
+**2026-11-14T11:27:23.242365Z**.
+A distributed workload has not been tested.
+
+The private Windows ZIP was independently verified: **4468742936 bytes**,
+SHA-256 `c68c0eda2f85276d8cf34cb67fa25ff7b18b523215424a15ac39024c6902c134`.
+Its six payloads include CPU and CUDA images; payload integrity, ZIP CRC and
+private ACL passed. That package verification does not establish execution on
+the target Windows 11 AMD/RTX 5050 laptop.
 See [the current handoff](../bootstrap/LIVE_SERVER.md) for device steps.
 
 Discovery boundary verification for this connection work passed normal and race
@@ -45,12 +74,13 @@ tests, discovery/client vet, and Darwin ARM64/Linux AMD64 test cross-compilation
 The generated probe parent executed actual arithmetic and independently stopped
 a timed-out child. The exact cached Windows CIM query also ran successfully on
 this host, reporting AMD CPU/total RAM and no NVIDIA display device. These checks
-do not establish physical RTX 5050 CUDA or native Mac behavior.
+alone do not establish physical RTX 5050 CUDA; the separate physical Mac result
+is recorded above.
 
-Still required: run the current package on the physical Apple Silicon Mac and
-Windows 11 AMD/NVIDIA RTX 5050 laptop, test access from those LAN peers, and verify
-their actual CPU/GPU probes and owner Stop. Production assignments still lack
-the agreed relative `task_remaining_ms` and detailed sandbox quota policy; the
+Still required: resolve the initial Finder-launch failure and run the current
+package on the Windows 11 AMD/NVIDIA RTX 5050 laptop, verifying its LAN access,
+CPU/CUDA probes and owner Stop. Production assignments still lack the agreed
+relative `task_remaining_ms` and detailed sandbox quota policy; the
 runner fails closed before executing such work. Two-device jobs, GPU checkpoint
 recovery and comparative benchmarks remain unproven. Older binary hashes and
 idle measurements below describe their recorded builds, not a new measurement
@@ -100,7 +130,9 @@ bounded sandbox/compatibility policy. A complete Assignment validated by the
 actual upstream model is rejected before `/started` or Docker Create. Adapter
 invocation envelopes, formal StandaloneRecord provenance/config matching and
 UI-generated DTO integration also remain unresolved with the other owners.
-Native Mac, actual GPU and physical multi-device acceptance are still deferred.
+At that earlier recording, native Mac, actual GPU and physical multi-device
+acceptance were deferred. Current Mac connection evidence is recorded above;
+actual GPU and distributed workload acceptance remain outstanding.
 
 The earlier offline Mac kit is `bootstrap/test-kit/macos-arm64-foundation/`, built from
 clean implementation commit `eac3ae0`. All five payload hashes, full gzip CRC/tar
@@ -266,17 +298,20 @@ resident during that snapshot; model steady-state RSS was not benchmarked.
 ## Deferred checks and handoff
 
 - Run the current [native connection package](../bootstrap/connect/README.md)
-  on Apple Silicon and Windows 11 AMD/RTX 5050. The earlier
-  [Mac readiness kit](../bootstrap/SECOND_LAPTOP.md) checks offline CPU readiness
-  only. Neither receiver needs host Python or Go. Native guard/filesystem,
-  GPU and LAN behavior still need those devices. Generated kits and caches are
-  Git-ignored.
+  on Windows 11 AMD/RTX 5050. Mac CPU preflight, LAN heartbeat, physical Ctrl+C
+  with exit130 and subsequent saved reconnect have passed through the `sh` route;
+  the first Finder-launch failure remains unexplained.
+  The earlier [Mac readiness kit](../bootstrap/SECOND_LAPTOP.md) checks offline CPU readiness
+  only. Neither receiver needs host Python or Go. Full workload guard/filesystem,
+  GPU and remaining device-control behavior still need those devices. Generated
+  kits and caches are Git-ignored.
 - Complete the live coordinator's [worker safety contract](PROTOCOL.md),
   especially the relative `task_remaining_ms` bound, detailed quotas and
   authority/receipt semantics, then repeat full CLI/SDK/worker flows. The server
   and generated DTOs now exist; portal/console and external planner/LLM
   end-to-end integration remain unverified here.
-- Enrol two physical devices and run one map job; test disconnect/sleep,
+- Once the safety contract is complete, run one map job across two physical
+  devices; test disconnect/sleep,
   reassignment/fencing/cancellation, result downloads and campus TLS/LAN access.
 - Use an actual supported NVIDIA GPU for CUDA probe/E5 tolerance, utilization,
   training and compatible checkpoint recovery. Apple Silicon CPU readiness
@@ -284,7 +319,7 @@ resident during that snapshot; model steady-state RSS was not benchmarked.
 - Establish registered trusted references and comparable final-source standalone
   and pooled series before reporting speedup/efficiency or accepted credits.
   No formal distributed benchmark or full live-worker compatibility is claimed;
-  the local live enrollment/ready-heartbeat result is recorded separately above.
+  the local and physical Mac ready-heartbeat results are recorded separately above.
 
 Local implementation and these checks do not satisfy the original full pool's
 two-device/CUDA acceptance conditions. The separate branch is preserved locally
@@ -301,5 +336,7 @@ was built with `-trimpath`, CGO disabled and clean source commit
 
 Trusted handoff SHA-256 of `SHA256SUMS`:
 `854e56f98ac161a4df7acf41f927eaf89ca975ee15e62981e78f9ad7d8a9b212`.
-Native Mac execution remains deferred. The first-notebook final binary's actual
+Native Mac execution had not been observed at that historical export; the
+current connection package's physical Mac success is recorded above. The
+first-notebook final binary's actual
 `campus doctor` exits 0 with healthy Docker29.2.1, CPU budget and no detected GPU.

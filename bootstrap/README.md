@@ -1,8 +1,9 @@
 # Verified user-space bootstrap
 
 For the current Mac/Windows handoff, use an operator-prepared
-[native connection package](connect/README.md). Open `Connect.command` on Apple
-Silicon or `Connect.cmd` on Windows 11 AMD64. It starts `campus connect`, checks
+[native connection package](connect/README.md). On Apple Silicon, run
+`sh ./Connect.command` from the extracted folder; on Windows 11 AMD64, open
+`Connect.cmd`. It starts `campus connect`, checks
 the native runner/manifest, prepares selected approved local images and verifies
 CPU or explicitly permitted GPU computation before enrollment. Recipients need
 Docker Desktop but no Python or Go. See [CLI usage](../runner/CLI.md) for
@@ -14,8 +15,13 @@ The LAN coordinator now runs upstream `96bfe6d` at
 [https://10.4.146.76:8443](https://10.4.146.76:8443), using strict TLS and a private
 client CA. Real local Go enrollment and ready heartbeat passed. The package CA
 is client-local; no global trust change is needed. Private invitation packages
-must not be published. Native Mac/RTX 5050 runs and peer LAN access still require
-those physical devices, and the assignment deadline/quota safety gate remains.
+must not be published. The physical Apple M2 Mac passed CPU check-only, saved
+reconnect and a server-observed LAN ready heartbeat through the `sh` route.
+Its first Finder double-click was killed for an unconfirmed reason despite
+matching hash and valid macOS signature checks. Physical Mac Ctrl+C returned
+the expected exit130; rerunning the launcher restored the saved connection and
+Serving. The Windows 11 AMD/RTX 5050 CPU/CUDA/LAN run remains to test; the
+assignment deadline/quota safety gate remains.
 
 ## Alternative binary-download scripts
 

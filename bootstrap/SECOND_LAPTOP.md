@@ -1,12 +1,34 @@
-# Second notebook: offline Apple Silicon readiness
+# Second notebook: Apple Silicon connection and offline history
 
 For the current LAN connection, use the new
-[native connection package](connect/README.md) and open `Connect.command`.
+[native connection package](connect/README.md). From the extracted folder, run:
+
+```sh
+sh ./Connect.command --check-only
+sh ./Connect.command
+```
+
 `campus connect` prepares and checks the selected runtime before enrollment;
 `--check-only` stays local and consumes no invitation. The LAN coordinator now
 runs at [https://10.4.146.76:8443](https://10.4.146.76:8443) with strict TLS and a
-private client CA. Real local Go enrollment/ready heartbeat passed; native Mac
-execution and that Mac's LAN reachability are still tests to perform.
+private client CA.
+
+Both commands have now passed on the physical **Apple M2 Mac, 8 cores, 8 GiB
+RAM**. Check-only passed the real CPU probe; normal connection offered 2 CPU and
+0.38 GiB RAM in that run, restored the saved identity and entered Serving.
+A strict-CA owner API read independently observed `MacBook Apple Silicon`
+(`50b752cf-f13f-4f76-ae0c-0b23f7666d35`) ready over the LAN at
+`2026-11-14T11:24:04.648714Z`, OS `darwin`, architecture `arm64`, CPUs 8.
+
+The transferred runner matched its package's pinned SHA-256, and Mac `codesign`
+reported valid on disk and satisfying its designated requirement. Edge
+quarantine metadata was present. The first Finder double-click produced
+`zsh: killed`; its cause remains unconfirmed. Use the tested `sh` route above.
+Physical Mac Ctrl+C printed `campus: context canceled` and returned the expected
+exit **130**. Running the same `sh` launcher again restored the saved connection
+and entered Serving. The owner API confirmed that same Mac ready after restart
+at `2026-11-14T11:27:23.242365Z`. Distributed workloads remain untested; the relative
+deadline/sandbox quota contract gate remains in force.
 
 The remainder records the earlier CPU-only offline readiness kit. Its hashes
 and checks remain useful evidence, but it does not replace the current
@@ -14,12 +36,12 @@ connection package or establish a live device session.
 
 ## Earlier offline prepared kit
 
-Use `bootstrap/test-kit/macos-arm64-foundation/` for the deferred Mac check.
+The earlier offline handoff used `bootstrap/test-kit/macos-arm64-foundation/`.
 It contains the clean native binary built from implementation commit
 `eac3ae08284158f4c7ac76e83544af8e4ca0f094`, after published-contract reconciliation.
 The earlier `macos-arm64-ready/` folder is retained as a historical first-pass kit.
 
-Current trusted SHA-256 of `SHA256SUMS`:
+Trusted SHA-256 of that historical kit's `SHA256SUMS`:
 
 ```text
 04134046d412f71b642229c89b7b45c57bc9abd15afd2230d695ba4559a33d9f
@@ -29,11 +51,12 @@ Payload size:208175556 bytes (about198.53 MiB). All payload hashes, full gzip/ta
 archive validation and shell syntax passed on the first notebook. Doctor also
 supports a verified locally loaded image without RepoDigest; joining/serving
 still requires a verified canonical reference and compatible real control plane.
-This kit is local CPU readiness only. Native Mac execution is still deferred.
+This kit is local CPU readiness only. Native Mac execution had not been observed
+when it was exported; the current connection package's physical result is above.
 
-Prepare the kit locally now. Run it on the second notebook only after the
-first notebook's local tests have finished and its owner is ready. This checks
-a Mac's native CPU runtime; it does not establish a pool run or benchmark.
+The following maker/checker instructions describe that earlier offline handoff.
+Its checker exercises a Mac's native CPU runtime; it does not establish a pool
+run or benchmark. Use the current connection package for the LAN session.
 
 The receiving Mac needs macOS on Apple Silicon, Docker Desktop for Apple
 Silicon installed/running, AC power, and enough free disk for the compressed
@@ -80,7 +103,7 @@ The manifest/profile does not copy arbitrary builder metadata, credentials,
 personal paths, models, or a GPU profile. Generated kits under
 `bootstrap/test-kit/` are ignored by Git.
 
-## Run later on the Mac
+## Historical offline checker instructions
 
 Transfer the whole folder through an owner-approved local method after the
 first notebook's checks are done. Keep its files together. Start Docker
@@ -131,16 +154,18 @@ Review `readiness-records/` before returning it later:
 
 These report local integrity, platform/runtime inventory, and one actual tiny
 CPU calculation. Keep credentials, datasets, and other personal files out of
-the handoff. Native Mac execution is still a test to perform on that notebook;
-passing generator tests on the maker does not claim it already happened.
+the handoff. At the time of this offline-kit record, native Mac execution had not
+been performed. Its maker tests alone did not establish that result; the current
+connection package's later physical Mac check is recorded above.
 
 Both notebooks should use the same LAN for a later coordinated test. That
 step still needs the real control plane, endpoint/certificate/invite, and
 explicitly chosen network configuration. This older readiness kit does not
 bundle a control plane; the current LAN coordinator is available separately at
-the address above. Its local enrollment check and these readiness results do
-not prove peer connectivity, distributed correctness, training resume, GPU
-support or comparable benchmark performance. Production workloads also remain
+the address above. The current Mac connection did prove that peer's LAN access;
+these earlier readiness results alone did not. Neither establishes distributed
+correctness, training resume, GPU support or comparable benchmark performance.
+Production workloads also remain
 behind the relative deadline/sandbox quota contract gate.
 
 ## Local generator verification
@@ -160,7 +185,8 @@ Mac binary or the ARM image natively.
 The first notebook has generated `bootstrap/test-kit/macos-arm64-ready/`.
 Copy that entire folder later; its payload is about 198.45 MiB. All payload hashes,
 the complete compressed image archive and shell syntax have been verified on
-the first notebook. Native execution on the receiving Mac is still deferred.
+the first notebook. Native execution had not been observed at that historical
+handoff; the current connection package's physical success is recorded above.
 
 Compare the output of `shasum -a 256 ./SHA256SUMS` with this trusted value before
 running the checker:

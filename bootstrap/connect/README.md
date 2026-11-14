@@ -30,8 +30,11 @@ The CMD window waits for Enter after an error so setup instructions remain
 visible. Success and cancellation exit immediately; closed input never stalls
 a headless run. The original Campus exit code is preserved.
 
-On Mac, open `Connect.command`; on Windows, open `Connect.cmd`. Keep the complete
-package folder together. For setup without enrollment, use:
+On Mac, run `sh ./Connect.command` from Terminal in the extracted folder;
+on Windows, open `Connect.cmd`. Keep the complete package folder together.
+The `sh` route passed physical M2 preflight and live enrollment/reconnect;
+the first Finder double-click reported `zsh: killed`. For setup without
+enrollment, use:
 
 ```sh
 sh ./Connect.command --check-only
@@ -57,4 +60,5 @@ retain Unix execute bits in a raw directory. If packaging the Mac directory on
 Windows into a ZIP for Finder, use Unix ZIP metadata (`create_system=3`, mode
 0755 in `ZipInfo.external_attr`) for `Connect.command` and `campus`. Test the
 actual extracted download on a Mac; quarantine may require its normal per-file
-security decision. No native Mac execution is established by Windows tests.
+security decision. Native Mac evidence comes from the physical M2 check in
+[the current handoff](../LIVE_SERVER.md), separately from Windows-side tests.

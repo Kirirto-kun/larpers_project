@@ -17,7 +17,8 @@ enable privileged services, download models, or run network package installation
 ## Prepared device connection
 
 Use the complete operator-prepared [native connection package](../bootstrap/connect/README.md).
-On Apple Silicon, open `Connect.command`; on Windows 11 AMD64, open `Connect.cmd`.
+On Apple Silicon, run `sh ./Connect.command` from the extracted package folder;
+on Windows 11 AMD64, open `Connect.cmd`.
 The recipient needs Docker Desktop, but no host Python or Go. Keep the package
 files together. A package containing an invitation is private to that device.
 
@@ -62,8 +63,14 @@ same local state directory and require no server connection or bundle arguments.
 An isolated LAN coordinator from upstream `96bfe6d` is now running at
 [https://10.4.146.76:8443](https://10.4.146.76:8443), with strict TLS and its private
 client CA. The package uses that CA only for this client. A real local Go join
-and ready heartbeat have passed. Native Apple Silicon and Windows 11 AMD/RTX 5050
-package runs, peer LAN access and actual RTX 5050 CUDA remain target-device tests.
+and ready heartbeat have passed. On a physical Apple M2 Mac (8 cores, 8 GiB RAM),
+`sh ./Connect.command --check-only` passed the CPU probe; normal startup restored
+the saved connection and entered Serving. The server independently observed its
+ready heartbeat over the LAN. The first Finder double-click returned
+`zsh: killed`; its cause is unconfirmed, while the transferred hash and macOS
+signature checks passed. Use the tested `sh` route. Mac Ctrl+C stopped the process
+with the expected exit 130, and restarting restored the saved connection and
+Serving. The Windows 11 AMD/RTX 5050 run and actual CUDA remain outstanding.
 The assignment deadline/quota safety gate below still blocks unbounded workloads.
 
 ## Device participation

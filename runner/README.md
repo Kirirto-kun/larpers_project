@@ -4,8 +4,10 @@ This branch contains the Go CLI/worker, isolated workload runtimes, Python SDK,
 checkpoint helpers and verified bootstrap for the Campus Pool implementation plan.
 The control plane runs separately: upstream `96bfe6d` is deployed on the LAN at
 [https://10.4.146.76:8443](https://10.4.146.76:8443), using strict TLS with a private
-client CA. Real local Go enrollment and ready heartbeat have passed. The two web
-applications are outside this runner branch.
+client CA. Real local Go enrollment and ready heartbeat have passed; a physical
+Apple M2 Mac also passed CPU preflight, saved reconnect and a server-observed
+LAN ready heartbeat using `sh ./Connect.command` from its extracted package.
+The two web applications are outside this runner branch.
 Published foundation DTOs are now generated into the Go client and optional
 Python SDK types. [Integration status](PROTOCOL.md) records the supported request
 boundaries and the worker safety contract that still blocks workload execution.
@@ -81,12 +83,15 @@ fixtures are pinned in PROTOCOL.md; generation and client boundary checks have
 been performed. Rich local execution policy remains separate from those DTOs.
 The live coordinator's relative hard-deadline/sandbox agreement remains required
 before executing production assignments. The server now supports the verified
-local enrollment/ready-heartbeat path; native Mac, Windows 11 RTX 5050 and peer
-LAN checks remain outstanding. Never replace the other owners' lockfiles/configs.
+local and physical Mac enrollment/ready-heartbeat paths. Physical Mac Ctrl+C
+returned the expected exit130, and another launch restored its saved connection.
+The Windows 11 AMD/RTX 5050 CPU/CUDA/LAN run remains outstanding. The initial Mac
+Finder launch failure is unconfirmed; use the tested `sh ./Connect.command`
+route. Never replace the other owners' lockfiles/configs.
 
 CPU amd64/arm64 and CUDA amd64 images have been built locally. Real CPU guard,
 training/resume and pretrained E5 checks are recorded in VALIDATION.md. Release
-acceptance still requires a real doctor on each laptop, two physical devices in
+acceptance still requires readiness checks on the remaining laptops, two physical devices in
 one map job, trusted references and comparable standalone baselines, physical
 disconnect/crash fault checks, and actual GPU checkpoint recovery. Local fixtures
 and single-host CPU execution do not satisfy those physical gates.

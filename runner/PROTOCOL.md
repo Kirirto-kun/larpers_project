@@ -9,8 +9,13 @@ DTOs, a generator and a deterministic mock API; that original commit did not
 contain a production coordinator. Later upstream `96bfe6d` is now deployed
 separately on the LAN at [https://10.4.146.76:8443](https://10.4.146.76:8443), with
 strict TLS and a private client CA. A real local Go join and ready heartbeat
-passed. This updates service availability without claiming scheduling,
-transactional workload acceptance, remote-device reachability or credits.
+passed. A physical Apple M2 Mac subsequently passed CPU preflight and saved
+reconnect through `sh ./Connect.command`; the owner API independently observed
+its LAN ready heartbeat at `2026-11-14T11:24:04.648714Z`. Physical Ctrl+C then
+returned the expected exit130, and relaunching restored the saved connection
+and entered Serving again. This establishes that Mac peer's reachability
+without claiming scheduling, transactional workload
+acceptance or credits.
 
 Go DTOs are generated into `internal/generated/api.go`; their provenance and
 regeneration command are in `internal/generated/PROVENANCE.md`. The Python SDK
@@ -120,7 +125,7 @@ foundation DTOs and be tested against the real API by their integration owner.
 This runner branch does not overwrite their source, generated clients or locks.
 
 See `VALIDATION.md` for actual local commands/results. Full acceptance still
-needs an agreed live-worker safety contract, native Mac/Windows 11 RTX 5050 runs,
-two physical devices, CUDA computation, trusted references and matched
+needs an agreed live-worker safety contract, the Windows 11 AMD/RTX 5050 run,
+two-device workloads, CUDA computation, trusted references and matched
 final-source standalone/pooled measurements. Server availability and the tested
-local enrollment path are recorded above.
+local and physical Mac connection paths are recorded above.

@@ -1,0 +1,62 @@
+name: Campus Pool checks
+on:
+  push:
+  pull_request:
+permissions:
+  contents: read
+jobs:
+  control-plane:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:17.12-alpine@sha256:34261f594522cf41dfcb76aefd42b9d201098b0e6b23c9c68733f169e4218b6f
+        env:
+          POSTGRES_USER: campus
+          POSTGRES_PASSWORD: campus
+          POSTGRES_DB: campus
+        ports:
+          - 5432:5432
+        options: --health-cmd "pg_isready -U campus -d campus" --health-interval 2s --health-timeout 3s --health-retries 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - uses: astral-sh/setup-uv@v6
+        with:
+          version: '0.13.8'
+      - run: uv sync --project server --locked
+      - run: uv run --project server ruff check server/campus server/tests contracts infra
+      - run: uv run --project server python contracts/check.py
+      - run: uv run --project server pytest server/tests -q
+      - run: uv run --project server alembic -c server/alembic.ini upgrade head
+      - run: uv run --project server alembic -c server/alembic.ini check
+  clients:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.25'
+          cache: false
+      - name: Generate and compile contract DTOs
+        run: |
+          python contracts/generate.py --target all
+          npm exec --yes --package=typescript@5.7.3 -- tsc --noEmit --strict apps/portal/src/generated/api.ts apps/console/src/generated/api.ts
+          go test runner/internal/generated/api.go
+          python -m py_compile sdk/python/campus/generated/api.py
+      - name: Build applications present in this checkout
+        run: |
+          for app in portal console; do
+            if [ -f "apps/$app/package-lock.json" ]; then
+              npm --prefix "apps/$app" ci
+              npm --prefix "apps/$app" run build
+            fi
+          done
+          if [ -f runner/go.mod ]; then go -C runner test ./...; fi

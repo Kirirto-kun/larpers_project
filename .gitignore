@@ -11,3 +11,5 @@ __pycache__/
 /sdk/python/campus/generated/
 /apps/portal/dist/
 /apps/console/dist/
+/campus-local-ca.pem
+/campus-smoke-credential.json

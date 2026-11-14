@@ -1,27 +1,47 @@
 # Verified user-space bootstrap
 
-For the current Mac/Windows handoff, use an operator-prepared
-[native connection package](connect/README.md). On Apple Silicon, run
-`sh ./Connect.command` from the extracted folder; on Windows 11 AMD64, open
-`Connect.cmd`. It starts `campus connect`, checks
-the native runner/manifest, prepares selected approved local images and verifies
-CPU or explicitly permitted GPU computation before enrollment. Recipients need
-Docker Desktop but no Python or Go. See [CLI usage](../runner/CLI.md) for
-`--check-only`, explicit CPU/GPU selection, saved reconnect and local Stop/Drain.
-The [current local-server handoff](LIVE_SERVER.md) includes device steps,
-operator restart commands and the observed physical-test status.
+The current handoff uses a small [public starter](public/README.md):
+`Connect.cmd` on Windows or `Connect.command` on macOS/Linux. These files are
+safe to forward; they contain public download metadata and an optional public
+CA certificate, with no invitation, owner token or device identity. On Mac run
+`sh ./Connect.command` in Terminal. Docker Desktop is a prerequisite on
+Windows/macOS; recipients need no host Python or Go.
 
-The LAN coordinator now runs upstream `96bfe6d` at
-[https://10.4.146.76:8443](https://10.4.146.76:8443), using strict TLS and a private
-client CA. Real local Go enrollment and ready heartbeat passed. The package CA
-is client-local; no global trust change is needed. Private invitation packages
-must not be published. The physical Apple M2 Mac passed CPU check-only, saved
-reconnect and a server-observed LAN ready heartbeat through the `sh` route.
-Its first Finder double-click was killed for an unconfirmed reason despite
-matching hash and valid macOS signature checks. Physical Mac Ctrl+C returned
-the expected exit130; rerunning the launcher restored the saved connection and
-Serving. The Windows 11 AMD/RTX 5050 CPU/CUDA/LAN run remains to test; the
-assignment deadline/quota safety gate remains.
+The starter detects native OS/architecture, downloads the exact pinned client
+into a private per-hash cache, verifies SHA-256/size and starts `campus install`.
+That client checks CPU/NVIDIA and local Docker, selects the matching approved
+CPU environment, and asks explicitly before downloading CUDA or offering GPU
+computation. Interrupted environment downloads resume; verified cached payloads
+are rehashed and reused. An invitation is requested separately after preflight
+for a new device. Saved identity reconnect needs no new invitation.
+No global CA, service, autostart, driver or Docker installation is performed.
+
+The [live handoff](LIVE_SERVER.md) gives the current LAN release status, device
+steps and operator restart command. Native CGO-disabled clients are built for
+Windows/macOS/Linux on amd64/arm64. Windows ARM Docker Desktop is currently
+Early Access, and binary availability does not guarantee runtime readiness.
+Ordinary phones and Apple Metal are not supported targets.
+See [CLI usage](../runner/CLI.md) for `install`, `--check-only`, CPU/GPU consent,
+cache selection, saved reconnect and local Stop/Drain.
+
+The coordinator runs upstream `96bfe6d` with the restricted diagnostic overlay at
+[https://10.4.146.76:8443](https://10.4.146.76:8443). TLS and hostname checks remain
+enabled; the included public CA is trusted only by Campus. The `10.4` endpoint
+is a LAN address, not an Internet release. Real Windows amd64 CPU connection and
+physical M2 CPU connection have passed. The Mac also completed a real bounded
+distributed CPU model-fitting job whose downloaded artifact passed independent
+numerical verification; [evidence](control_plane_compat/RESULT.md) explains its
+explicit allowlist and policy. General arbitrary-job compatibility, two-device
+benchmarks and actual RTX 5050/CUDA execution remain separate gates.
+
+## Alternative offline device package
+
+An operator-prepared [native connection package](connect/README.md) keeps the
+client and image archives together for offline transfer and starts
+`campus connect`. Existing private ZIPs remain usable. A package containing an
+invitation is private to its device and must not be hosted in the public release.
+The physical Mac's tested package entry point is `sh ./Connect.command`; its
+initial Finder kill remains unconfirmed. Do not disable macOS security.
 
 ## Alternative binary-download scripts
 
@@ -30,7 +50,7 @@ SHA-256, keep it in a private user cache, and launch `campus join <invite>` with
 the owner's additional arguments. They do not install Python/Go, elevate
 privileges, change system services, install Docker/drivers, or enable autostart.
 
-**No runner release is currently published by this repository.** Obtain the
+**These older scripts have no default release URL or checksum.** Obtain the
 release base URL, the exact binary SHA-256 for your OS/architecture, and invite
 from the trusted administrator/release channel. All three are required inputs;
 these scripts contain no default release URL or invented checksum. A checksum
@@ -130,8 +150,8 @@ inputs/architectures, cached-file tampering, linked caches, and runner exit
 codes. Windows tests exercise a real native executable and both available
 PowerShell editions; shell tests use Git Bash on Windows.
 
-Public HTTPS release hosting, published per-platform digests and native
-Linux/macOS execution remain release/integration gates for these download
-scripts. A local Go join against the running LAN coordinator has separately
-passed; that does not establish a published-download-to-join path or a
-distributed workload result.
+The new public starter/catalog route is the primary LAN handoff; its verification
+is recorded in [VALIDATION.md](../runner/VALIDATION.md). An Internet release and
+physical acceptance of every target remain separate gates. The tests above
+describe the older binary-download scripts; they do not establish every
+public-starter-to-enrollment flow or general distributed workload compatibility.

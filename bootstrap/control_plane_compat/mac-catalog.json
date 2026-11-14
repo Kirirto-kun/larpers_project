@@ -1,0 +1,15 @@
+{
+  "environments": [{
+    "id": "diagnostic-cpu-arm64", "name": "Bounded Mac CPU diagnostic",
+    "variant_id": "cpu-arm64",
+    "image_digest": "campus/python-ml-cpu-v1-arm64@sha256:3d7435b47960fcc183cd61a2350b5b3ca2e58fd5abfcf832b4563dad4eda55fb",
+    "platform": "linux/arm64", "accelerator": "cpu",
+    "resource_requirements": {"cpu_millis": 1000, "memory_bytes": 268435456, "disk_bytes": 35651584, "gpu_slots": 0, "vram_bytes": 0}
+  }],
+  "adapters": [{
+    "ref": {"id": "campus.diagnostic", "version": "1"},
+    "image_ids": ["diagnostic-cpu-arm64"], "policies": ["structural"],
+    "checkpoints": false, "parallel": false,
+    "recipe": {"id": "diagnostic-quadratic", "name": "CPU quadratic model diagnostic", "description": "A bounded deterministic regression fit; independent numerical verification is performed by the diagnostic caller.", "adapter": {"id": "campus.diagnostic", "version": "1"}}
+  }]
+}

@@ -1,6 +1,98 @@
 # Local validation and remaining acceptance gates
 
-## Current LAN coordinator and native connection path
+## Current public preparation and physical Mac result
+
+Final R3 live acceptance: the actual Windows CMD launcher, inherited from a
+PowerShell 7 session, reused the verified native client and CPU environment,
+passed the real CPU probe and restored the saved device. Owner API observed
+`ready` at `2026-11-14T12:48:32.469569Z`. `install --stop` then returned 0 and the
+foreground CMD exited 0. The default CPU cache contained no CUDA archive object.
+Strict-CA R3 catalog, six native client HEAD sizes, three exact starter bodies,
+206 Range and private-file 404 checks passed. A scan of public metadata/clients
+found none of the nine known private credential/invitation values.
+
+Update on 2026-11-14: the current handoff is an invitation-free public starter
+with a pinned download catalog, while private offline device ZIPs remain usable.
+See [the LAN release status](../bootstrap/LIVE_SERVER.md) and
+[public release format](../bootstrap/public/README.md). The current R3 release is
+`bootstrap/test-kit/public/runner-20261114-r3`, served read-only at
+`https://10.4.146.76:8443/downloads/runner-20261114-r3/`. Its exact starter
+sizes/hashes and pinned catalog are recorded in the handoff. The three image
+archives are reused verified hardlinks checked for identity and size; all 18
+non-image release files were freshly hashed, without rereading all image bytes.
+The preceding R1 release was verified through strict TLS at
+`https://10.4.146.76:8443/downloads/runner-20261114-r1/`: HEAD for all six native
+targets, exact bytes for all three starter files, HTTP Range 206, and 404 for
+invitation, owner and runtime-file paths. This is a LAN handoff, not an Internet
+publication or GitHub release.
+
+All six native Windows/macOS/Linux amd64/arm64 clients were built with
+`CGO_ENABLED=0`, `-trimpath` and `-buildvcs=false`. Native Windows amd64 CPU and
+physical M2 CPU execution have passed; the native Linux installer and Unix
+filesystem checks passed under WSL. Cross-building the other targets is not
+physical acceptance. Windows ARM Docker Desktop is currently Early Access;
+there is no ordinary phone, Apple Metal or ARM CUDA offering.
+
+The public starter verifies and caches the selected native client. `install`
+pins the catalog and selected environment hashes, requests GPU consent before
+any CUDA download, resumes interrupted large files, and rehashes cached files
+before reuse. New-device invitations are entered separately after successful
+preflight. Docker Desktop/WSL/driver prerequisites remain owner setup.
+
+| Prepared environment archive | Compressed bytes |
+| --- | ---: |
+| CPU linux/arm64 | 198349093 |
+| CPU linux/amd64 | 282383826 |
+| CUDA linux/amd64 | 4175747216 |
+
+A real Go HTTP preparation test downloaded the full 4,175,747,216-byte CUDA
+archive through Caddy using the strict pinned CA. It first cancelled after
+8,388,608 bytes, then resumed with `Range: bytes=8388608-` and received exact
+`Content-Range: bytes 8388608-4175747215/4175747216` with status 206. Final object
+and prepared-bundle hashes passed. A third `Prepare` call with a transport that
+denied every network request succeeded with **zero HTTP requests**, proving
+verified payload cache reuse. This test neither enrolled a device nor executed
+CUDA. Evidence is in
+`.git/campus-runner/public-live-download/live-download-report.json`.
+
+Fresh Go normal/race tests and vet passed. The latest R3 targeted public suite
+passed **53 tests in 52.19 seconds** after the Windows module-path and repeat-cache
+ACL corrections. It includes two actual non-administrator runs with protected
+owner DACLs and no second client download, CIM discovery, parent module-path
+restoration and exit codes 0/1/7/130. ACL updates use the DACL alone and require
+no `SeSecurityPrivilege` privilege. The earlier full locked Python suite passed
+**426 tests with 1 opt-in E5 skip in 220.34 seconds** before those launcher fixes;
+that full-suite result is distinct from the final targeted regression run.
+
+An actual native R2 Windows CMD launch downloaded the pinned client and CPU
+environment from an empty cache, passed preflight and reached ready. The R3 CMD
+launch from inherited PowerShell 7 then reused the verified client/environment,
+passed CPU preflight, restored the saved identity and entered Serving. The
+CPU-only cache contained no CUDA archive object. These runs verify the real
+Windows launcher/runtime path; they do not establish physical Mac public-starter
+execution or NVIDIA CUDA execution.
+
+The physical Apple M2, 8 cores and 8 GiB RAM, has also completed a real
+distributed CPU computation through the live API's explicit diagnostic overlay.
+Job `f62d56ff-b5d0-4866-aa5c-d1e0a24f00a4` reached succeeded on node
+`50b752cf-f13f-4f76-ae0c-0b23f7666d35`. Native Linux/aarch64 Python 3.11.14
+fitted a quadratic model to 250,000 deterministic samples, reporting 447.717 ms
+of calculation. The authenticated artifact download was `model.json`, 281 bytes,
+SHA-256 `eb57995ae2440f334c6d8c1c8e9ef4ed41b5ed3ef29e759fa85ee43db93482f7`.
+An independent exact-rational reference accepted maximum coefficient error
+`4.0589753780295723e-13` and MSE error `4.6629367034256575e-15`.
+The node returned to ready with zero active attempts.
+
+This is a bounded CPU diagnostic under a device/image/adapter allowlist: 1 CPU,
+256 MiB RAM, 64 PIDs, 34 MiB explicit tmpfs quotas and a 60-second hard bound,
+with no network or GPU. Server verification is `structural`; the independent
+numerical check is separate evidence. [Policy and physical result](../bootstrap/control_plane_compat/RESULT.md)
+record the proof. General published assignments still fail closed when their
+relative deadline and detailed sandbox policy are absent. Arbitrary-job
+compatibility, two physical devices in one job, actual RTX 5050/CUDA execution,
+GPU recovery and comparative performance remain acceptance gates.
+
+## Connection validation recorded before public preparation
 
 Update on 2026-11-14: upstream control-plane `96bfe6d` is deployed from an
 isolated local snapshot with Docker Compose project `campus-live`. Its LAN
@@ -8,8 +100,9 @@ endpoint is [https://10.4.146.76:8443](https://10.4.146.76:8443), with strict TL
 and a private client CA. Real Go device enrollment and ready heartbeat passed
 against this service. A physical Apple M2 Mac has now also passed CPU preflight
 and saved reconnect, with a server-observed ready heartbeat over the LAN. This
-supersedes earlier coordinator-absent and Mac-peer-pending statements; it does
-not establish distributed workload execution.
+supersedes earlier coordinator-absent and Mac-peer-pending statements. These
+connection-only checks do not themselves establish workload execution; the later
+restricted Mac computation is recorded above.
 
 The [native connection package](../bootstrap/connect/README.md) now starts
 `campus connect`, verifies its pinned files and local Docker endpoint, loads
@@ -60,7 +153,8 @@ printed `campus: context canceled` and returned the expected exit **130**; rerun
 the same `sh` launcher restored the saved connection and entered Serving again.
 The owner API then confirmed the same Mac ready after restart, last seen
 **2026-11-14T11:27:23.242365Z**.
-A distributed workload has not been tested.
+At this connection-only checkpoint, a distributed workload had not been tested;
+the later successful restricted Mac computation is recorded above.
 
 The private Windows ZIP was independently verified: **4468742936 bytes**,
 SHA-256 `c68c0eda2f85276d8cf34cb67fa25ff7b18b523215424a15ac39024c6902c134`.
@@ -132,7 +226,8 @@ invocation envelopes, formal StandaloneRecord provenance/config matching and
 UI-generated DTO integration also remain unresolved with the other owners.
 At that earlier recording, native Mac, actual GPU and physical multi-device
 acceptance were deferred. Current Mac connection evidence is recorded above;
-actual GPU and distributed workload acceptance remain outstanding.
+actual GPU and general distributed workload acceptance remain outstanding. The
+later restricted physical Mac computation is recorded at the top of this file.
 
 The earlier offline Mac kit is `bootstrap/test-kit/macos-arm64-foundation/`, built from
 clean implementation commit `eac3ae0`. All five payload hashes, full gzip CRC/tar
@@ -303,7 +398,8 @@ resident during that snapshot; model steady-state RSS was not benchmarked.
   the first Finder-launch failure remains unexplained.
   The earlier [Mac readiness kit](../bootstrap/SECOND_LAPTOP.md) checks offline CPU readiness
   only. Neither receiver needs host Python or Go. Full workload guard/filesystem,
-  GPU and remaining device-control behavior still need those devices. Generated
+  GPU and remaining device-control behavior still need those devices. The later
+  bounded physical Mac computation is recorded above. Generated
   kits and caches are Git-ignored.
 - Complete the live coordinator's [worker safety contract](PROTOCOL.md),
   especially the relative `task_remaining_ms` bound, detailed quotas and

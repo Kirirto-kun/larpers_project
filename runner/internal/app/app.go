@@ -24,6 +24,7 @@ import (
 const usage = `Usage: campus [--state-dir DIR] [--endpoint URL] [--ca-file FILE] COMMAND
 
 Commands:
+  install --catalog-url URL --catalog-sha256 HEX  Download, cache and connect
   connect --bundle DIR --manifest-sha256 HEX  Prepare and connect this device
   doctor [--profiles FILE] [--gpu]        Inspect host and probe prepared runtimes
   join INVITE [--no-serve] [--gpu]        Redeem a device invitation and participate
@@ -140,6 +141,8 @@ func (a *App) Run(ctx context.Context, args []string) int {
 		}
 		command, args := rest[0], rest[1:]
 		switch command {
+		case "install":
+			err = a.install(ctx, cfg, args)
 		case "connect":
 			err = a.connect(ctx, cfg, args)
 		case "help", "--help", "-h":

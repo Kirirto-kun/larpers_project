@@ -1,0 +1,82 @@
+#!/bin/sh
+# Download a native, pinned client; the visible client handles environment consent.
+set -eu
+umask 077
+fail() { printf '%s\n' "Campus: $1" >&2; exit 1; }
+trap 'exit 130' INT
+PATH="$HOME/.docker/bin:/Applications/Docker.app/Contents/Resources/bin:$PATH"
+export PATH
+system=$(uname -s)
+case "$system" in Darwin) os=darwin ;; Linux) os=linux ;; *) fail 'this starter supports macOS and Linux' ;; esac
+machine=$(uname -m)
+case "$machine" in arm64|aarch64) arch=arm64 ;; x86_64|amd64) arch=amd64 ;; *) fail 'unsupported native CPU architecture' ;; esac
+# An Intel shell running under Rosetta must still fetch the Apple Silicon client.
+if [ "$os" = darwin ] && [ "$(sysctl -n hw.optional.arm64 2>/dev/null || printf 0)" = 1 ]; then arch=arm64; fi
+case "$os-$arch" in
+@POSIX_TARGETS@
+    *) fail 'this release has no client for your native platform' ;;
+esac
+case "$os" in
+    darwin) cache="$HOME/Library/Caches/Campus/starter" ;;
+    linux) cache="${XDG_CACHE_HOME:-$HOME/.cache}/Campus/starter" ;;
+esac
+safe_path() {
+    check=$1
+    case "$check" in /*) ;; *) fail 'private cache must use an absolute path' ;; esac
+    while [ "$check" != / ]; do
+        [ ! -L "$check" ] || fail 'private cache must not contain symbolic links'
+        check=$(dirname "$check")
+    done
+}
+safe_path "$cache"
+mkdir -p "$cache"
+safe_path "$cache"
+chmod 700 "$cache"
+work=$(mktemp -d "$cache/.download.XXXXXXXX") || fail 'cannot create private download cache'
+trap 'rm -f "$work/runner" "$work/ca.pem"; rmdir "$work" 2>/dev/null || :' EXIT
+trap 'exit 130' INT
+hash_file() {
+    if command -v shasum >/dev/null 2>&1; then result=$(shasum -a 256 < "$1")
+    elif command -v sha256sum >/dev/null 2>&1; then result=$(sha256sum < "$1")
+    else fail 'SHA-256 utility is unavailable'; fi
+    printf '%s' "${result%% *}"
+}
+verified() {
+    [ ! -L "$1" ] && [ -f "$1" ] || return 1
+    count=$(wc -c < "$1" | tr -d '[:space:]')
+    [ "$count" = "$runner_size" ] && [ "$(hash_file "$1")" = "$runner_sha" ]
+}
+ca_base64='@CA_BASE64@'
+ca_sha='@CA_SHA256@'
+ca=''
+if [ -n "$ca_base64" ]; then
+    ca="$cache/ca-$ca_sha.pem"
+    if [ -L "$ca" ]; then fail 'CA cache must not be a symbolic link'; fi
+    if [ ! -f "$ca" ] || [ "$(hash_file "$ca")" != "$ca_sha" ]; then
+        if [ "$os" = darwin ]; then printf '%s' "$ca_base64" | base64 -D > "$work/ca.pem"
+        else printf '%s' "$ca_base64" | base64 -d > "$work/ca.pem"; fi
+        [ "$(hash_file "$work/ca.pem")" = "$ca_sha" ] || fail 'embedded public CA checksum mismatch'
+        mv -f "$work/ca.pem" "$ca"
+    fi
+fi
+runner="$cache/runner-$runner_sha"
+if ! verified "$runner"; then
+    [ ! -L "$runner" ] || fail 'runner cache must not be a symbolic link'
+    printf '%s\n' 'Downloading the native Campus client...'
+    if [ -n "$ca" ]; then
+        status=$(curl --fail --silent --show-error --proto '=https' --proto-redir '=https' --tlsv1.2 --noproxy '@DOWNLOAD_HOST@' --max-redirs 0 --connect-timeout 15 --max-time 300 --max-filesize "$runner_size" --cacert "$ca" --output "$work/runner" --write-out '%{http_code}' -- "$runner_url") || fail 'native client download failed'
+    else
+        status=$(curl --fail --silent --show-error --proto '=https' --proto-redir '=https' --tlsv1.2 --noproxy '@DOWNLOAD_HOST@' --max-redirs 0 --connect-timeout 15 --max-time 300 --max-filesize "$runner_size" --output "$work/runner" --write-out '%{http_code}' -- "$runner_url") || fail 'native client download failed'
+    fi
+    [ "$status" = 200 ] || fail 'native client download returned an unexpected HTTP status'
+    verified "$work/runner" || fail 'native client checksum or size mismatch; obtain a fresh trusted starter'
+    chmod 700 "$work/runner"
+    mv -f "$work/runner" "$runner"
+fi
+verified "$runner" || fail 'cached native client verification failed'
+chmod 700 "$runner"
+if [ -n "$ca" ]; then
+    "$runner" --ca-file "$ca" install --catalog-url '@CATALOG_URL@' --catalog-sha256 '@CATALOG_SHA256@'
+else
+    "$runner" install --catalog-url '@CATALOG_URL@' --catalog-sha256 '@CATALOG_SHA256@'
+fi

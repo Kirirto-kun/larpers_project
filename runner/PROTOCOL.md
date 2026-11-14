@@ -13,9 +13,10 @@ passed. A physical Apple M2 Mac subsequently passed CPU preflight and saved
 reconnect through `sh ./Connect.command`; the owner API independently observed
 its LAN ready heartbeat at `2026-11-14T11:24:04.648714Z`. Physical Ctrl+C then
 returned the expected exit130, and relaunching restored the saved connection
-and entered Serving again. This establishes that Mac peer's reachability
-without claiming scheduling, transactional workload
-acceptance or credits.
+and entered Serving again. A later restricted compatibility overlay enabled
+that same physical Mac to complete a real distributed CPU diagnostic, including
+accepted artifact publication and independent numerical verification. The
+ordinary published worker contract remains incomplete as described below.
 
 Go DTOs are generated into `internal/generated/api.go`; their provenance and
 regeneration command are in `internal/generated/PROVENANCE.md`. The Python SDK
@@ -54,7 +55,37 @@ accelerator and declared outputs before creating a job. It never silently
 accepts a substituted shell command. Actual planner/LLM end-to-end execution has
 not been verified against the live deployment.
 
-## Worker safety contract still required
+## Restricted live Mac diagnostic
+
+The live API is built from a separate `control-plane-96bfe6d-compat` staging
+copy; the pristine upstream snapshot remains unchanged. Its explicit
+administrator policy allows only Mac node
+`50b752cf-f13f-4f76-ae0c-0b23f7666d35`, the exact diagnostic adapter and native
+ARM image. It translates assignments only for that authenticated device with
+the exact `campus/0.1.0` user agent. Other clients keep the ordinary DTO, and
+unsupported work is rejected before leasing.
+
+The policy supplies a server-derived relative hard bound of at most 60 seconds,
+1 CPU, 256 MiB RAM, 64 PIDs and 34 MiB of explicit tmpfs quotas, with no network,
+GPU, inputs or checkpoint resume. The installed runner's monotonic lease guard
+and independent hard bound remain active. A narrowly validated completion-name
+translation retains the ordinary fencing, artifact ownership, integrity,
+idempotency and verification paths.
+
+Job `f62d56ff-b5d0-4866-aa5c-d1e0a24f00a4` reached succeeded on the physical M2.
+Its native Linux/aarch64 Python task fitted a quadratic model to 250,000 samples.
+The authenticated 281-byte `model.json` download matched SHA-256
+`eb57995ae2440f334c6d8c1c8e9ef4ed41b5ed3ef29e759fa85ee43db93482f7`;
+an independent exact-rational reference accepted its coefficients and MSE.
+Server verification remains explicitly `structural`; that numerical evidence
+is a separate client-side check. The node returned to ready with zero active
+attempts. See [overlay policy](../bootstrap/control_plane_compat/README.md) and
+[physical result](../bootstrap/control_plane_compat/RESULT.md).
+
+This proves the restricted diagnostic path, not arbitrary-job compatibility,
+general planner execution, a multi-device benchmark or GPU support.
+
+## General worker safety contract still required
 
 The published Assignment is not sufficient for this runner's full execution
 contract. In particular:
@@ -69,12 +100,15 @@ contract. In particular:
   model has different representations. Conversion must preserve binding,
   output quotas, checkpoint compatibility and registered validator authority.
 
-`ClaimWork` fails closed with `ErrWorkerContractIncomplete` when the required
+Outside the explicit diagnostic overlay, `ClaimWork` fails closed with
+`ErrWorkerContractIncomplete` when the required
 relative bound/policy is absent. A complete fixture validated by the actual
 foundation Assignment DTO is checked by a worker regression: no `/started`
 mutation or container creation occurs, and polling stops with the explicit
 error. Safe container functionality demonstrated locally does not prove that
-this published assignment can run through a real coordinator.
+this ordinary published assignment can run through a real coordinator. The
+allowlisted diagnostic succeeds because it supplies the missing bounded policy
+explicitly; it does not weaken this failure mode for other work.
 
 The typed attempt transport uses generated proof, completion, lease receipt and
 checkpoint DTOs. Completion outputs reference finalized artifacts; local
@@ -112,8 +146,9 @@ object result/string error. The current trusted adapter executable also binds
 schema version and a static registered adapter ID/version, with richer error
 details. The coordinator invocation must explicitly bind that trusted identity
 and adapt the envelope; never infer a Python module/validator from user input.
-The original foundation commit did not contain that invoker; its live
-end-to-end behavior has not been established by the enrollment checks.
+The original foundation commit did not contain that invoker. The restricted Mac
+diagnostic establishes only its one allowlisted adapter path; general live
+adapter/planner execution remains unverified.
 
 ## Other project parts
 
@@ -125,7 +160,10 @@ foundation DTOs and be tested against the real API by their integration owner.
 This runner branch does not overwrite their source, generated clients or locks.
 
 See `VALIDATION.md` for actual local commands/results. Full acceptance still
-needs an agreed live-worker safety contract, the Windows 11 AMD/RTX 5050 run,
+needs an agreed general live-worker safety contract, the Windows 11 AMD/RTX 5050 run,
 two-device workloads, CUDA computation, trusted references and matched
 final-source standalone/pooled measurements. Server availability and the tested
-local and physical Mac connection paths are recorded above.
+local and physical Mac connection paths and restricted computation are recorded
+above. Public starter/download verification is tracked separately in
+[VALIDATION.md](VALIDATION.md); redistributable packaging does not expand the
+worker protocol's execution authority.

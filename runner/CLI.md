@@ -14,7 +14,62 @@ guard, registered adapters and offline dependencies. Windows additionally needs
 a working Docker Desktop/WSL2 installation. The CLI does not install drivers,
 enable privileged services, download models, or run network package installation.
 
-## Prepared device connection
+## Public starter and automatic preparation
+
+The [redistributable public starter](../bootstrap/public/README.md) contains no
+invitation or device identity. Share `Connect.cmd` for Windows or
+`Connect.command` for macOS/Linux through a trusted channel. On Mac, run
+`sh ./Connect.command` in Terminal. The starter selects the native OS/architecture,
+downloads the pinned client into a private per-hash cache, verifies its exact
+size and SHA-256, and starts:
+
+```text
+campus install --catalog-url TRUSTED_CATALOG_URL --catalog-sha256 TRUSTED_CATALOG_SHA256
+campus install --catalog-url TRUSTED_CATALOG_URL --catalog-sha256 TRUSTED_CATALOG_SHA256 --gpu=false
+campus install --catalog-url TRUSTED_CATALOG_URL --catalog-sha256 TRUSTED_CATALOG_SHA256 --gpu
+campus install --catalog-url TRUSTED_CATALOG_URL --catalog-sha256 TRUSTED_CATALOG_SHA256 --check-only
+campus install --stop
+campus install --drain
+```
+
+`install` verifies the pinned public catalog, selects the exact target, checks
+the local Docker runtime and CPU/NVIDIA inventory, then downloads only the
+approved environment for that target. The running client must itself match the
+catalog's pinned runner bytes; an arbitrary developer build is refused.
+CPU is the default. A normal interactive
+run with a usable NVIDIA device and an available CUDA image asks separately for
+permission to download CUDA and use the GPU, defaulting to No. `--gpu=false`
+selects CPU without asking; `--gpu` supplies explicit consent and fails if the
+driver or target CUDA runtime is unavailable. Apple Silicon uses native ARM64
+CPU containers; no Metal support is offered.
+
+Environment objects are cached by SHA-256 under the OS user cache's
+`Campus/downloads` directory; `--cache-dir DIR` overrides it. Reuse rechecks the
+exact size/hash. Interrupted large downloads retain a private partial file and
+resume with checked HTTP Range/Content-Range; no partial file is loaded. The
+small catalog is fetched and pinned on each install invocation. Previously
+verified environment objects need no repeat download. Preparation produces a
+verified local bundle and delegates preflight/enrollment to `connect` below.
+The invitation is requested separately only after preflight; an existing saved
+identity reconnects without a new invitation. `--check-only` may download/load
+approved images and start Docker, but does not enroll or serve. Stop/Drain need
+neither catalog arguments nor a server connection.
+
+Native CGO-disabled clients are built for Windows, macOS and Linux, each on
+amd64 and arm64. That build coverage is separate from physical runtime coverage:
+Windows amd64 and Apple M2 CPU have run; native Linux installer tests passed
+under WSL. Docker Desktop is a prerequisite on Windows/macOS, with its required
+virtualization/WSL setup completed by the owner. Windows ARM Docker Desktop is
+currently Early Access; the ARM binary does not guarantee a usable runtime.
+Unsupported systems, including ordinary phones, are not supported targets.
+The starter does not install Docker, drivers or privileged prerequisites.
+
+See [the live handoff](../bootstrap/LIVE_SERVER.md) for the LAN release and its
+verification status. Public here means safe to redistribute without invitation
+secrets; the current `10.4.146.76` host is accessible on the tested LAN, not a
+published Internet release. Its embedded public CA remains client-local.
+
+## Prepared offline device connection
 
 Use the complete operator-prepared [native connection package](../bootstrap/connect/README.md).
 On Apple Silicon, run `sh ./Connect.command` from the extracted package folder;
@@ -70,8 +125,13 @@ ready heartbeat over the LAN. The first Finder double-click returned
 `zsh: killed`; its cause is unconfirmed, while the transferred hash and macOS
 signature checks passed. Use the tested `sh` route. Mac Ctrl+C stopped the process
 with the expected exit 130, and restarting restored the saved connection and
-Serving. The Windows 11 AMD/RTX 5050 run and actual CUDA remain outstanding.
-The assignment deadline/quota safety gate below still blocks unbounded workloads.
+Serving. The Mac later completed a real bounded distributed CPU job through an
+explicit device/image/adapter-allowlisted compatibility overlay. Its
+authenticated 281-byte `model.json` passed SHA-256 and an independent
+exact-rational numerical check; see [the result](../bootstrap/control_plane_compat/RESULT.md).
+Ordinary published assignments still fail closed without the required relative
+deadline and sandbox policy. The target Windows 11 AMD/RTX 5050 run and actual
+CUDA remain outstanding.
 
 ## Device participation
 
@@ -285,12 +345,14 @@ and job artifacts use `{id, name, sha256, size_bytes, media_type}`; checksum and
 size verification still precede publishing any downloaded directory.
 
 The original `5a5bd29` foundation supplied DTOs, fixtures and a fixture server.
-The later `96bfe6d` coordinator is deployed separately on the LAN; real local
-enrollment and ready heartbeat have now passed against it. The assignment still
-lacks the worker's relative `task_remaining_ms` hard bound and agreed detailed
-sandbox quotas. Worker execution fails closed at that boundary. Those enrollment
-checks and passing HTTP tests do not establish distributed workload execution,
-server-side exactly-once behavior or a completed two-device benchmark.
+The later `96bfe6d` coordinator is deployed separately on the LAN. Real local
+enrollment/heartbeat and a physical Mac's restricted distributed CPU computation
+have passed. The Mac diagnostic uses an explicit administrator allowlist and
+fixed relative hard bound/quotas; it does not make ordinary Assignment DTOs
+generally compatible. Those ordinary assignments still lack the worker's
+relative `task_remaining_ms` hard bound and agreed detailed sandbox quotas, and
+execution fails closed at that boundary. No general planner-to-worker flow,
+server-side exactly-once claim or two-device benchmark is established.
 
 ## Local baseline
 

@@ -72,6 +72,34 @@ func startConnectionDocker(ctx context.Context) error {
 	return nil
 }
 
+func (a *App) readyConnectionRuntime(ctx context.Context, caps client.Capabilities) (client.Capabilities, error) {
+	if caps.Runtime.Healthy {
+		return caps, nil
+	}
+	fmt.Fprintln(a.Stdout, "Запускаю Docker Desktop…")
+	if err := a.StartDocker(ctx); err != nil {
+		return caps, err
+	}
+	ready, cancel := context.WithTimeout(ctx, 120*time.Second)
+	defer cancel()
+	for !caps.Runtime.Healthy {
+		select {
+		case <-ready.Done():
+			if ctx.Err() != nil {
+				return caps, ctx.Err()
+			}
+			return caps, errors.New("Docker ещё не готов; завершите его первоначальную настройку и повторите запуск")
+		case <-time.After(time.Second):
+		}
+		var err error
+		caps, err = a.Discover(ready)
+		if err != nil {
+			return caps, err
+		}
+	}
+	return caps, nil
+}
+
 func connectionLine(ctx context.Context, reader *bufio.Reader) (string, error) {
 	type answer struct {
 		value string
@@ -180,24 +208,9 @@ func (a *App) connect(ctx context.Context, cfg config, args []string) error {
 	if err != nil {
 		return err
 	}
-	if !caps.Runtime.Healthy {
-		fmt.Fprintln(a.Stdout, "Запускаю Docker Desktop…")
-		if err = a.StartDocker(ctx); err != nil {
-			return err
-		}
-		ready, cancel := context.WithTimeout(ctx, 120*time.Second)
-		defer cancel()
-		for !caps.Runtime.Healthy {
-			select {
-			case <-ready.Done():
-				return errors.New("Docker ещё не готов; завершите его первоначальную настройку и повторите запуск")
-			case <-time.After(time.Second):
-			}
-			caps, err = a.Discover(ready)
-			if err != nil {
-				return err
-			}
-		}
+	caps, err = a.readyConnectionRuntime(ctx, caps)
+	if err != nil {
+		return err
 	}
 	model := caps.CPUModel
 	if model == "" {

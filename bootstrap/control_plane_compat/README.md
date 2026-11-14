@@ -1,5 +1,9 @@
 # Bounded Apple Silicon worker diagnostic
 
+The optional CUDA extension and its physical RTX 5050 result are documented in
+[GPU-README.md](GPU-README.md) and [GPU_RESULT.md](GPU_RESULT.md). Its combined
+policy retains the Mac diagnostic described here.
+
 This optional overlay proves a real distributed task on the already-installed
 `campus/0.1.0` worker. It is a diagnostic migration bridge against pristine
 control-plane commit `96bfe6d`, not a general production API agreement.

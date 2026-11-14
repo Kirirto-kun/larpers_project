@@ -45,7 +45,7 @@ def prepare(campus):
     scheduler = replace_once(scheduler, "def claim_work(db, app, actor, session_id):", "def claim_work(db, app, actor, session_id, *, worker_policy=None):")
     scheduler = replace_once(scheduler,
         "variant = next((v for v in variants if compatible(node, v, remaining)), None)",
-        "variant = next((v for v in variants if compatible(node, v, remaining) and worker_compat.supports(stage, v, worker_policy)), None)")
+        "variant = next((v for v in variants if compatible(node, v, remaining) and worker_compat.supports(stage, v, worker_policy, node=node)), None)")
     scheduler = replace_once(scheduler,
         "return lease(db, app, node, session, current, job, task, owner, stage, variant)",
         "return lease(db, app, node, session, current, job, task, owner, stage, variant, worker_policy=worker_policy)")

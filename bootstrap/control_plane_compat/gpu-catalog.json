@@ -1,0 +1,44 @@
+{
+  "environments": [
+    {
+      "id": "diagnostic-cuda-amd64",
+      "name": "Bounded RTX 5050 CUDA diagnostic",
+      "variant_id": "cuda-amd64",
+      "image_digest": "campus/python-ml-cuda-v1-amd64@sha256:d416742141559c0428ce0e41b5c94044dfd523522c61b0da09189e8f8dc48bb6",
+      "platform": "linux/amd64",
+      "accelerator": "cuda",
+      "resource_requirements": {
+        "cpu_millis": 1000,
+        "memory_bytes": 1073741824,
+        "disk_bytes": 35651584,
+        "gpu_slots": 1,
+        "vram_bytes": 1073741824
+      }
+    }
+  ],
+  "adapters": [
+    {
+      "ref": {
+        "id": "campus.diagnostic.cuda",
+        "version": "1"
+      },
+      "image_ids": [
+        "diagnostic-cuda-amd64"
+      ],
+      "policies": [
+        "structural"
+      ],
+      "checkpoints": false,
+      "parallel": false,
+      "recipe": {
+        "id": "diagnostic-cuda-matmul",
+        "name": "RTX 5050 CUDA matrix diagnostic",
+        "description": "Small bounded exact CUDA matrix computation; independent full CPU integer verification by the caller.",
+        "adapter": {
+          "id": "campus.diagnostic.cuda",
+          "version": "1"
+        }
+      }
+    }
+  ]
+}

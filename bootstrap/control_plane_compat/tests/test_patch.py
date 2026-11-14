@@ -12,7 +12,7 @@ class PatchTest(unittest.TestCase):
   changes=m.prepare(SOURCE)
   self.assertEqual(set(changes),{'main.py','jobs/scheduler.py','worker_compat.py'})
   for path,code in changes.items(): compile(code,path,'exec')
-  self.assertIn('worker_compat.supports(stage, v, worker_policy)',changes['jobs/scheduler.py'])
+  self.assertIn('worker_compat.supports(stage, v, worker_policy, node=node)',changes['jobs/scheduler.py'])
   self.assertIn('remaining_ms=int((deadline - current)',changes['jobs/scheduler.py'])
   self.assertIn('if worker_policy else value',changes['jobs/scheduler.py'])
   self.assertIn('dto.ResultManifest.model_validate',changes['main.py'])

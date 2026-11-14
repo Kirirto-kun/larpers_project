@@ -41,10 +41,14 @@ def run(temp):
     from campus.auth import issue_credential
     from campus.config import Settings
     from campus.main import create_app, plan_once, verify_once
-    from run_mac import plan
+    gpu = os.environ.get("DIAGNOSTIC_KIND") == "gpu"
+    if gpu:
+        from run_gpu import plan
+    else:
+        from run_mac import plan
 
-    catalog=json.loads((ROOT/"mac-catalog.json").read_text())
-    ordinary=copy.deepcopy(catalog["adapters"][0])
+    catalog=json.loads((ROOT/("combined-catalog.json" if gpu else "mac-catalog.json")).read_text())
+    ordinary=copy.deepcopy(catalog["adapters"][-1 if gpu else 0])
     ordinary["ref"]["id"]="ordinary"
     ordinary.pop("recipe")
     catalog["adapters"].append(ordinary)
@@ -75,16 +79,18 @@ def run(temp):
 
         invite=call("POST","/invitations",{"kind":"device","name":"Isolated arm64"},status=201)
         credential=call("POST","/invitations/redeem",{"token":invite["token"],"installation_id":str(uuid4()),"protocol_version":1},headers={},status=201)
-        policy=json.loads((ROOT/"mac-policy.json").read_text())
+        policy=json.loads((ROOT/("gpu-policy.json" if gpu else "mac-policy.json")).read_text())
         policy["node_ids"]=[credential["node_id"]]
         policy_path=temp/"policy.json"
-        policy_path.write_text(json.dumps(policy))
+        configured=({"schema_version":2,"policies":[json.loads((ROOT/"mac-policy.json").read_text()),policy]}
+                    if gpu else policy)
+        policy_path.write_text(json.dumps(configured))
         os.environ[worker_compat.ENV]=str(policy_path)
         worker_compat.load_policy.cache_clear()
-        env=catalog["environments"][0]
-        caps={"os":"darwin","arch":"arm64","cpu_logical":8,"memory_available_bytes":1<<30,
+        env=catalog["environments"][-1 if gpu else 0]
+        caps={"os":"windows" if gpu else "darwin","arch":"amd64" if gpu else "arm64","cpu_logical":8,"memory_available_bytes":2<<30,
               "disk_available_bytes":1<<30,"runtime":{"type":"docker","version":"integration","healthy":True},
-              "gpus":[],"power_state":"ac","offered_budget":env["resource_requirements"],
+              "gpus":[{"id":"0","vendor":"nvidia","vram_bytes":8<<30,"driver":"integration","cuda_verified":True}] if gpu else [],"power_state":"ac","offered_budget":env["resource_requirements"],
               "preflight_revision":1,"image_digests":[env["image_digest"]],"allow_on_battery":False}
         auth={"Authorization":"Bearer "+credential["token"]}
         session=call("POST","/node-sessions",{"protocol_version":1,"capabilities":caps},auth,status=201)
@@ -99,6 +105,12 @@ def run(temp):
                         {**owner,"Idempotency-Key":str(uuid4())},status=201)
 
         diagnostic=job(plan())
+        if gpu:
+            bad_caps=copy.deepcopy(caps); bad_caps["gpus"][0]["id"]="1"
+            bad_session=call("POST","/node-sessions",{"protocol_version":1,"capabilities":bad_caps},auth,status=201)
+            call("POST","/work/next",{"wait_ms":0},{**auth,"X-Node-Session":bad_session["id"],"User-Agent":"campus/0.1.0"},status=204)
+            session=call("POST","/node-sessions",{"protocol_version":1,"capabilities":caps},auth,status=201)
+            device={**auth,"X-Node-Session":session["id"],"User-Agent":"campus/0.1.0"}
         # Same physical capability, different UA: diagnostic is never assigned.
         call("POST","/work/next",{"wait_ms":0},{**device,"User-Agent":"other"},status=204)
         # Another genuinely enrolled, ready node with the same image also cannot claim it.

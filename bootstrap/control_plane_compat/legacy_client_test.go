@@ -33,7 +33,14 @@ func TestDiagnosticRichServerFixtureAcceptedByExistingClient(t *testing.T) {
 	if err := a.Validate(); err != nil {
 		t.Fatal(err)
 	}
-	if a.ResourceLimits.MemoryBytes != 268435456 || a.ResourceLimits.CPUMillis != 1000 || len(a.Outputs) != 1 || a.Outputs[0] != "model.json" {
+	wantMemory := int64(268435456)
+	if a.Adapter.ID == "campus.diagnostic.cuda" {
+		wantMemory = 1073741824
+		if a.Platform != "linux/amd64" || a.ResourceLimits.VRAMBytes != 1073741824 || len(a.ResourceLimits.GPUIDs) != 1 || a.ResourceLimits.GPUIDs[0] != "0" {
+			t.Fatal("wrong bounded CUDA assignment")
+		}
+	}
+	if a.ResourceLimits.MemoryBytes != wantMemory || a.ResourceLimits.CPUMillis != 1000 || len(a.Outputs) != 1 || a.Outputs[0] != "model.json" {
 		t.Fatal("wrong bounded rich assignment")
 	}
 }

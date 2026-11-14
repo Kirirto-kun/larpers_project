@@ -1,0 +1,55 @@
+{
+  "schema_version": 2,
+  "policies": [
+    {
+      "schema_version": 1,
+      "node_ids": [
+        "50b752cf-f13f-4f76-ae0c-0b23f7666d35"
+      ],
+      "image_digest": "campus/python-ml-cpu-v1-arm64@sha256:3d7435b47960fcc183cd61a2350b5b3ca2e58fd5abfcf832b4563dad4eda55fb",
+      "adapter": {
+        "id": "campus.diagnostic",
+        "version": "1"
+      },
+      "max_task_ms": 60000,
+      "sandbox": {
+        "cpu_millis": 1000,
+        "memory_bytes": 268435456,
+        "pids": 64,
+        "workspace_bytes": 16777216,
+        "output_bytes": 1048576,
+        "checkpoint_bytes": 1048576,
+        "tmp_bytes": 16777216,
+        "gpu_ids": [],
+        "vram_bytes": 0
+      }
+    },
+    {
+      "schema_version": 2,
+      "node_ids": [
+        "ec6c1cbe-125d-43e4-bda6-a82b0fcdc34a"
+      ],
+      "image_digest": "campus/python-ml-cuda-v1-amd64@sha256:d416742141559c0428ce0e41b5c94044dfd523522c61b0da09189e8f8dc48bb6",
+      "adapter": {
+        "id": "campus.diagnostic.cuda",
+        "version": "1"
+      },
+      "max_task_ms": 60000,
+      "sandbox": {
+        "cpu_millis": 1000,
+        "memory_bytes": 1073741824,
+        "pids": 128,
+        "workspace_bytes": 16777216,
+        "output_bytes": 1048576,
+        "checkpoint_bytes": 1048576,
+        "tmp_bytes": 16777216,
+        "gpu_ids": [
+          "0"
+        ],
+        "vram_bytes": 1073741824
+      },
+      "platform": "linux/amd64",
+      "accelerator": "cuda"
+    }
+  ]
+}

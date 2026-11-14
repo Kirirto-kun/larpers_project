@@ -45,10 +45,11 @@ def plan():
 
 
 class API:
-    def __init__(self, runtime, endpoint):
+    def __init__(self, runtime, endpoint, *, raw_max=65536):
         owner = json.loads((runtime/"owner-cli.json").read_text(encoding="utf-8-sig"))
         self.token = owner["token"]
         self.endpoint = endpoint.rstrip("/")+"/api/v1"
+        self.raw_max = raw_max
         self.opener = urllib.request.build_opener(urllib.request.ProxyHandler({}),urllib.request.HTTPSHandler(
             context=ssl.create_default_context(cafile=str(runtime/"campus-local-ca.pem"))))
 
@@ -62,7 +63,7 @@ class API:
         request=urllib.request.Request(self.endpoint+route,data=data,method=method,headers=headers)
         try:
             with self.opener.open(request,timeout=15) as response:
-                payload=response.read(65537 if raw else 4*1024*1024)
+                payload=response.read(self.raw_max+1 if raw else 4*1024*1024)
                 return (payload,dict(response.headers)) if raw else json.loads(payload)
         except urllib.error.HTTPError as error:
             problem=json.loads(error.read(8192))

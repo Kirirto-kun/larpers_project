@@ -1,0 +1,49 @@
+{
+  "$defs": {
+    "Event": {
+      "additionalProperties": false,
+      "properties": {
+        "entity_id": {
+          "format": "uuid",
+          "title": "Entity Id",
+          "type": "string"
+        },
+        "entity_type": {
+          "title": "Entity Type",
+          "type": "string"
+        },
+        "event_id": {
+          "exclusiveMinimum": 0.0,
+          "title": "Event Id",
+          "type": "integer"
+        },
+        "occurred_at": {
+          "format": "date-time",
+          "title": "Occurred At",
+          "type": "string"
+        },
+        "payload": {
+          "additionalProperties": true,
+          "title": "Payload",
+          "type": "object"
+        },
+        "type": {
+          "title": "Type",
+          "type": "string"
+        }
+      },
+      "required": [
+        "event_id",
+        "occurred_at",
+        "entity_type",
+        "entity_id",
+        "type",
+        "payload"
+      ],
+      "title": "Event",
+      "type": "object"
+    }
+  },
+  "$ref": "#/$defs/Event",
+  "$schema": "https://json-schema.org/draft/2020-12/schema"
+}

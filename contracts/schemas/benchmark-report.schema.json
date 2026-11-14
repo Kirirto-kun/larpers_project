@@ -1,0 +1,416 @@
+{
+  "$defs": {
+    "AdapterRef": {
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "pattern": "^[a-zA-Z0-9][a-zA-Z0-9._-]{0,63}$",
+          "title": "Id",
+          "type": "string"
+        },
+        "version": {
+          "pattern": "^[a-zA-Z0-9][a-zA-Z0-9._-]{0,63}$",
+          "title": "Version",
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "version"
+      ],
+      "title": "AdapterRef",
+      "type": "object"
+    },
+    "BenchmarkCreate": {
+      "additionalProperties": false,
+      "properties": {
+        "batch_policy": {
+          "additionalProperties": {
+            "exclusiveMinimum": 0.0,
+            "type": "integer"
+          },
+          "maxProperties": 16,
+          "title": "Batch Policy",
+          "type": "object"
+        },
+        "concurrency": {
+          "maximum": 512.0,
+          "minimum": 1.0,
+          "title": "Concurrency",
+          "type": "integer"
+        },
+        "node_ids": {
+          "items": {
+            "format": "uuid",
+            "type": "string"
+          },
+          "maxItems": 32,
+          "minItems": 2,
+          "title": "Node Ids",
+          "type": "array"
+        },
+        "plan_revision": {
+          "exclusiveMinimum": 0.0,
+          "title": "Plan Revision",
+          "type": "integer"
+        },
+        "preview_id": {
+          "format": "uuid",
+          "title": "Preview Id",
+          "type": "string"
+        },
+        "repetitions": {
+          "default": 3,
+          "maximum": 20.0,
+          "minimum": 3.0,
+          "title": "Repetitions",
+          "type": "integer"
+        },
+        "warm": {
+          "default": true,
+          "title": "Warm",
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "preview_id",
+        "plan_revision",
+        "node_ids",
+        "concurrency"
+      ],
+      "title": "BenchmarkCreate",
+      "type": "object"
+    },
+    "BenchmarkReport": {
+      "additionalProperties": false,
+      "properties": {
+        "config": {
+          "$ref": "#/$defs/BenchmarkCreate"
+        },
+        "config_digest": {
+          "pattern": "^[a-f0-9]{64}$",
+          "title": "Config Digest",
+          "type": "string"
+        },
+        "efficiency_percent": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Efficiency Percent"
+        },
+        "id": {
+          "format": "uuid",
+          "title": "Id",
+          "type": "string"
+        },
+        "manifest_digest": {
+          "pattern": "^[a-f0-9]{64}$",
+          "title": "Manifest Digest",
+          "type": "string"
+        },
+        "pooled_units_per_second": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Pooled Units Per Second"
+        },
+        "service_job_ids": {
+          "items": {
+            "format": "uuid",
+            "type": "string"
+          },
+          "title": "Service Job Ids",
+          "type": "array"
+        },
+        "service_runs": {
+          "items": {
+            "additionalProperties": true,
+            "type": "object"
+          },
+          "title": "Service Runs",
+          "type": "array"
+        },
+        "speedup": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Speedup"
+        },
+        "standalone_results": {
+          "items": {
+            "$ref": "#/$defs/StandaloneRecord"
+          },
+          "title": "Standalone Results",
+          "type": "array"
+        },
+        "standalone_units_per_second": {
+          "additionalProperties": {
+            "type": "number"
+          },
+          "title": "Standalone Units Per Second",
+          "type": "object"
+        },
+        "status": {
+          "enum": [
+            "collecting",
+            "running",
+            "complete",
+            "failed"
+          ],
+          "title": "Status",
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "config",
+        "config_digest",
+        "manifest_digest",
+        "status",
+        "standalone_results",
+        "service_job_ids",
+        "standalone_units_per_second",
+        "service_runs"
+      ],
+      "title": "BenchmarkReport",
+      "type": "object"
+    },
+    "Resources": {
+      "additionalProperties": false,
+      "properties": {
+        "cpu_millis": {
+          "exclusiveMinimum": 0.0,
+          "title": "Cpu Millis",
+          "type": "integer"
+        },
+        "disk_bytes": {
+          "exclusiveMinimum": 0.0,
+          "title": "Disk Bytes",
+          "type": "integer"
+        },
+        "gpu_slots": {
+          "default": 0,
+          "maximum": 64.0,
+          "minimum": 0.0,
+          "title": "Gpu Slots",
+          "type": "integer"
+        },
+        "memory_bytes": {
+          "exclusiveMinimum": 0.0,
+          "title": "Memory Bytes",
+          "type": "integer"
+        },
+        "vram_bytes": {
+          "default": 0,
+          "minimum": 0.0,
+          "title": "Vram Bytes",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "cpu_millis",
+        "memory_bytes",
+        "disk_bytes"
+      ],
+      "title": "Resources",
+      "type": "object"
+    },
+    "StandaloneRecord": {
+      "additionalProperties": false,
+      "properties": {
+        "adapter": {
+          "$ref": "#/$defs/AdapterRef"
+        },
+        "config_digest": {
+          "pattern": "^[a-f0-9]{64}$",
+          "title": "Config Digest",
+          "type": "string"
+        },
+        "duration_ms": {
+          "exclusiveMinimum": 0.0,
+          "title": "Duration Ms",
+          "type": "integer"
+        },
+        "ended_at": {
+          "format": "date-time",
+          "title": "Ended At",
+          "type": "string"
+        },
+        "image_digest": {
+          "maxLength": 256,
+          "pattern": "^[a-z0-9][a-z0-9./:_-]*@sha256:[a-f0-9]{64}$",
+          "title": "Image Digest",
+          "type": "string"
+        },
+        "manifest_digest": {
+          "pattern": "^[a-f0-9]{64}$",
+          "title": "Manifest Digest",
+          "type": "string"
+        },
+        "model_digest": {
+          "anyOf": [
+            {
+              "pattern": "^[a-f0-9]{64}$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Model Digest"
+        },
+        "node_id": {
+          "format": "uuid",
+          "title": "Node Id",
+          "type": "string"
+        },
+        "quality_passed": {
+          "title": "Quality Passed",
+          "type": "boolean"
+        },
+        "repetition": {
+          "minimum": 0.0,
+          "title": "Repetition",
+          "type": "integer"
+        },
+        "resource_limits": {
+          "$ref": "#/$defs/Resources"
+        },
+        "schema_version": {
+          "const": "1",
+          "default": "1",
+          "title": "Schema Version",
+          "type": "string"
+        },
+        "started_at": {
+          "format": "date-time",
+          "title": "Started At",
+          "type": "string"
+        },
+        "units": {
+          "exclusiveMinimum": 0.0,
+          "title": "Units",
+          "type": "integer"
+        },
+        "utilization": {
+          "items": {
+            "$ref": "#/$defs/Telemetry"
+          },
+          "maxItems": 10000,
+          "title": "Utilization",
+          "type": "array"
+        },
+        "verification_ms": {
+          "default": 0,
+          "minimum": 0.0,
+          "title": "Verification Ms",
+          "type": "integer"
+        },
+        "warm": {
+          "title": "Warm",
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "node_id",
+        "manifest_digest",
+        "config_digest",
+        "image_digest",
+        "adapter",
+        "resource_limits",
+        "repetition",
+        "units",
+        "quality_passed",
+        "duration_ms",
+        "started_at",
+        "ended_at",
+        "warm"
+      ],
+      "title": "StandaloneRecord",
+      "type": "object"
+    },
+    "Telemetry": {
+      "additionalProperties": false,
+      "properties": {
+        "cpu_percent": {
+          "anyOf": [
+            {
+              "maximum": 100.0,
+              "minimum": 0.0,
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Cpu Percent"
+        },
+        "gpu_percent": {
+          "anyOf": [
+            {
+              "maximum": 100.0,
+              "minimum": 0.0,
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Gpu Percent"
+        },
+        "memory_bytes": {
+          "anyOf": [
+            {
+              "minimum": 0.0,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Memory Bytes"
+        },
+        "phase": {
+          "enum": [
+            "idle",
+            "transfer",
+            "start",
+            "compute",
+            "verify",
+            "aggregate"
+          ],
+          "title": "Phase",
+          "type": "string"
+        },
+        "sequence": {
+          "minimum": 0.0,
+          "title": "Sequence",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "sequence",
+        "phase"
+      ],
+      "title": "Telemetry",
+      "type": "object"
+    }
+  },
+  "$ref": "#/$defs/BenchmarkReport",
+  "$schema": "https://json-schema.org/draft/2020-12/schema"
+}

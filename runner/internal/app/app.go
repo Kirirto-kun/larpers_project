@@ -24,6 +24,7 @@ import (
 const usage = `Usage: campus [--state-dir DIR] [--endpoint URL] [--ca-file FILE] COMMAND
 
 Commands:
+  connect --bundle DIR --manifest-sha256 HEX  Prepare and connect this device
   doctor [--profiles FILE] [--gpu]        Inspect host and probe prepared runtimes
   join INVITE [--no-serve] [--gpu]        Redeem a device invitation and participate
   serve [--profiles FILE] [--gpu]         Offer this device until stopped
@@ -47,6 +48,7 @@ HTTP is supported only for loopback development coordinators.
 // default command uses the real host discovery, Docker probes and worker loop.
 type App struct {
 	Stdout, Stderr io.Writer
+	Stdin          io.Reader
 	Getenv         func(string) string
 	Cwd            func() (string, error)
 	Discover       func(context.Context) (client.Capabilities, error)
@@ -54,6 +56,10 @@ type App struct {
 	VerifyImage    func(context.Context, string, string) error
 	ResolveImage   func(context.Context, string) (string, error)
 	Serve          func(context.Context, *worker.Runner, client.Capabilities, bool) error
+	LocalDocker    func(context.Context) (string, error)
+	PinDocker      func(string) (func(), error)
+	LoadImage      func(context.Context, string) error
+	StartDocker    func(context.Context) error
 }
 
 type config struct{ StateDir, Endpoint, CAFile string }
@@ -65,6 +71,9 @@ type statusError struct {
 func (e *statusError) Error() string  { return e.err.Error() }
 func usageError(message string) error { return &statusError{2, errors.New(message)} }
 func (a *App) defaults() {
+	if a.Stdin == nil {
+		a.Stdin = os.Stdin
+	}
 	if a.Stdout == nil {
 		a.Stdout = os.Stdout
 	}
@@ -82,7 +91,7 @@ func (a *App) defaults() {
 	}
 	if a.Probe == nil {
 		a.Probe = func(ctx context.Context, image, platform string, gpu bool) error {
-			return discovery.Probe(ctx, image, platform, gpu, discovery.Exec)
+			return discovery.Probe(ctx, image, platform, gpu, discovery.ProbeExec)
 		}
 	}
 	if a.VerifyImage == nil {
@@ -99,6 +108,20 @@ func (a *App) defaults() {
 		a.Serve = func(ctx context.Context, r *worker.Runner, c client.Capabilities, gpu bool) error {
 			return r.Serve(ctx, c, gpu)
 		}
+	}
+	if a.LocalDocker == nil {
+		a.LocalDocker = func(ctx context.Context) (string, error) {
+			return discovery.RequireLocalDocker(ctx, discovery.Exec, a.Getenv)
+		}
+	}
+	if a.PinDocker == nil {
+		a.PinDocker = pinDockerEndpoint
+	}
+	if a.LoadImage == nil {
+		a.LoadImage = loadConnectionImage
+	}
+	if a.StartDocker == nil {
+		a.StartDocker = startConnectionDocker
 	}
 }
 
@@ -117,6 +140,8 @@ func (a *App) Run(ctx context.Context, args []string) int {
 		}
 		command, args := rest[0], rest[1:]
 		switch command {
+		case "connect":
+			err = a.connect(ctx, cfg, args)
 		case "help", "--help", "-h":
 			fmt.Fprint(a.Stdout, usage)
 			return 0

@@ -1,6 +1,7 @@
 # Campus CLI
 
-Build with Go 1.25.6 or newer:
+For developer builds, use Go 1.25.6 or newer. Prepared-package recipients need
+neither Go nor host Python:
 
 ```powershell
 go -C runner build -o ../campus.exe ./cmd/campus
@@ -12,6 +13,58 @@ runtime and locally cached, approved Campus images containing the protected
 guard, registered adapters and offline dependencies. Windows additionally needs
 a working Docker Desktop/WSL2 installation. The CLI does not install drivers,
 enable privileged services, download models, or run network package installation.
+
+## Prepared device connection
+
+Use the complete operator-prepared [native connection package](../bootstrap/connect/README.md).
+On Apple Silicon, open `Connect.command`; on Windows 11 AMD64, open `Connect.cmd`.
+The recipient needs Docker Desktop, but no host Python or Go. Keep the package
+files together. A package containing an invitation is private to that device.
+
+The native launchers verify the pinned runner and manifest before starting the
+common connection command. Direct CLI equivalents are:
+
+```text
+campus connect --bundle KIT_DIR --manifest-sha256 TRUSTED_MANIFEST_SHA256
+campus connect --bundle KIT_DIR --manifest-sha256 TRUSTED_MANIFEST_SHA256 --check-only
+campus connect --bundle KIT_DIR --manifest-sha256 TRUSTED_MANIFEST_SHA256 --gpu=false
+campus connect --bundle KIT_DIR --manifest-sha256 TRUSTED_MANIFEST_SHA256 --gpu
+campus connect --drain
+campus connect --stop
+```
+
+`connect` validates the native target, pinned metadata and selected image archives,
+requires a local Docker socket, and pins that endpoint for this process. It
+reports CPU model/thread count, RAM and available NVIDIA compute devices. On
+Windows, separate OS display inventory can identify NVIDIA hardware even when
+the compute driver is unavailable; that does not establish usable CUDA. If an
+installed Docker Desktop is stopped, the command tries its normal start command
+and waits for readiness. Missing Docker/WSL/driver setup remains an explicit
+owner action. No service, autostart, global trust or execution-policy change is
+made.
+
+CPU is the default. When a compute GPU is detected, normal interactive connection
+asks for explicit GPU permission with a default of No. `--gpu=false` selects CPU
+without that prompt; `--gpu` explicitly requests CUDA. Only selected, missing
+approved images are loaded from the package. Real CPU arithmetic and, when
+selected, CUDA computation must pass before enrollment. Probes have an independent
+45-second container deadline and a 60-second host-process bound. GPU failure does
+not silently become CPU participation. The resulting CPU/RAM budget is printed.
+
+`--check-only` can start Docker and load prepared local images, but never redeems
+an invitation, joins or serves. It checks local readiness; it does not establish
+LAN reachability or a coordinator session. Normal connection preflights first,
+then uses the private packaged invitation or asks for one. An existing saved
+identity reconnects through `serve` without redeeming that invitation again.
+Leave the foreground window open; Ctrl+C stops participation. Drain/Stop use the
+same local state directory and require no server connection or bundle arguments.
+
+An isolated LAN coordinator from upstream `96bfe6d` is now running at
+[https://10.4.146.76:8443](https://10.4.146.76:8443), with strict TLS and its private
+client CA. The package uses that CA only for this client. A real local Go join
+and ready heartbeat have passed. Native Apple Silicon and Windows 11 AMD/RTX 5050
+package runs, peer LAN access and actual RTX 5050 CUDA remain target-device tests.
+The assignment deadline/quota safety gate below still blocks unbounded workloads.
 
 ## Device participation
 
@@ -224,12 +277,13 @@ Upload responses use `id`, `state`, `part_count` and part descriptors. Finalized
 and job artifacts use `{id, name, sha256, size_bytes, media_type}`; checksum and
 size verification still precede publishing any downloaded directory.
 
-The published foundation currently supplies DTOs, fixtures and a fixture server,
-with no production coordinator entry point. The published assignment also lacks
-the worker's relative task hard-deadline and detailed sandbox quota contract.
-Worker execution fails closed at that boundary. Passing HTTP integration tests
-establishes request/response compatibility, not live enrollment, distributed
-execution, server-side idempotency or a completed two-device benchmark.
+The original `5a5bd29` foundation supplied DTOs, fixtures and a fixture server.
+The later `96bfe6d` coordinator is deployed separately on the LAN; real local
+enrollment and ready heartbeat have now passed against it. The assignment still
+lacks the worker's relative `task_remaining_ms` hard bound and agreed detailed
+sandbox quotas. Worker execution fails closed at that boundary. Those enrollment
+checks and passing HTTP tests do not establish distributed workload execution,
+server-side exactly-once behavior or a completed two-device benchmark.
 
 ## Local baseline
 

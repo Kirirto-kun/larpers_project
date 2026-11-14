@@ -5,9 +5,12 @@ Foundation became available after the first local validation pass:
 Its committed `contracts/openapi-v1.yaml` is JSON and has SHA-256
 `f6811226468f3dcba58e734654044b4710687b0e942f849430ee8b2411b1ace8`.
 The unmodified upstream schema/fixture checker passes. This commit contains
-DTOs, a generator and a deterministic mock API, but no `server/campus/main.py`
-or production coordinator. Do not confuse a successful fixture exchange with
-enrolment, scheduling, transactional acceptance or credits.
+DTOs, a generator and a deterministic mock API; that original commit did not
+contain a production coordinator. Later upstream `96bfe6d` is now deployed
+separately on the LAN at [https://10.4.146.76:8443](https://10.4.146.76:8443), with
+strict TLS and a private client CA. A real local Go join and ready heartbeat
+passed. This updates service availability without claiming scheduling,
+transactional workload acceptance, remote-device reachability or credits.
 
 Go DTOs are generated into `internal/generated/api.go`; their provenance and
 regeneration command are in `internal/generated/PROVENANCE.md`. The Python SDK
@@ -43,8 +46,8 @@ The command CLI retains `campus run --gpu -- python train.py`. It submits the
 literal command intent through the published planner API, then verifies the
 ready single-stage plan's argv, adapter, working directory, bindings, network,
 accelerator and declared outputs before creating a job. It never silently
-accepts a substituted shell command. Actual planner/LLM execution remains
-unavailable until the coordinator exists.
+accepts a substituted shell command. Actual planner/LLM end-to-end execution has
+not been verified against the live deployment.
 
 ## Worker safety contract still required
 
@@ -104,7 +107,8 @@ object result/string error. The current trusted adapter executable also binds
 schema version and a static registered adapter ID/version, with richer error
 details. The coordinator invocation must explicitly bind that trusted identity
 and adapt the envelope; never infer a Python module/validator from user input.
-The upstream commit does not yet contain that invoker.
+The original foundation commit did not contain that invoker; its live
+end-to-end behavior has not been established by the enrollment checks.
 
 ## Other project parts
 
@@ -116,5 +120,7 @@ foundation DTOs and be tested against the real API by their integration owner.
 This runner branch does not overwrite their source, generated clients or locks.
 
 See `VALIDATION.md` for actual local commands/results. Full acceptance still
-needs the production server, native Mac run, two physical devices, CUDA hardware,
-trusted references and matched final-source standalone/pooled measurements.
+needs an agreed live-worker safety contract, native Mac/Windows 11 RTX 5050 runs,
+two physical devices, CUDA computation, trusted references and matched
+final-source standalone/pooled measurements. Server availability and the tested
+local enrollment path are recorded above.

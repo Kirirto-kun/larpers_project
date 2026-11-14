@@ -1,5 +1,24 @@
 # Verified user-space bootstrap
 
+For the current Mac/Windows handoff, use an operator-prepared
+[native connection package](connect/README.md). Open `Connect.command` on Apple
+Silicon or `Connect.cmd` on Windows 11 AMD64. It starts `campus connect`, checks
+the native runner/manifest, prepares selected approved local images and verifies
+CPU or explicitly permitted GPU computation before enrollment. Recipients need
+Docker Desktop but no Python or Go. See [CLI usage](../runner/CLI.md) for
+`--check-only`, explicit CPU/GPU selection, saved reconnect and local Stop/Drain.
+The [current local-server handoff](LIVE_SERVER.md) includes device steps,
+operator restart commands and the observed physical-test status.
+
+The LAN coordinator now runs upstream `96bfe6d` at
+[https://10.4.146.76:8443](https://10.4.146.76:8443), using strict TLS and a private
+client CA. Real local Go enrollment and ready heartbeat passed. The package CA
+is client-local; no global trust change is needed. Private invitation packages
+must not be published. Native Mac/RTX 5050 runs and peer LAN access still require
+those physical devices, and the assignment deadline/quota safety gate remains.
+
+## Alternative binary-download scripts
+
 `join.sh` and `join.ps1` download one platform-specific Campus runner, verify its
 SHA-256, keep it in a private user cache, and launch `campus join <invite>` with
 the owner's additional arguments. They do not install Python/Go, elevate
@@ -105,5 +124,8 @@ inputs/architectures, cached-file tampering, linked caches, and runner exit
 codes. Windows tests exercise a real native executable and both available
 PowerShell editions; shell tests use Git Bash on Windows.
 
-Live HTTPS release hosting, published per-platform digests, native Linux/macOS
-execution, and an actual coordinator join remain release/integration gates.
+Public HTTPS release hosting, published per-platform digests and native
+Linux/macOS execution remain release/integration gates for these download
+scripts. A local Go join against the running LAN coordinator has separately
+passed; that does not establish a published-download-to-join path or a
+distributed workload result.

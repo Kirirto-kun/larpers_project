@@ -1,13 +1,69 @@
 # Local validation and remaining acceptance gates
 
+## Current LAN coordinator and native connection path
+
+Update on 2026-11-14: upstream control-plane `96bfe6d` is deployed from an
+isolated local snapshot with Docker Compose project `campus-live`. Its LAN
+endpoint is [https://10.4.146.76:8443](https://10.4.146.76:8443), with strict TLS
+and a private client CA. Real Go device enrollment and ready heartbeat passed
+against this service. This supersedes earlier coordinator-absent statements;
+it establishes the tested local device/API path, not peer network reachability
+or distributed workload execution.
+
+The [native connection package](../bootstrap/connect/README.md) now starts
+`campus connect`, verifies its pinned files and local Docker endpoint, loads
+selected prepared images when missing, and preflights before redeeming an
+invitation. Saved identity reconnects without a second redemption. CPU is the
+default; GPU requires explicit permission and a successful real CUDA calculation.
+Separate cached Windows NVIDIA display names do not become usable compute GPUs.
+`--check-only` performs local setup/checks without enrollment. Stop/Drain remain
+local and foreground operation adds no autostart or global CA installation.
+
+Fresh connection-source verification: full Go tests, race tests and vet passed.
+The full locked CPU Python suite passed **374 tests, with 1 opt-in E5 skip,
+in 273.26 seconds**. The real new Windows `connect` binary detected the host AMD,
+passed the CPU container probe, restored the existing device identity and sent
+a fresh ready heartbeat at `2026-11-14T11:13:00.883801Z`; local `connect --stop`
+then ended the foreground process with exit 0. Regression tests and re-review
+cover positional opaque invitation handling and immutable private metadata
+snapshots during long probes/loads.
+
+The private Mac ZIP is 208331587 bytes, SHA-256
+`8789a2c7bb7b711aa9be9bda6ebc14f9d52fe9a3d5929d1f43a683ee26110c07`.
+Payload hashes, launcher pins, ZIP CRC and Unix executable modes passed.
+These are candidate binaries built with CGO0/trimpath from the tested working
+tree based on `a694371`; their Go VCS metadata honestly records modified sources.
+The first physical Mac launch subsequently showed `zsh: killed`, before Campus
+output. The original native ARM64 Mach-O has valid signature bounds and all 2417
+ad-hoc SHA-256 page hashes match; the Mac's transferred file hash, system
+signature verification and quarantine diagnostics are still needed. This
+attempt does not establish successful native Mac startup or enrollment.
+See [the current handoff](../bootstrap/LIVE_SERVER.md) for device steps.
+
+Discovery boundary verification for this connection work passed normal and race
+tests, discovery/client vet, and Darwin ARM64/Linux AMD64 test cross-compilation.
+The generated probe parent executed actual arithmetic and independently stopped
+a timed-out child. The exact cached Windows CIM query also ran successfully on
+this host, reporting AMD CPU/total RAM and no NVIDIA display device. These checks
+do not establish physical RTX 5050 CUDA or native Mac behavior.
+
+Still required: run the current package on the physical Apple Silicon Mac and
+Windows 11 AMD/NVIDIA RTX 5050 laptop, test access from those LAN peers, and verify
+their actual CPU/GPU probes and owner Stop. Production assignments still lack
+the agreed relative `task_remaining_ms` and detailed sandbox quota policy; the
+runner fails closed before executing such work. Two-device jobs, GPU checkpoint
+recovery and comparative benchmarks remain unproven. Older binary hashes and
+idle measurements below describe their recorded builds, not a new measurement
+of the connection changes.
+
 ## Update after foundation publication
 
 Upstream `codex/control-plane` subsequently appeared at `5a5bd29`, with shared
 contracts/DTOs and a mock API. The earlier statement that contracts were absent
-describes the initial pass below. There is still no production coordinator.
-See [the current integration record](PROTOCOL.md) for exact boundaries/gaps.
+describes the initial pass below. A later coordinator is now deployed as recorded
+above. See [the integration record](PROTOCOL.md) for exact boundaries/gaps.
 
-Current reconciled-source verification:
+Reconciled-source verification recorded before the connection work:
 
 - Full Go tests and race tests pass; `go vet ./...` exits 0. All Linux/amd64
   package test binaries also pass under WSL when launched from their respective
@@ -46,7 +102,7 @@ invocation envelopes, formal StandaloneRecord provenance/config matching and
 UI-generated DTO integration also remain unresolved with the other owners.
 Native Mac, actual GPU and physical multi-device acceptance are still deferred.
 
-The updated Mac kit is `bootstrap/test-kit/macos-arm64-foundation/`, built from
+The earlier offline Mac kit is `bootstrap/test-kit/macos-arm64-foundation/`, built from
 clean implementation commit `eac3ae0`. All five payload hashes, full gzip CRC/tar
 stream (22 entries) and `bash -n check.sh` pass. Payload208175556 bytes; image bytes
 are unchanged from the verified ARM runtime. SHA-256 of `SHA256SUMS`:
@@ -60,8 +116,8 @@ measurements below remain historical evidence, not the current handoff.
 Date: 2026-11-14. Branch: `codex/runner-cli`, based on `f1914dd`.
 Scope: implementation-plan part 4 only. The owner requested all available
 first-notebook checks now and deferred the physical Apple Silicon notebook test.
-The repository still has no production control plane, generated shared DTOs,
-portal or console implementation. Fixture APIs below do not establish those
+At that point there was no production control plane, generated shared DTOs,
+portal or console implementation in this checkout. Fixture APIs below do not establish those
 components' compatibility or transaction semantics.
 
 ## Reproducible local checks
@@ -209,14 +265,17 @@ resident during that snapshot; model steady-state RSS was not benchmarked.
 
 ## Deferred checks and handoff
 
-- Run the prepared [Mac readiness kit](../bootstrap/SECOND_LAPTOP.md) on native
-  Apple Silicon. It verifies the supplied image/binary and tiny CPU computation;
-  no host Python or Go is needed. Native guard/filesystem behavior still needs
-  that device. Generated kits and binary/model/image caches are Git-ignored.
-- Obtain the real control-plane foundation, agree [v1 payloads](PROTOCOL.md),
-  generate DTOs, and repeat CLI/SDK/worker flows against it. In particular agree
-  the required relative `task_remaining_ms` bound and authority/receipt semantics.
-  Portal/console and external planner/LLM integration are unavailable here.
+- Run the current [native connection package](../bootstrap/connect/README.md)
+  on Apple Silicon and Windows 11 AMD/RTX 5050. The earlier
+  [Mac readiness kit](../bootstrap/SECOND_LAPTOP.md) checks offline CPU readiness
+  only. Neither receiver needs host Python or Go. Native guard/filesystem,
+  GPU and LAN behavior still need those devices. Generated kits and caches are
+  Git-ignored.
+- Complete the live coordinator's [worker safety contract](PROTOCOL.md),
+  especially the relative `task_remaining_ms` bound, detailed quotas and
+  authority/receipt semantics, then repeat full CLI/SDK/worker flows. The server
+  and generated DTOs now exist; portal/console and external planner/LLM
+  end-to-end integration remain unverified here.
 - Enrol two physical devices and run one map job; test disconnect/sleep,
   reassignment/fencing/cancellation, result downloads and campus TLS/LAN access.
 - Use an actual supported NVIDIA GPU for CUDA probe/E5 tolerance, utilization,
@@ -224,7 +283,8 @@ resident during that snapshot; model steady-state RSS was not benchmarked.
   supplies no CUDA evidence.
 - Establish registered trusted references and comparable final-source standalone
   and pooled series before reporting speedup/efficiency or accepted credits.
-  No formal distributed benchmark or real-server compatibility is claimed.
+  No formal distributed benchmark or full live-worker compatibility is claimed;
+  the local live enrollment/ready-heartbeat result is recorded separately above.
 
 Local implementation and these checks do not satisfy the original full pool's
 two-device/CUDA acceptance conditions. The separate branch is preserved locally

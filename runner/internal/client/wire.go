@@ -81,6 +81,7 @@ type Runtime struct {
 }
 type GPU struct {
 	ID           string `json:"id"`
+	Name         string `json:"name,omitempty"`
 	Vendor       string `json:"vendor"`
 	VRAMBytes    int64  `json:"vram_bytes"`
 	Driver       string `json:"driver"`
@@ -90,6 +91,10 @@ type Capabilities struct {
 	OS                   string         `json:"os"`
 	Arch                 string         `json:"arch"`
 	CPULogical           int            `json:"cpu_logical"`
+	CPUModel             string         `json:"cpu_model,omitempty"`
+	CPUVendor            string         `json:"cpu_vendor,omitempty"`
+	MemoryTotalBytes     int64          `json:"memory_total_bytes,omitempty"`
+	NVIDIADeviceNames    []string       `json:"nvidia_device_names,omitempty"`
 	MemoryAvailableBytes int64          `json:"memory_available_bytes"`
 	DiskAvailableBytes   int64          `json:"disk_available_bytes"`
 	Runtime              Runtime        `json:"runtime"`

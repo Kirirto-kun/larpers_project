@@ -2,10 +2,13 @@
 
 This branch contains the Go CLI/worker, isolated workload runtimes, Python SDK,
 checkpoint helpers and verified bootstrap for the Campus Pool implementation plan.
-It does not contain the production control plane or the two web applications.
+The control plane runs separately: upstream `96bfe6d` is deployed on the LAN at
+[https://10.4.146.76:8443](https://10.4.146.76:8443), using strict TLS with a private
+client CA. Real local Go enrollment and ready heartbeat have passed. The two web
+applications are outside this runner branch.
 Published foundation DTOs are now generated into the Go client and optional
 Python SDK types. [Integration status](PROTOCOL.md) records the supported request
-boundaries and the worker safety contract that still prevents deployment.
+boundaries and the worker safety contract that still blocks workload execution.
 
 ## Build and test
 
@@ -48,6 +51,7 @@ builds and generated test outputs are not committed.
 
 ## Interfaces and operation
 
+- [Prepared Mac/Windows connection packages](../bootstrap/connect/README.md)
 - [CLI and standalone measurements](CLI.md)
 - [Python SDK and checkpoint helpers](../sdk/python/README.md)
 - [Adapters, E5 search, training and independent validators](../workloads/README.md)
@@ -75,9 +79,10 @@ it does not prove the owner measured honestly.
 Foundation is owned by the control-plane branch. Its published OpenAPI and
 fixtures are pinned in PROTOCOL.md; generation and client boundary checks have
 been performed. Rich local execution policy remains separate from those DTOs.
-The production server and relative hard-deadline/sandbox agreement remain
-required before both documented physical integration rounds. Never replace the
-other owners' lockfiles/configs.
+The live coordinator's relative hard-deadline/sandbox agreement remains required
+before executing production assignments. The server now supports the verified
+local enrollment/ready-heartbeat path; native Mac, Windows 11 RTX 5050 and peer
+LAN checks remain outstanding. Never replace the other owners' lockfiles/configs.
 
 CPU amd64/arm64 and CUDA amd64 images have been built locally. Real CPU guard,
 training/resume and pretrained E5 checks are recorded in VALIDATION.md. Release

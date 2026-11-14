@@ -1,0 +1,13 @@
+@echo off
+setlocal DisableDelayedExpansion
+set "CAMPUS_CONNECT_BUNDLE=%~dp0"
+powershell.exe -NoLogo -NoProfile -Command "$ErrorActionPreference='Stop'; try { $bundle=[IO.Path]::GetFullPath([Environment]::GetEnvironmentVariable('CAMPUS_CONNECT_BUNDLE','Process')); if($bundle.Length -gt [IO.Path]::GetPathRoot($bundle).Length) { $bundle=$bundle.TrimEnd([char]92,[char]47) }; $runner=Join-Path $bundle 'campus.exe'; $manifest=Join-Path $bundle 'connection.json'; foreach($path in @($runner,$manifest)) { $item=Get-Item -LiteralPath $path -Force; if($item.PSIsContainer -or ($item.Attributes -band [IO.FileAttributes]::ReparsePoint)) { throw 'Package payload must be a regular file' } }; if((Get-FileHash -LiteralPath $runner -Algorithm SHA256).Hash -ne '@RUNNER_SHA256@') { throw 'Runner checksum mismatch; obtain a fresh trusted package' }; if((Get-FileHash -LiteralPath $manifest -Algorithm SHA256).Hash -ne '@MANIFEST_SHA256@') { throw 'Manifest checksum mismatch; obtain a fresh trusted package' }; & $runner connect --bundle $bundle --manifest-sha256 '@MANIFEST_SHA256@'; exit $LASTEXITCODE } catch { Write-Error ('Campus: '+$_.Exception.Message) -ErrorAction Continue; exit 1 }"
+set "CAMPUS_CONNECT_EXIT=%errorlevel%"
+if "%CAMPUS_CONNECT_EXIT%"=="0" goto done
+if "%CAMPUS_CONNECT_EXIT%"=="130" goto done
+if "%CAMPUS_CONNECT_EXIT%"=="-1073741510" goto done
+if "%CAMPUS_CONNECT_EXIT%"=="3221225786" goto done
+echo(
+set /p "CAMPUS_CONNECT_DISMISS=Press Enter to close this window..."
+:done
+exit /b %CAMPUS_CONNECT_EXIT%

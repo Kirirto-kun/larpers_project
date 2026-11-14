@@ -36,6 +36,20 @@ func DefaultDir() (string, error) {
 	}
 	return filepath.Join(d, "campus"), nil
 }
+
+// PrivateTempDir creates an owner-protected staging directory without creating
+// an installation identity or changing an existing session.
+func PrivateTempDir(parent, prefix string) (string, error) {
+	dir, err := os.MkdirTemp(parent, prefix)
+	if err != nil {
+		return "", err
+	}
+	if err = protect(dir); err != nil {
+		os.Remove(dir)
+		return "", err
+	}
+	return dir, nil
+}
 func AtomicJSON(path string, value any) error {
 	b, e := json.Marshal(value)
 	if e != nil {

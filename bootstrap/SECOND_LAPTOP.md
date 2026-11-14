@@ -1,6 +1,18 @@
 # Second notebook: offline Apple Silicon readiness
 
-## Current prepared kit
+For the current LAN connection, use the new
+[native connection package](connect/README.md) and open `Connect.command`.
+`campus connect` prepares and checks the selected runtime before enrollment;
+`--check-only` stays local and consumes no invitation. The LAN coordinator now
+runs at [https://10.4.146.76:8443](https://10.4.146.76:8443) with strict TLS and a
+private client CA. Real local Go enrollment/ready heartbeat passed; native Mac
+execution and that Mac's LAN reachability are still tests to perform.
+
+The remainder records the earlier CPU-only offline readiness kit. Its hashes
+and checks remain useful evidence, but it does not replace the current
+connection package or establish a live device session.
+
+## Earlier offline prepared kit
 
 Use `bootstrap/test-kit/macos-arm64-foundation/` for the deferred Mac check.
 It contains the clean native binary built from implementation commit
@@ -124,9 +136,12 @@ passing generator tests on the maker does not claim it already happened.
 
 Both notebooks should use the same LAN for a later coordinated test. That
 step still needs the real control plane, endpoint/certificate/invite, and
-explicitly chosen network configuration. No control plane is currently bundled,
-and readiness results do not prove connectivity, distributed correctness,
-training resume, GPU support, or comparable benchmark performance.
+explicitly chosen network configuration. This older readiness kit does not
+bundle a control plane; the current LAN coordinator is available separately at
+the address above. Its local enrollment check and these readiness results do
+not prove peer connectivity, distributed correctness, training resume, GPU
+support or comparable benchmark performance. Production workloads also remain
+behind the relative deadline/sandbox quota contract gate.
 
 ## Local generator verification
 

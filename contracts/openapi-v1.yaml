@@ -108,6 +108,7 @@
             "type": "string"
           },
           "size_bytes": {
+            "maximum": 9.223372036854776e+18,
             "minimum": 0.0,
             "title": "Size Bytes",
             "type": "integer"
@@ -163,11 +164,13 @@
           },
           "generation": {
             "exclusiveMinimum": 0.0,
+            "maximum": 9.223372036854776e+18,
             "title": "Generation",
             "type": "integer"
           },
           "heartbeat_interval_ms": {
             "exclusiveMinimum": 0.0,
+            "maximum": 9.223372036854776e+18,
             "title": "Heartbeat Interval Ms",
             "type": "integer"
           },
@@ -204,6 +207,7 @@
             "type": "string"
           },
           "lease_remaining_ms": {
+            "maximum": 9.223372036854776e+18,
             "minimum": 0.0,
             "title": "Lease Remaining Ms",
             "type": "integer"
@@ -351,6 +355,7 @@
         "properties": {
           "generation": {
             "exclusiveMinimum": 0.0,
+            "maximum": 9.223372036854776e+18,
             "title": "Generation",
             "type": "integer"
           },
@@ -389,6 +394,7 @@
           },
           "generation": {
             "exclusiveMinimum": 0.0,
+            "maximum": 9.223372036854776e+18,
             "title": "Generation",
             "type": "integer"
           },
@@ -438,6 +444,7 @@
           },
           "generation": {
             "exclusiveMinimum": 0.0,
+            "maximum": 9.223372036854776e+18,
             "title": "Generation",
             "type": "integer"
           },
@@ -463,6 +470,7 @@
           "memory_bytes": {
             "anyOf": [
               {
+                "maximum": 9.223372036854776e+18,
                 "minimum": 0.0,
                 "type": "integer"
               },
@@ -485,6 +493,7 @@
             "type": "string"
           },
           "sequence": {
+            "maximum": 9.223372036854776e+18,
             "minimum": 0.0,
             "title": "Sequence",
             "type": "integer"
@@ -505,6 +514,7 @@
           "batch_policy": {
             "additionalProperties": {
               "exclusiveMinimum": 0.0,
+              "maximum": 9.223372036854776e+18,
               "type": "integer"
             },
             "maxProperties": 16,
@@ -512,6 +522,7 @@
             "type": "object"
           },
           "concurrency": {
+            "description": "Maximum simultaneous compute tasks per node, identical in standalone and service runs",
             "maximum": 512.0,
             "minimum": 1.0,
             "title": "Concurrency",
@@ -529,6 +540,7 @@
           },
           "plan_revision": {
             "exclusiveMinimum": 0.0,
+            "maximum": 9.223372036854776e+18,
             "title": "Plan Revision",
             "type": "integer"
           },
@@ -672,11 +684,13 @@
         "additionalProperties": false,
         "properties": {
           "cpu_millis": {
+            "maximum": 9.223372036854776e+18,
             "minimum": 0.0,
             "title": "Cpu Millis",
             "type": "integer"
           },
           "disk_bytes": {
+            "maximum": 9.223372036854776e+18,
             "minimum": 0.0,
             "title": "Disk Bytes",
             "type": "integer"
@@ -689,12 +703,14 @@
             "type": "integer"
           },
           "memory_bytes": {
+            "maximum": 9.223372036854776e+18,
             "minimum": 0.0,
             "title": "Memory Bytes",
             "type": "integer"
           },
           "vram_bytes": {
             "default": 0,
+            "maximum": 9.223372036854776e+18,
             "minimum": 0.0,
             "title": "Vram Bytes",
             "type": "integer"
@@ -724,6 +740,15 @@
             "title": "Arch",
             "type": "string"
           },
+          "cached_artifact_digests": {
+            "items": {
+              "pattern": "^[a-f0-9]{64}$",
+              "type": "string"
+            },
+            "maxItems": 1024,
+            "title": "Cached Artifact Digests",
+            "type": "array"
+          },
           "cpu_logical": {
             "exclusiveMinimum": 0.0,
             "maximum": 1024.0,
@@ -731,6 +756,7 @@
             "type": "integer"
           },
           "disk_available_bytes": {
+            "maximum": 9.223372036854776e+18,
             "minimum": 0.0,
             "title": "Disk Available Bytes",
             "type": "integer"
@@ -754,6 +780,7 @@
             "type": "array"
           },
           "memory_available_bytes": {
+            "maximum": 9.223372036854776e+18,
             "minimum": 0.0,
             "title": "Memory Available Bytes",
             "type": "integer"
@@ -781,11 +808,26 @@
           },
           "preflight_revision": {
             "exclusiveMinimum": 0.0,
+            "maximum": 9.223372036854776e+18,
             "title": "Preflight Revision",
             "type": "integer"
           },
           "runtime": {
             "$ref": "#/components/schemas/Runtime"
+          },
+          "transfer_bytes_per_second": {
+            "anyOf": [
+              {
+                "exclusiveMinimum": 0.0,
+                "maximum": 9.223372036854776e+18,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Worker-measured recent input download rate; scheduling hint only",
+            "title": "Transfer Bytes Per Second"
           }
         },
         "required": [
@@ -800,6 +842,66 @@
           "preflight_revision"
         ],
         "title": "Capabilities",
+        "type": "object"
+      },
+      "CheckpointFile": {
+        "additionalProperties": false,
+        "properties": {
+          "path": {
+            "maxLength": 512,
+            "minLength": 1,
+            "title": "Path",
+            "type": "string"
+          },
+          "sha256": {
+            "pattern": "^[a-f0-9]{64}$",
+            "title": "Sha256",
+            "type": "string"
+          },
+          "size_bytes": {
+            "maximum": 9223372036854775807,
+            "minimum": 0,
+            "title": "Size Bytes",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "path",
+          "size_bytes",
+          "sha256"
+        ],
+        "title": "CheckpointFile",
+        "type": "object"
+      },
+      "CheckpointManifest": {
+        "additionalProperties": false,
+        "properties": {
+          "compatibility_digest": {
+            "pattern": "^[a-f0-9]{64}$",
+            "title": "Compatibility Digest",
+            "type": "string"
+          },
+          "files": {
+            "items": {
+              "$ref": "#/components/schemas/CheckpointFile"
+            },
+            "maxItems": 256,
+            "minItems": 1,
+            "title": "Files",
+            "type": "array"
+          },
+          "schema_version": {
+            "const": "1",
+            "default": "1",
+            "title": "Schema Version",
+            "type": "string"
+          }
+        },
+        "required": [
+          "compatibility_digest",
+          "files"
+        ],
+        "title": "CheckpointManifest",
         "type": "object"
       },
       "CheckpointPublish": {
@@ -817,6 +919,7 @@
           },
           "generation": {
             "exclusiveMinimum": 0.0,
+            "maximum": 9.223372036854776e+18,
             "title": "Generation",
             "type": "integer"
           },
@@ -828,6 +931,7 @@
           },
           "sequence": {
             "exclusiveMinimum": 0.0,
+            "maximum": 9.223372036854776e+18,
             "title": "Sequence",
             "type": "integer"
           }
@@ -847,6 +951,7 @@
         "properties": {
           "generation": {
             "exclusiveMinimum": 0.0,
+            "maximum": 9.223372036854776e+18,
             "title": "Generation",
             "type": "integer"
           },
@@ -957,11 +1062,13 @@
         "properties": {
           "accepted_units": {
             "exclusiveMinimum": 0.0,
+            "maximum": 9.223372036854776e+18,
             "title": "Accepted Units",
             "type": "integer"
           },
           "amount": {
             "exclusiveMinimum": 0.0,
+            "maximum": 9.223372036854776e+18,
             "title": "Amount",
             "type": "integer"
           },
@@ -1144,6 +1251,7 @@
           },
           "event_id": {
             "exclusiveMinimum": 0.0,
+            "maximum": 9.223372036854776e+18,
             "title": "Event Id",
             "type": "integer"
           },
@@ -1177,6 +1285,7 @@
         "additionalProperties": false,
         "properties": {
           "cursor": {
+            "maximum": 9.223372036854776e+18,
             "minimum": 0.0,
             "title": "Cursor",
             "type": "integer"
@@ -1234,6 +1343,7 @@
           },
           "generation": {
             "exclusiveMinimum": 0.0,
+            "maximum": 9.223372036854776e+18,
             "title": "Generation",
             "type": "integer"
           },
@@ -1282,6 +1392,7 @@
             "type": "string"
           },
           "vram_bytes": {
+            "maximum": 9.223372036854776e+18,
             "minimum": 0.0,
             "title": "Vram Bytes",
             "type": "integer"
@@ -1460,6 +1571,7 @@
         "additionalProperties": false,
         "properties": {
           "accepted_units": {
+            "maximum": 9.223372036854776e+18,
             "minimum": 0.0,
             "title": "Accepted Units",
             "type": "integer"
@@ -1477,6 +1589,7 @@
             "type": "string"
           },
           "failed_units": {
+            "maximum": 9.223372036854776e+18,
             "minimum": 0.0,
             "title": "Failed Units",
             "type": "integer"
@@ -1532,6 +1645,7 @@
             "type": "array"
           },
           "total_units": {
+            "maximum": 9.223372036854776e+18,
             "minimum": 0.0,
             "title": "Total Units",
             "type": "integer"
@@ -1557,6 +1671,7 @@
         "properties": {
           "plan_revision": {
             "exclusiveMinimum": 0.0,
+            "maximum": 9.223372036854776e+18,
             "title": "Plan Revision",
             "type": "integer"
           },
@@ -1615,6 +1730,7 @@
           },
           "plan_revision": {
             "exclusiveMinimum": 0.0,
+            "maximum": 9.223372036854776e+18,
             "title": "Plan Revision",
             "type": "integer"
           },
@@ -1682,6 +1798,7 @@
             "type": "string"
           },
           "lease_remaining_ms": {
+            "maximum": 9.223372036854776e+18,
             "minimum": 0.0,
             "title": "Lease Remaining Ms",
             "type": "integer"
@@ -1709,6 +1826,7 @@
           },
           "cursor": {
             "exclusiveMinimum": 0.0,
+            "maximum": 9.223372036854776e+18,
             "title": "Cursor",
             "type": "integer"
           },
@@ -1722,6 +1840,7 @@
             "type": "string"
           },
           "sequence": {
+            "maximum": 9.223372036854776e+18,
             "minimum": 0.0,
             "title": "Sequence",
             "type": "integer"
@@ -1746,6 +1865,7 @@
         "additionalProperties": false,
         "properties": {
           "cursor": {
+            "maximum": 9.223372036854776e+18,
             "minimum": 0.0,
             "title": "Cursor",
             "type": "integer"
@@ -1775,6 +1895,7 @@
         "properties": {
           "generation": {
             "exclusiveMinimum": 0.0,
+            "maximum": 9.223372036854776e+18,
             "title": "Generation",
             "type": "integer"
           },
@@ -1785,6 +1906,7 @@
             "type": "string"
           },
           "sequence": {
+            "maximum": 9.223372036854776e+18,
             "minimum": 0.0,
             "title": "Sequence",
             "type": "integer"
@@ -1808,11 +1930,13 @@
         "additionalProperties": false,
         "properties": {
           "accepted_units": {
+            "maximum": 9.223372036854776e+18,
             "minimum": 0.0,
             "title": "Accepted Units",
             "type": "integer"
           },
           "active_attempts": {
+            "maximum": 9.223372036854776e+18,
             "minimum": 0.0,
             "title": "Active Attempts",
             "type": "integer"
@@ -1933,6 +2057,7 @@
         "properties": {
           "max_bytes": {
             "exclusiveMinimum": 0.0,
+            "maximum": 9.223372036854776e+18,
             "title": "Max Bytes",
             "type": "integer"
           },
@@ -1981,12 +2106,14 @@
         "additionalProperties": false,
         "properties": {
           "accepted_units": {
+            "maximum": 9.223372036854776e+18,
             "minimum": 0.0,
             "title": "Accepted Units",
             "type": "integer"
           },
           "jobs_by_state": {
             "additionalProperties": {
+              "maximum": 9.223372036854776e+18,
               "minimum": 0.0,
               "type": "integer"
             },
@@ -1994,6 +2121,7 @@
             "type": "object"
           },
           "nodes": {
+            "maximum": 9.223372036854776e+18,
             "minimum": 0.0,
             "title": "Nodes",
             "type": "integer"
@@ -2004,6 +2132,7 @@
             "type": "string"
           },
           "ready_nodes": {
+            "maximum": 9.223372036854776e+18,
             "minimum": 0.0,
             "title": "Ready Nodes",
             "type": "integer"
@@ -2073,6 +2202,7 @@
           },
           "plan_revision": {
             "exclusiveMinimum": 0.0,
+            "maximum": 9.223372036854776e+18,
             "title": "Plan Revision",
             "type": "integer"
           },
@@ -2119,6 +2249,7 @@
           },
           "plan_revision": {
             "exclusiveMinimum": 0.0,
+            "maximum": 9.223372036854776e+18,
             "title": "Plan Revision",
             "type": "integer"
           },
@@ -2239,15 +2370,18 @@
           },
           "heartbeat_interval_ms": {
             "exclusiveMinimum": 0.0,
+            "maximum": 9.223372036854776e+18,
             "title": "Heartbeat Interval Ms",
             "type": "integer"
           },
           "lease_ms": {
             "exclusiveMinimum": 0.0,
+            "maximum": 9.223372036854776e+18,
             "title": "Lease Ms",
             "type": "integer"
           },
           "long_poll_ms": {
+            "maximum": 9.223372036854776e+18,
             "minimum": 0.0,
             "title": "Long Poll Ms",
             "type": "integer"
@@ -2343,11 +2477,13 @@
         "properties": {
           "cpu_millis": {
             "exclusiveMinimum": 0.0,
+            "maximum": 9.223372036854776e+18,
             "title": "Cpu Millis",
             "type": "integer"
           },
           "disk_bytes": {
             "exclusiveMinimum": 0.0,
+            "maximum": 9.223372036854776e+18,
             "title": "Disk Bytes",
             "type": "integer"
           },
@@ -2360,11 +2496,13 @@
           },
           "memory_bytes": {
             "exclusiveMinimum": 0.0,
+            "maximum": 9.223372036854776e+18,
             "title": "Memory Bytes",
             "type": "integer"
           },
           "vram_bytes": {
             "default": 0,
+            "maximum": 9.223372036854776e+18,
             "minimum": 0.0,
             "title": "Vram Bytes",
             "type": "integer"
@@ -2384,6 +2522,7 @@
           "compute_ms": {
             "anyOf": [
               {
+                "maximum": 9.223372036854776e+18,
                 "minimum": 0.0,
                 "type": "integer"
               },
@@ -2717,6 +2856,7 @@
           "batch_policy": {
             "additionalProperties": {
               "exclusiveMinimum": 0.0,
+              "maximum": 9.223372036854776e+18,
               "type": "integer"
             },
             "maxProperties": 16,
@@ -2725,7 +2865,9 @@
           },
           "concurrency": {
             "default": 1,
+            "description": "Maximum simultaneous compute tasks per node",
             "exclusiveMinimum": 0.0,
+            "maximum": 9.223372036854776e+18,
             "title": "Concurrency",
             "type": "integer"
           },
@@ -2736,6 +2878,7 @@
           },
           "duration_ms": {
             "exclusiveMinimum": 0.0,
+            "maximum": 9.223372036854776e+18,
             "title": "Duration Ms",
             "type": "integer"
           },
@@ -2777,6 +2920,7 @@
             "type": "boolean"
           },
           "repetition": {
+            "maximum": 9.223372036854776e+18,
             "minimum": 0.0,
             "title": "Repetition",
             "type": "integer"
@@ -2797,6 +2941,7 @@
           },
           "units": {
             "exclusiveMinimum": 0.0,
+            "maximum": 9.223372036854776e+18,
             "title": "Units",
             "type": "integer"
           },
@@ -2810,6 +2955,7 @@
           },
           "verification_ms": {
             "default": 0,
+            "maximum": 9.223372036854776e+18,
             "minimum": 0.0,
             "title": "Verification Ms",
             "type": "integer"
@@ -2864,6 +3010,7 @@
             "title": "Error Code"
           },
           "generation": {
+            "maximum": 9.223372036854776e+18,
             "minimum": 0.0,
             "title": "Generation",
             "type": "integer"
@@ -2894,6 +3041,7 @@
             "$ref": "#/components/schemas/TaskState"
           },
           "units": {
+            "maximum": 9.223372036854776e+18,
             "minimum": 0.0,
             "title": "Units",
             "type": "integer"
@@ -2967,6 +3115,7 @@
           "memory_bytes": {
             "anyOf": [
               {
+                "maximum": 9.223372036854776e+18,
                 "minimum": 0.0,
                 "type": "integer"
               },
@@ -2989,6 +3138,7 @@
             "type": "string"
           },
           "sequence": {
+            "maximum": 9.223372036854776e+18,
             "minimum": 0.0,
             "title": "Sequence",
             "type": "integer"
@@ -3020,12 +3170,14 @@
             "type": "string"
           },
           "part_count": {
+            "maximum": 9.223372036854776e+18,
             "minimum": 0.0,
             "title": "Part Count",
             "type": "integer"
           },
           "part_size_bytes": {
             "exclusiveMinimum": 0.0,
+            "maximum": 9.223372036854776e+18,
             "title": "Part Size Bytes",
             "type": "integer"
           },
@@ -3118,6 +3270,7 @@
             "type": "string"
           },
           "size_bytes": {
+            "maximum": 9.223372036854776e+18,
             "minimum": 0.0,
             "title": "Size Bytes",
             "type": "integer"
@@ -3135,6 +3288,7 @@
         "additionalProperties": false,
         "properties": {
           "number": {
+            "maximum": 9.223372036854776e+18,
             "minimum": 0.0,
             "title": "Number",
             "type": "integer"
@@ -3146,6 +3300,7 @@
           },
           "size_bytes": {
             "exclusiveMinimum": 0.0,
+            "maximum": 9.223372036854776e+18,
             "title": "Size Bytes",
             "type": "integer"
           }

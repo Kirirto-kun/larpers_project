@@ -249,6 +249,7 @@ json.dump({"result": result}, sys.stdout)
                         "command": [sys.executable, str(adapter_path)],
                         "parallel": True,
                         "checkpoints": True,
+                        "checkpoint_files": ["trainer-state.json"],
                         "recipe": {
                             "id": "test",
                             "name": "Test",

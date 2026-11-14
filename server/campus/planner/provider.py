@@ -34,7 +34,7 @@ class Proposal(BaseModel):
 
 def invoke(settings, context, budget_seconds):
     if (
-        settings.llm_provider not in {"model-studio", "openai-compatible"}
+        settings.llm_provider not in {"model-studio", "openai-compatible", "deepseek"}
         or not settings.llm_api_key
         or not settings.llm_model
         or not settings.llm_base_url
@@ -77,6 +77,8 @@ def invoke(settings, context, budget_seconds):
         "max_tokens": 4096,
         "stream": False,
     }
+    if settings.llm_provider == "deepseek":
+        data["thinking"] = {"type": "disabled"}
     deadline = time.monotonic() + budget_seconds
     for attempt in range(3):
         remaining = deadline - time.monotonic()

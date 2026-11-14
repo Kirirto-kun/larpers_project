@@ -26,6 +26,7 @@ SCHEMAS = {
     "adapter-request": "AdapterRequest",
     "adapter-response": "AdapterResponse",
     "result-manifest": "ResultManifest",
+    "checkpoint-manifest": "CheckpointManifest",
     "search-result": "SearchResult",
 }
 

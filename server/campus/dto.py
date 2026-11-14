@@ -2,7 +2,7 @@ from enum import StrEnum
 from typing import Annotated, Any, Literal
 from uuid import UUID
 
-from pydantic import AwareDatetime, BaseModel, ConfigDict, Field, StringConstraints
+from pydantic import AwareDatetime, BaseModel, ConfigDict, Field, StringConstraints, model_validator
 
 SHA256 = Annotated[str, StringConstraints(pattern=r"^[a-f0-9]{64}$")]
 ImageDigest = Annotated[
@@ -11,8 +11,8 @@ ImageDigest = Annotated[
 ShortText = Annotated[str, StringConstraints(min_length=1, max_length=256)]
 Identifier = Annotated[str, StringConstraints(pattern=r"^[a-zA-Z0-9][a-zA-Z0-9._-]{0,63}$")]
 FilePath = Annotated[str, StringConstraints(min_length=1, max_length=512)]
-Positive = Annotated[int, Field(gt=0)]
-Nonnegative = Annotated[int, Field(ge=0)]
+Positive = Annotated[int, Field(gt=0, le=2**63 - 1)]
+Nonnegative = Annotated[int, Field(ge=0, le=2**63 - 1)]
 Accelerator = Literal["cpu", "cuda"]
 NodeState = Literal["preflight", "ready", "draining", "paused", "offline", "quarantined"]
 PreviewState = Literal[
@@ -22,6 +22,23 @@ PreviewState = Literal[
 
 class DTO(BaseModel):
     model_config = ConfigDict(extra="forbid", allow_inf_nan=False)
+
+    @model_validator(mode="before")
+    @classmethod
+    def portable_json(cls, value):
+        pending = [value]
+        while pending:
+            item = pending.pop()
+            if isinstance(item, str):
+                if "\x00" in item:
+                    raise ValueError("NUL characters are not supported")
+                item.encode("utf-8")
+            elif isinstance(item, dict):
+                pending.extend(item.keys())
+                pending.extend(item.values())
+            elif isinstance(item, (list, tuple)):
+                pending.extend(item)
+        return value
 
 
 class TaskState(StrEnum):
@@ -99,6 +116,10 @@ class Capabilities(DTO):
     offered_budget: Budget
     preflight_revision: Positive
     image_digests: list[ImageDigest] = Field(default_factory=list, max_length=128)
+    cached_artifact_digests: list[SHA256] = Field(default_factory=list, max_length=1024)
+    transfer_bytes_per_second: Positive | None = Field(
+        default=None, description="Worker-measured recent input download rate; scheduling hint only"
+    )
     allow_on_battery: bool = False
 
 
@@ -525,7 +546,7 @@ class AdapterResponse(DTO):
 class StandaloneRecord(DTO):
     schema_version: Literal["1"] = "1"
     node_id: UUID
-    concurrency: Positive = 1
+    concurrency: Positive = Field(default=1, description="Maximum simultaneous compute tasks per node")
     batch_policy: dict[str, Positive] = Field(default_factory=dict, max_length=16)
     manifest_digest: SHA256
     config_digest: SHA256
@@ -548,7 +569,14 @@ class BenchmarkCreate(DTO):
     preview_id: UUID
     plan_revision: Positive
     node_ids: list[UUID] = Field(min_length=2, max_length=32)
-    concurrency: Annotated[int, Field(ge=1, le=512)]
+    concurrency: Annotated[
+        int,
+        Field(
+            ge=1,
+            le=512,
+            description="Maximum simultaneous compute tasks per node, identical in standalone and service runs",
+        ),
+    ]
     batch_policy: dict[str, Positive] = Field(default_factory=dict, max_length=16)
     repetitions: Annotated[int, Field(ge=3, le=20)] = 3
     warm: bool = True
@@ -571,3 +599,15 @@ class BenchmarkReport(DTO):
 
 class SearchStart(DTO):
     search_job_id: UUID
+
+
+class CheckpointFile(DTO):
+    path: FilePath
+    size_bytes: Nonnegative
+    sha256: SHA256
+
+
+class CheckpointManifest(DTO):
+    schema_version: Literal["1"] = "1"
+    compatibility_digest: SHA256
+    files: list[CheckpointFile] = Field(min_length=1, max_length=256)

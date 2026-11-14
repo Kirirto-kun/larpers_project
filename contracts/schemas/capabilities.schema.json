@@ -4,11 +4,13 @@
       "additionalProperties": false,
       "properties": {
         "cpu_millis": {
+          "maximum": 9.223372036854776e+18,
           "minimum": 0.0,
           "title": "Cpu Millis",
           "type": "integer"
         },
         "disk_bytes": {
+          "maximum": 9.223372036854776e+18,
           "minimum": 0.0,
           "title": "Disk Bytes",
           "type": "integer"
@@ -21,12 +23,14 @@
           "type": "integer"
         },
         "memory_bytes": {
+          "maximum": 9.223372036854776e+18,
           "minimum": 0.0,
           "title": "Memory Bytes",
           "type": "integer"
         },
         "vram_bytes": {
           "default": 0,
+          "maximum": 9.223372036854776e+18,
           "minimum": 0.0,
           "title": "Vram Bytes",
           "type": "integer"
@@ -56,6 +60,15 @@
           "title": "Arch",
           "type": "string"
         },
+        "cached_artifact_digests": {
+          "items": {
+            "pattern": "^[a-f0-9]{64}$",
+            "type": "string"
+          },
+          "maxItems": 1024,
+          "title": "Cached Artifact Digests",
+          "type": "array"
+        },
         "cpu_logical": {
           "exclusiveMinimum": 0.0,
           "maximum": 1024.0,
@@ -63,6 +76,7 @@
           "type": "integer"
         },
         "disk_available_bytes": {
+          "maximum": 9.223372036854776e+18,
           "minimum": 0.0,
           "title": "Disk Available Bytes",
           "type": "integer"
@@ -86,6 +100,7 @@
           "type": "array"
         },
         "memory_available_bytes": {
+          "maximum": 9.223372036854776e+18,
           "minimum": 0.0,
           "title": "Memory Available Bytes",
           "type": "integer"
@@ -113,11 +128,26 @@
         },
         "preflight_revision": {
           "exclusiveMinimum": 0.0,
+          "maximum": 9.223372036854776e+18,
           "title": "Preflight Revision",
           "type": "integer"
         },
         "runtime": {
           "$ref": "#/$defs/Runtime"
+        },
+        "transfer_bytes_per_second": {
+          "anyOf": [
+            {
+              "exclusiveMinimum": 0.0,
+              "maximum": 9.223372036854776e+18,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Worker-measured recent input download rate; scheduling hint only",
+          "title": "Transfer Bytes Per Second"
         }
       },
       "required": [
@@ -159,6 +189,7 @@
           "type": "string"
         },
         "vram_bytes": {
+          "maximum": 9.223372036854776e+18,
           "minimum": 0.0,
           "title": "Vram Bytes",
           "type": "integer"

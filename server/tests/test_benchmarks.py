@@ -15,7 +15,7 @@ def test_benchmark_uses_standalone_then_service_and_distinct_contributors(cp):
             "preview_id": view["id"],
             "plan_revision": 1,
             "node_ids": [node1["node_id"], node2["node_id"]],
-            "concurrency": 2,
+            "concurrency": 1,
             "repetitions": 3,
         },
     )
@@ -32,7 +32,7 @@ def test_benchmark_uses_standalone_then_service_and_distinct_contributors(cp):
             "adapter": ADAPTER,
             "resource_limits": LIMITS,
             "units": 3,
-            "concurrency": 2,
+            "concurrency": 1,
             "quality_passed": True,
             "duration_ms": 100,
             "started_at": start.isoformat(),
@@ -51,8 +51,11 @@ def test_benchmark_uses_standalone_then_service_and_distinct_contributors(cp):
     for series in ([first], [second], [first, second]):
         for _ in range(3):
             workers = [series[i % len(series)] for i in range(3)]
-            for worker in workers:
-                cp.complete(worker, cp.claim(worker))
+            for start in range(0, 3, len(series)):
+                batch = workers[start : start + len(series)]
+                assigned = [cp.claim(worker) for worker in batch]
+                for worker, assignment in zip(batch, assigned, strict=True):
+                    cp.complete(worker, assignment)
             cp.maintenance()
     report = cp.call("GET", path + "/export")
     assert report["status"] == "complete"

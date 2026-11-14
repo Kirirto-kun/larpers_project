@@ -8,8 +8,9 @@ from sqlalchemy import select
 from .. import dto
 from .. import models as m
 from ..auth import session_for
-from ..db import now, payload, secret_hash, write_lock
+from ..db import digest, now, payload, secret_hash, write_lock
 from ..events import emit
+from .batching import observed_rate, resize
 from .service import COMPUTE, RUNNABLE, artifact_dto, retry_or_fail, stage_for, update_finished
 
 RESOURCE_KEYS = ("cpu_millis", "memory_bytes", "disk_bytes", "gpu_slots", "vram_bytes")
@@ -112,7 +113,14 @@ def claim_work(db, app, actor, session_id):
     write_lock(db)
     node, session = session_for(db, actor, session_id, touch=True)
     current = now(db)
-    reserved = [a.variant["resource_requirements"] for a in active_attempts(db, node.id, current)]
+    reserved = [
+        variant["resource_requirements"]
+        for variant in db.scalars(
+            select(m.Attempt.variant).where(
+                m.Attempt.node_id == node.id, m.Attempt.reserved_until > current
+            )
+        )
+    ]
     remaining = budget(node, reserved)
     if remaining["cpu_millis"] <= 0:
         return None
@@ -127,11 +135,21 @@ def claim_work(db, app, actor, session_id):
             m.Task.state.in_(RUNNABLE),
             m.Task.available_at <= current,
         )
-        .order_by(m.User.last_dispatched_at.asc().nulls_first(), m.Task.created_at, m.Task.id)
+        .order_by(
+            m.User.last_dispatched_at.asc().nulls_first(),
+            m.Task.created_at,
+            m.Task.id,
+        )
         .with_for_update(of=m.Task, skip_locked=True)
     )
     dependencies = {}
+    choices, rates = [], {}
+    selected_owner = None
     for task, job, owner in candidates:
+        if len(choices) >= 32:
+            break
+        if choices and owner.id != selected_owner:
+            continue
         if job.node_ids is not None and str(node.id) not in job.node_ids:
             continue
         stage = stage_for(job, task)
@@ -143,7 +161,12 @@ def claim_work(db, app, actor, session_id):
                 continue
         if job.concurrency is not None and db.scalar(
             select(m.Task.id)
-            .where(m.Task.job_id == job.id, m.Task.state.in_(COMPUTE))
+            .join(m.Attempt, m.Attempt.id == m.Task.current_attempt_id)
+            .where(
+                m.Task.job_id == job.id,
+                m.Task.state.in_(COMPUTE),
+                m.Attempt.node_id == node.id,
+            )
             .offset(job.concurrency - 1)
             .limit(1)
         ):
@@ -153,7 +176,36 @@ def claim_work(db, app, actor, session_id):
             variants = benchmark_variants(db, job, node, variants)
         variant = next((v for v in variants if compatible(node, v, remaining)), None)
         if variant:
-            return lease(db, app, node, session, current, job, task, owner, stage, variant)
+            selected_owner = owner.id
+            # Owner fairness comes first. Avoid starving older or retrying work
+            # while preferring cheaper transfers among fresh compatible tasks.
+            if task.generation or (current - task.created_at).total_seconds() >= 30:
+                choices = [((), task, job, owner, stage, variant)]
+                break
+            key = (
+                variant.image_digest,
+                stage.adapter.id,
+                stage.adapter.version,
+                digest(stage.parameters),
+            )
+            if key not in rates:
+                rates[key] = observed_rate(db, node, stage, variant)
+            cached = set(node.capabilities.get("cached_artifact_digests", []))
+            inputs = assignment_inputs(db, job, task, stage)
+            missing = {
+                item.artifact.sha256: item.artifact.size_bytes
+                for item in inputs
+                if item.artifact.sha256 not in cached
+            }
+            transfer = sum(missing.values())
+            throughput = node.capabilities.get("transfer_bytes_per_second")
+            compute = task.units / rates[key] if rates[key] else 0
+            cost = (transfer / throughput + compute, 0) if throughput else (transfer, compute)
+            choices.append(((cost, task.created_at, task.id), task, job, owner, stage, variant))
+    if choices:
+        _, task, job, owner, stage, variant = min(choices, key=lambda item: item[0])
+        resize(db, app, node, job, task, stage, variant)
+        return lease(db, app, node, session, current, job, task, owner, stage, variant)
     return None
 
 
@@ -199,6 +251,7 @@ def lease(db, app, node, session, current, job, task, owner, stage, variant):
         variant=payload(variant),
         deadline_at=deadline,
         lease_expires_at=lease_end,
+        reserved_until=lease_end,
     )
     task.state, task.current_attempt_id, task.error_code = "leased", attempt.id, None
     owner.last_dispatched_at = current

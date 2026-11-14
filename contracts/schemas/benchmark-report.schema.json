@@ -27,6 +27,7 @@
         "batch_policy": {
           "additionalProperties": {
             "exclusiveMinimum": 0.0,
+            "maximum": 9.223372036854776e+18,
             "type": "integer"
           },
           "maxProperties": 16,
@@ -34,6 +35,7 @@
           "type": "object"
         },
         "concurrency": {
+          "description": "Maximum simultaneous compute tasks per node, identical in standalone and service runs",
           "maximum": 512.0,
           "minimum": 1.0,
           "title": "Concurrency",
@@ -51,6 +53,7 @@
         },
         "plan_revision": {
           "exclusiveMinimum": 0.0,
+          "maximum": 9.223372036854776e+18,
           "title": "Plan Revision",
           "type": "integer"
         },
@@ -195,11 +198,13 @@
       "properties": {
         "cpu_millis": {
           "exclusiveMinimum": 0.0,
+          "maximum": 9.223372036854776e+18,
           "title": "Cpu Millis",
           "type": "integer"
         },
         "disk_bytes": {
           "exclusiveMinimum": 0.0,
+          "maximum": 9.223372036854776e+18,
           "title": "Disk Bytes",
           "type": "integer"
         },
@@ -212,11 +217,13 @@
         },
         "memory_bytes": {
           "exclusiveMinimum": 0.0,
+          "maximum": 9.223372036854776e+18,
           "title": "Memory Bytes",
           "type": "integer"
         },
         "vram_bytes": {
           "default": 0,
+          "maximum": 9.223372036854776e+18,
           "minimum": 0.0,
           "title": "Vram Bytes",
           "type": "integer"
@@ -239,6 +246,7 @@
         "batch_policy": {
           "additionalProperties": {
             "exclusiveMinimum": 0.0,
+            "maximum": 9.223372036854776e+18,
             "type": "integer"
           },
           "maxProperties": 16,
@@ -247,7 +255,9 @@
         },
         "concurrency": {
           "default": 1,
+          "description": "Maximum simultaneous compute tasks per node",
           "exclusiveMinimum": 0.0,
+          "maximum": 9.223372036854776e+18,
           "title": "Concurrency",
           "type": "integer"
         },
@@ -258,6 +268,7 @@
         },
         "duration_ms": {
           "exclusiveMinimum": 0.0,
+          "maximum": 9.223372036854776e+18,
           "title": "Duration Ms",
           "type": "integer"
         },
@@ -299,6 +310,7 @@
           "type": "boolean"
         },
         "repetition": {
+          "maximum": 9.223372036854776e+18,
           "minimum": 0.0,
           "title": "Repetition",
           "type": "integer"
@@ -319,6 +331,7 @@
         },
         "units": {
           "exclusiveMinimum": 0.0,
+          "maximum": 9.223372036854776e+18,
           "title": "Units",
           "type": "integer"
         },
@@ -332,6 +345,7 @@
         },
         "verification_ms": {
           "default": 0,
+          "maximum": 9.223372036854776e+18,
           "minimum": 0.0,
           "title": "Verification Ms",
           "type": "integer"
@@ -391,6 +405,7 @@
         "memory_bytes": {
           "anyOf": [
             {
+              "maximum": 9.223372036854776e+18,
               "minimum": 0.0,
               "type": "integer"
             },
@@ -413,6 +428,7 @@
           "type": "string"
         },
         "sequence": {
+          "maximum": 9.223372036854776e+18,
           "minimum": 0.0,
           "title": "Sequence",
           "type": "integer"

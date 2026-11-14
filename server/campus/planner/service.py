@@ -9,7 +9,7 @@ from .. import models as m
 from ..db import digest, now, payload, write_lock
 from ..errors import Problem
 from ..events import emit
-from ..jobs.adapters import prepare
+from ..jobs.adapters import prepare, read_json_result
 from ..jobs.service import cancel, create_job, owned_preview
 from .inspection import inspect
 from .validation import manifest, validate_plan
@@ -149,7 +149,17 @@ def context_for(db, app, row, user, request):
         )
         if len(results) != 1:
             raise Problem("PROBE_FAILED", "The registered probe did not return accepted evidence", 422)
-        context["probe"] = {"job_id": str(row.probe_job_id), "verification": results[0].report["level"]}
+        evidence = {}
+        for output in results[0].result["outputs"]:
+            artifact = db.get(m.Artifact, output["artifact_id"])
+            if artifact.size_bytes > 16_384:
+                raise Problem("PROBE_LIMIT", "Probe evidence exceeds the inspection limit", 422)
+            evidence[output["path"]] = read_json_result(app.storage.blob(artifact.sha256), 16_384)
+        context["probe"] = {
+            "job_id": str(row.probe_job_id),
+            "verification": results[0].report["level"],
+            "outputs": evidence,
+        }
     return context
 
 
@@ -180,7 +190,7 @@ def prepare_preview(app, claim_data):
         db.refresh(row)
         if row.state != "planning" or row.claim_id != claim_data[1] or row.claim_expires_at <= now(db):
             return {}
-        validate_plan(db, app, user, plan, request)
+        validate_plan(db, app, user, plan, request, server_evidence=row.probe_job_id is not None)
         row.state = "validating"
         announce(db, row, user)
         adapter_inputs = []
@@ -212,7 +222,15 @@ def launch_probe(db, app, row, user, proposal):
         or stage.validation_policy == "structural"
     ):
         raise Problem("INVALID_PROBE", "The requested adapter has no eligible isolated probe", 422)
-    request = dto.PreviewRequest(prompt="Registered capability probe")
+    original = dto.PreviewRequest.model_validate(row.request)
+    samples = [
+        binding
+        for binding in original.inputs
+        if not binding.archive and db.get(m.Artifact, binding.artifact_id).size_bytes <= 65_536
+    ]
+    samples = samples[:1]
+    stage = stage.model_copy(update={"bindings": samples})
+    request = dto.PreviewRequest(prompt="Registered capability probe", inputs=samples)
     project, manifest_sha = manifest(db, user, request)
     deadline = min(row.deadline_at, now(db) + timedelta(seconds=45))
     plan = dto.JobPlan(

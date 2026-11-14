@@ -90,7 +90,12 @@ def prepare(plan, inputs, catalog, max_tasks, *, batch_policy=None, budget_secon
         data = {
             "stage": payload(stage),
             "inputs": inputs,
-            "batch_policy": batch_policy or {},
+            "batch_policy": batch_policy
+            or {
+                "target_duration_ms": 10_000,
+                "target_units": adapter.initial_batch_units,
+                "max_units": adapter.max_batch_units,
+            },
             "max_tasks": max_tasks,
         }
         if adapter.command:

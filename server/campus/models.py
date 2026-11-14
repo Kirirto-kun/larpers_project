@@ -152,6 +152,7 @@ class Attempt(Identified, Created, Base):
     __tablename__ = "attempts"
     __table_args__ = (
         UniqueConstraint("task_id", "generation"),
+        Index("ix_attempts_node_reserved", "node_id", "reserved_until"),
         Index(
             "ix_attempts_compute_lease",
             "lease_expires_at",
@@ -167,6 +168,7 @@ class Attempt(Identified, Created, Base):
     variant: Mapped[dict] = mapped_column(JSONB)
     deadline_at: Mapped[datetime]
     lease_expires_at: Mapped[datetime]
+    reserved_until: Mapped[datetime]
     started_at: Mapped[datetime | None]
     error_code: Mapped[str | None] = mapped_column(String(64))
     completion_digest: Mapped[str | None] = mapped_column(String(64))

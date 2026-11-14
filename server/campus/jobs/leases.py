@@ -88,6 +88,7 @@ def renew_attempt(db, app, actor, session_id, attempt_id, body):
     attempt.lease_expires_at = min(
         attempt.deadline_at, current + timedelta(milliseconds=app.settings.lease_ms)
     )
+    attempt.reserved_until = attempt.lease_expires_at
     return receipt(attempt, current)
 
 
@@ -134,6 +135,7 @@ def complete_attempt(db, app, actor, session_id, attempt_id, body):
     current = now(db)
     live(ctx, current)
     node.last_seen_at = current
+    attempt.reserved_until = current
     task.state = attempt.state = "verifying"
     attempt.completion_digest = key
     attempt.result = payload(body.manifest)
@@ -174,7 +176,9 @@ def fail(db, actor, session_id, attempt_id, body, release=False):
     temporary = release or (
         body.retryable and code in {"OOM", "RUNTIME_INTERRUPTED", "NETWORK_ERROR", "NODE_BUSY"}
     )
-    retry_or_fail(db, job, task, attempt, code, temporary, now(db))
+    current = now(db)
+    attempt.reserved_until = current
+    retry_or_fail(db, job, task, attempt, code, temporary, current)
     return dto.AttemptStatus(
         attempt_id=attempt.id,
         task_id=task.id,
@@ -216,7 +220,13 @@ def checkpoint(db, app, actor, session_id, attempt_id, body):
         .limit(1)
     )
     if latest and latest.sequence >= body.sequence:
-        if latest.sequence == body.sequence and latest.artifact_id == row.id:
+        replay = db.scalar(
+            select(m.Checkpoint).where(
+                m.Checkpoint.attempt_id == attempt.id,
+                m.Checkpoint.sequence == body.sequence,
+            )
+        )
+        if replay and replay.artifact_id == row.id and replay.compatibility_digest == expected:
             return artifact_dto(row)
         raise conflict("Checkpoint sequence must increase")
     live(ctx, now(db))

@@ -1,9 +1,12 @@
 import io
+import json
 from datetime import timedelta
+from hashlib import sha256
 from zipfile import ZipFile
 
 from conftest import sample_plan
 from fastapi.testclient import TestClient
+from sqlalchemy import select
 from test_leases import expire
 
 from campus import dto
@@ -50,19 +53,44 @@ def test_checkpoint_only_resumes_published_compatible_blob(cp):
     cp.job(plan=plan)
     node, _ = cp.device()
     first = cp.claim(node)
-    archive = io.BytesIO()
-    with ZipFile(archive, "w") as file:
-        file.writestr("trainer-state.json", '{"step": 3}')
-    output = cp.upload(
-        archive.getvalue(), "state.zip", kind="checkpoint", device=node, assignment=first, part_size=1024
-    )
     with cp.runtime.sessions() as db:
         job, task = db.get(m.Job, first["job_id"]), db.get(m.Task, first["task_id"])
         attempt = db.get(m.Attempt, first["attempt_id"])
         digest = checkpoint_digest(job, task, dto.Variant.model_validate(attempt.variant))
+    state = b'{"step": 3}'
+    archive = io.BytesIO()
+    with ZipFile(archive, "w") as file:
+        file.writestr("trainer-state.json", state)
+        file.writestr(
+            "campus-checkpoint.json",
+            json.dumps(
+                {
+                    "compatibility_digest": digest,
+                    "files": [
+                        {
+                            "path": "trainer-state.json",
+                            "size_bytes": len(state),
+                            "sha256": sha256(state).hexdigest(),
+                        }
+                    ],
+                }
+            ),
+        )
+    output = cp.upload(
+        archive.getvalue(), "state.zip", kind="checkpoint", device=node, assignment=first, part_size=1024
+    )
     body = {"artifact_id": output["id"], "compatibility_digest": digest, "sequence": 1}
     cp.attempt(node, first, "checkpoints", extra={**body, "artifact_id": first["task_id"]}, code=422)
     cp.attempt(node, first, "checkpoints", extra=body)
+    cp.attempt(node, first, "checkpoints", extra={**body, "sequence": 2})
+    cp.attempt(node, first, "checkpoints", extra=body)
+    with cp.runtime.sessions() as db:
+        latest = db.scalar(
+            select(m.Checkpoint)
+            .where(m.Checkpoint.attempt_id == first["attempt_id"])
+            .order_by(m.Checkpoint.sequence.desc())
+        )
+        assert latest.sequence == 2
     expire(cp, first)
     cp.maintenance()
     second = cp.claim(node)

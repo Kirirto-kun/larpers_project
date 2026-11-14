@@ -25,7 +25,8 @@ def owned_preview(db, actor, preview_id):
     preview = db.get(m.Preview, preview_id)
     if not preview:
         raise missing()
-    actor.owns(preview.owner_id)
+    owner = db.get(m.User, preview.owner_id)
+    actor.owns(preview.owner_id, owner.pool_id)
     return preview
 
 
@@ -240,6 +241,7 @@ def retry_or_fail(db, job, task, attempt, code, retryable, current):
     policy = job.plan["retry_policy"]
     attempt.state = "failed"
     attempt.error_code = task.error_code = code
+    retryable = retryable and stage_for(job, task).resume_policy != "unsupported"
     if retryable and task.generation < policy["max_attempts"] and current < job.deadline_at:
         base = policy["backoff_ms"] * 2 ** (task.generation - 1)
         jitter = int.from_bytes(task.id.bytes[-2:], "big") / 65535

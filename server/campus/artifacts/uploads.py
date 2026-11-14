@@ -9,6 +9,7 @@ from ..db import now, write_lock
 from ..errors import Problem, conflict, forbidden, missing
 from ..jobs import leases
 from ..jobs.service import artifact_dto, stage_for
+from .checkpoints import validate_checkpoint
 from .storage import safe_relative, secret_path, validate_archive
 
 
@@ -151,8 +152,22 @@ def publish_blob(app, row, view):
             with file.open("rb") as source:
                 yield from iter(lambda: source.read(1024 * 1024), b"")
 
+    checkpoint_context = None
+    if row.kind == "checkpoint":
+        with app.sessions() as db:
+            attempt = db.get(m.Attempt, row.attempt_id)
+            task = db.get(m.Task, attempt.task_id)
+            job = db.get(m.Job, task.job_id)
+            stage = stage_for(job, task)
+            checkpoint_context = (
+                leases.checkpoint_digest(job, task, dto.Variant.model_validate(attempt.variant)),
+                app.catalog.adapter(stage.adapter).checkpoint_files,
+            )
+
     def validate(path):
         validate_archive(path, app.settings.upload_limit_bytes)
+        if checkpoint_context:
+            validate_checkpoint(path, *checkpoint_context)
 
     app.storage.publish(
         app.storage.blob(row.sha256),

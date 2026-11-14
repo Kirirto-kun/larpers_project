@@ -1,4 +1,11 @@
+from datetime import timedelta
+
+import pytest
 from conftest import CAPS, sample_plan
+from sqlalchemy import select
+
+from campus import models as m
+from campus.db import digest, now
 
 
 def test_incompatible_hardware_waits(cp):
@@ -45,3 +52,40 @@ def test_dag_waits_for_accepted_predecessor(cp):
     assert results.artifact["id"] in {item["artifact"]["id"] for item in following["inputs"]}
     cp.complete(other, following)
     assert cp.call("GET", f"/jobs/{job['id']}")["state"] == "succeeded"
+
+
+@pytest.mark.parametrize("aged", [False, True])
+def test_cache_preference_preserves_aged_work(cp, aged):
+    artifacts, jobs = [], []
+    for content in (b"first input", b"cached input"):
+        artifact = cp.upload(content, "data.txt")
+        artifacts.append(artifact)
+        binding = {"artifact_id": artifact["id"], "mount_path": "/inputs/data.txt", "archive": False}
+        plan = sample_plan(
+            manifest=digest(
+                {
+                    "project_digest": None,
+                    "inputs": [
+                        {**binding, "sha256": artifact["sha256"], "size_bytes": artifact["size_bytes"]}
+                    ],
+                }
+            )
+        )
+        plan["stages"][0]["bindings"] = [binding]
+        jobs.append(cp.job(plan=plan, fields={"inputs": [binding]}))
+    if aged:
+        with cp.runtime.sessions.begin() as db:
+            first = db.scalar(select(m.Task).where(m.Task.job_id == jobs[0]["id"]))
+            first.created_at = now(db) - timedelta(seconds=31)
+    worker, _ = cp.device(
+        {
+            **CAPS,
+            "cached_artifact_digests": [artifacts[1]["sha256"]],
+            "transfer_bytes_per_second": 1_000_000,
+        }
+    )
+    work = cp.claim(worker)
+    assert work["job_id"] == jobs[0 if aged else 1]["id"]
+    # A cache hint never grants access to inputs of the unassigned job.
+    other = artifacts[1 if aged else 0]
+    cp.call("GET", f"/artifacts/{other['id']}/content", headers=worker, code=403)

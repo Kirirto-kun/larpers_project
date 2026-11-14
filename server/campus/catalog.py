@@ -13,7 +13,11 @@ class Adapter(BaseModel):
     image_ids: list[dto.Identifier]
     policies: list[dto.Identifier]
     checkpoints: bool = False
+    checkpoint_files: list[dto.FilePath] = Field(default_factory=list)
     parallel: bool = False
+    adaptive_batches: bool = False
+    initial_batch_units: int = Field(default=8, ge=1, le=10_000)
+    max_batch_units: int = Field(default=256, ge=1, le=10_000)
     unit: str = "task"
     weight: int = Field(default=1, ge=1, le=10_000)
     command: list[str] = Field(default_factory=list)
@@ -42,6 +46,14 @@ class Catalog:
         for item in self.adapters.values():
             if not set(item.image_ids) <= self.environments.keys():
                 raise ValueError("Adapter references an unregistered environment")
+            if item.adaptive_batches and not item.parallel:
+                raise ValueError(
+                    "Adaptive batches require an adapter accepting any assigned item subset"
+                )
+            if item.initial_batch_units > item.max_batch_units:
+                raise ValueError("Initial batch exceeds maximum batch size")
+            if item.checkpoints and not item.checkpoint_files:
+                raise ValueError("Checkpoint adapters must declare every required state file")
             if item.parallel and not item.command:
                 raise ValueError("A parallel adapter requires a bounded runtime command")
 

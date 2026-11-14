@@ -9,6 +9,7 @@ def expire(cp, assignment):
     with cp.runtime.sessions.begin() as db:
         row = db.get(m.Attempt, assignment["attempt_id"])
         row.lease_expires_at = now(db) - timedelta(seconds=1)
+        row.reserved_until = row.lease_expires_at
 
 
 def test_concurrent_claim_reserves_device_and_task(cp):

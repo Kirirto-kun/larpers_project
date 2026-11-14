@@ -1,4 +1,5 @@
 from pathlib import Path
+from typing import Literal
 
 from pydantic import Field, SecretStr, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -34,7 +35,7 @@ class Settings(BaseSettings):
     llm_base_url: str = ""
     llm_model: str = ""
     llm_api_key: SecretStr | None = None
-    llm_json_mode: str = "json_object"
+    llm_json_mode: Literal["json_object", "json_schema"] = "json_object"
     llm_timeout_seconds: float = Field(default=20, gt=0, le=90)
     llm_planning_seconds: int = Field(default=70, ge=2, le=300)
 

@@ -1,3 +1,4 @@
+import { ChevronRight } from "lucide-react";
 import { useState } from "react";
 import { useResource } from "../lib/hooks";
 import type { Node } from "../lib/types";
@@ -22,7 +23,7 @@ export function Nodes({ admin }: { admin: boolean }) {
   const node = data?.find((n) => n.id === selected);
   return (
     <>
-      <PageHeader eyebrow="DEVICES" title="Every laptop has a role.">
+      <PageHeader eyebrow="DEVICES" title="Devices">
         CPU and GPU capacity is offered explicitly by each participant.
       </PageHeader>
       <ErrorBox message={error || message} />
@@ -42,10 +43,12 @@ export function Nodes({ admin }: { admin: boolean }) {
               <tr key={n.id}>
                 <td>
                   <button
-                    className="button ghost"
-                    onClick={() => setSelected(n.id)}
+                    className="item-button"
+                    aria-expanded={selected === n.id}
+                    onClick={() => setSelected(selected === n.id ? "" : n.id)}
                   >
                     {n.name}
+                    <ChevronRight aria-hidden="true" />
                   </button>
                   <small>{n.roles.join(", ")}</small>
                 </td>
@@ -100,11 +103,25 @@ export function Nodes({ admin }: { admin: boolean }) {
             </p>
           ))}
           {admin && (
-            <div className="actions">
+            <div className="actions control-actions">
               {["drain", "stop", "resume", "quarantine", "release"].map(
                 (action) => (
                   <Button
                     variant="outline"
+                    className={
+                      action === "stop" || action === "quarantine"
+                        ? "danger"
+                        : undefined
+                    }
+                    title={
+                      {
+                        drain: "Finish current work and pause new tasks",
+                        stop: "Stop work on this device",
+                        resume: "Allow this device to accept work",
+                        quarantine: "Exclude this device from the pool",
+                        release: "Release this device from quarantine",
+                      }[action]
+                    }
                     disabled={busy}
                     key={action}
                     onClick={async () => {

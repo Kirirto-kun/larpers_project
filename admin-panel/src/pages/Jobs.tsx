@@ -1,3 +1,4 @@
+import { ChevronRight } from "lucide-react";
 import { useState } from "react";
 import { useResource } from "../lib/hooks";
 import type { Job } from "../lib/types";
@@ -9,10 +10,7 @@ export function Jobs() {
   const job = data?.find((j) => j.id === selected);
   return (
     <>
-      <PageHeader
-        eyebrow="JOBS"
-        title="Follow the work, including the retries."
-      >
+      <PageHeader eyebrow="JOBS" title="Jobs">
         Only accepted units count toward useful throughput.
       </PageHeader>
       <ErrorBox message={error} />
@@ -22,10 +20,12 @@ export function Jobs() {
           <div className="row" key={j.id}>
             <div>
               <button
-                className="button ghost"
-                onClick={() => setSelected(j.id)}
+                className="item-button"
+                aria-expanded={selected === j.id}
+                onClick={() => setSelected(selected === j.id ? "" : j.id)}
               >
                 {j.name}
+                <ChevronRight aria-hidden="true" />
               </button>
               <p>
                 {j.accepted_units}/{j.total_units} accepted · {j.failed_units}{" "}

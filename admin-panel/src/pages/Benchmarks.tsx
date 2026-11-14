@@ -1,3 +1,4 @@
+import { ChevronRight } from "lucide-react";
 import { TimingChart, UtilizationChart } from "../components/MeasurementCharts";
 import { useState } from "react";
 import { useResource } from "../lib/hooks";
@@ -26,10 +27,7 @@ export function Benchmarks({ admin }: { admin: boolean }) {
   const report = reports?.find((b) => b.id === selected);
   return (
     <>
-      <PageHeader
-        eyebrow="BENCHMARKS"
-        title="Measure the value of working together."
-      >
+      <PageHeader eyebrow="BENCHMARKS" title="Benchmarks">
         Compare matched workloads and resource budgets. Utilization is not
         pooling efficiency.
       </PageHeader>
@@ -38,6 +36,7 @@ export function Benchmarks({ admin }: { admin: boolean }) {
         <section className="card">
           <h2>New experiment</h2>
           <form
+            className="experiment-form"
             onSubmit={async (e) => {
               e.preventDefault();
               setBusy(true);
@@ -120,30 +119,34 @@ export function Benchmarks({ admin }: { admin: boolean }) {
               />
               Cold start series
             </label>
-            <h3>Compute participants</h3>
-            {nodes?.map((n) => (
-              <label className="check" key={n.id}>
-                <input
-                  type="checkbox"
-                  checked={ids.includes(n.id)}
-                  onChange={(e) =>
-                    setIds(
-                      e.target.checked
-                        ? [...ids, n.id]
-                        : ids.filter((id) => id !== n.id),
-                    )
-                  }
-                />
-                {n.name}
-              </label>
-            ))}
-            <Button disabled={busy || !ids.length}>
-              Create new experiment
-            </Button>
-            <p className="muted">
-              Changed inputs or settings require a new experiment. Existing
-              results are never relabelled.
-            </p>
+            <fieldset className="form-section">
+              <legend>Compute participants</legend>
+              {nodes?.map((n) => (
+                <label className="check" key={n.id}>
+                  <input
+                    type="checkbox"
+                    checked={ids.includes(n.id)}
+                    onChange={(e) =>
+                      setIds(
+                        e.target.checked
+                          ? [...ids, n.id]
+                          : ids.filter((id) => id !== n.id),
+                      )
+                    }
+                  />
+                  {n.name}
+                </label>
+              ))}
+            </fieldset>
+            <div className="form-footer">
+              <Button disabled={busy || !ids.length}>
+                {busy ? "Creating experiment…" : "Create new experiment"}
+              </Button>
+              <p className="muted">
+                Changed inputs or settings require a new experiment. Existing
+                results are never relabelled.
+              </p>
+            </div>
           </form>
         </section>
       )}
@@ -156,8 +159,13 @@ export function Benchmarks({ admin }: { admin: boolean }) {
         )}
         {reports?.map((b) => (
           <div className="row" key={b.id}>
-            <button className="button ghost" onClick={() => setSelected(b.id)}>
+            <button
+              className="item-button"
+              aria-expanded={selected === b.id}
+              onClick={() => setSelected(selected === b.id ? "" : b.id)}
+            >
               {b.workload} · {b.experiment_id}
+              <ChevronRight aria-hidden="true" />
             </button>
             <Status value={b.state} />
           </div>

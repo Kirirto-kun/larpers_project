@@ -120,3 +120,22 @@ export-failure and concurrent-destination atomicity, the independent subprocess
 deadline, a real tiny CPU Torch calculation, and the generated checker's argv
 flow using a fake external Docker boundary where this host cannot execute a
 Mac binary or the ARM image natively.
+
+## Prepared handoff on 2026-11-14
+
+The first notebook has generated `bootstrap/test-kit/macos-arm64-ready/`.
+Copy that entire folder later; its payload is about 198.45 MiB. All payload hashes,
+the complete compressed image archive and shell syntax have been verified on
+the first notebook. Native execution on the receiving Mac is still deferred.
+
+Compare the output of `shasum -a 256 ./SHA256SUMS` with this trusted value before
+running the checker:
+
+```text
+854e56f98ac161a4df7acf41f927eaf89ca975ee15e62981e78f9ad7d8a9b212
+```
+
+The bundled native binary uses clean implementation commit
+`cd975f3d675a4cdb8ad0a87b91e72c5033b632f7`. See
+[the local validation record](../runner/VALIDATION.md) for the image identity and
+first-notebook results.

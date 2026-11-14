@@ -172,3 +172,17 @@ resident during that snapshot; model steady-state RSS was not benchmarked.
 Local implementation and these checks do not satisfy the original full pool's
 two-device/CUDA acceptance conditions. The separate branch is preserved locally
 for the user's deferred hardware check; it has not been merged or published.
+
+### Actual Mac kit export
+
+`bootstrap/test-kit/macos-arm64-ready/` was generated and independently rehashed.
+The gzip archive was fully streamed through CRC/tar validation (22 archive
+entries), and `check.sh` passes shell syntax validation. Payload total is
+208085236 bytes; compressed image is 198348974 bytes. The bundled native binary
+was built with `-trimpath`, CGO disabled and clean source commit
+`cd975f3d675a4cdb8ad0a87b91e72c5033b632f7`.
+
+Trusted handoff SHA-256 of `SHA256SUMS`:
+`854e56f98ac161a4df7acf41f927eaf89ca975ee15e62981e78f9ad7d8a9b212`.
+Native Mac execution remains deferred. The first-notebook final binary's actual
+`campus doctor` exits 0 with healthy Docker29.2.1, CPU budget and no detected GPU.

@@ -56,28 +56,65 @@ export function PoolCharts({
       <div>
         <h2>Workload</h2>
         <small className="chart-caption">Current tasks</small>
-        <div className="snapshot-bars">
-          {tasks.map((t) => (
-            <div className="snapshot-bar-row" key={t.label}>
-              <span>{t.label}</span>
-              <div className="visual-track">
-                <span
-                  style={{
-                    width:
-                      t.value === undefined
-                        ? 0
-                        : (t.value /
-                            Math.max(1, ...tasks.map((x) => x.value ?? 0))) *
-                            100 +
-                          "%",
-                    background: t.color,
-                  }}
-                />
-              </div>
-              <strong>{t.value ?? "—"}</strong>
-            </div>
+        <svg
+          className="workload-chart"
+          viewBox="0 0 420 210"
+          role="img"
+          aria-label={tasks
+            .map((t) => t.label + ": " + (t.value ?? "not measured"))
+            .join(", ")}
+        >
+          {[0, 1, 2, 3].map((i) => (
+            <g key={i}>
+              <line
+                x1="30"
+                x2="405"
+                y1={165 - i * 45}
+                y2={165 - i * 45}
+                stroke="#e7ede7"
+                strokeDasharray={i ? "3 5" : undefined}
+              />
+              <text x="20" y={169 - i * 45} textAnchor="end">
+                {Math.ceil(Math.max(1, ...tasks.map((t) => t.value ?? 0)) / 3) *
+                  i}
+              </text>
+            </g>
           ))}
-        </div>
+          {tasks.map((t, i) => {
+            const height =
+              ((t.value ?? 0) /
+                (Math.ceil(Math.max(1, ...tasks.map((t) => t.value ?? 0)) / 3) *
+                  3)) *
+              135;
+            return (
+              <g key={t.label}>
+                <rect
+                  x={68 + i * 121}
+                  y={165 - height}
+                  width="48"
+                  height={height}
+                  rx="3"
+                  fill={t.color}
+                >
+                  <title>
+                    {t.label}: {t.value ?? "not measured"}
+                  </title>
+                </rect>
+                <text
+                  className="chart-value"
+                  x={92 + i * 121}
+                  y={155 - height}
+                  textAnchor="middle"
+                >
+                  {t.value ?? "—"}
+                </text>
+                <text x={92 + i * 121} y="190" textAnchor="middle">
+                  {t.label}
+                </text>
+              </g>
+            );
+          })}
+        </svg>
       </div>
       <div>
         <h2>Device availability</h2>
@@ -86,21 +123,61 @@ export function PoolCharts({
         </small>
         {nodes && nodes.length > 0 ? (
           <>
-            <div
-              className="availability-bar"
+            <svg
+              className="availability-donut"
+              viewBox="0 0 220 185"
               role="img"
               aria-label={states
                 .map((s) => s.label + ": " + s.value)
                 .join(", ")}
             >
-              {states.map((s) => (
-                <span
-                  key={s.label}
-                  style={{ flex: s.value, background: s.color }}
-                  title={s.label + ": " + s.value}
-                />
-              ))}
-            </div>
+              <circle
+                cx="110"
+                cy="88"
+                r="60"
+                fill="none"
+                stroke="#edf1ec"
+                strokeWidth="15"
+              />
+              {states.map((s, i) => {
+                const circumference = 2 * Math.PI * 60;
+                const offset =
+                  (states
+                    .slice(0, i)
+                    .reduce((sum, item) => sum + item.value, 0) /
+                    nodes.length) *
+                  circumference;
+                return (
+                  <circle
+                    key={s.label}
+                    cx="110"
+                    cy="88"
+                    r="60"
+                    fill="none"
+                    stroke={s.color}
+                    strokeWidth="15"
+                    strokeDasharray={`${(s.value / nodes.length) * circumference} ${circumference}`}
+                    strokeDashoffset={-offset}
+                    transform="rotate(-90 110 88)"
+                  >
+                    <title>
+                      {s.label}: {s.value}
+                    </title>
+                  </circle>
+                );
+              })}
+              <text x="110" y="89" textAnchor="middle" className="donut-value">
+                {Math.round(
+                  (nodes.filter((n) => n.state === "ready").length /
+                    nodes.length) *
+                    100,
+                )}
+                %
+              </text>
+              <text x="110" y="111" textAnchor="middle">
+                ready
+              </text>
+            </svg>
             <div className="chart-legend">
               {states.map((s) => (
                 <span key={s.label}>

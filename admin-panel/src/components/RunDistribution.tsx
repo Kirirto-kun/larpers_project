@@ -1,5 +1,4 @@
 import type { Benchmark } from "../lib/types";
-import { median } from "../lib/benchmark";
 
 export function RunDistribution({ report }: { report: Benchmark }) {
   const series = [
@@ -7,82 +6,110 @@ export function RunDistribution({ report }: { report: Benchmark }) {
     {
       name: "Single via service",
       values: report.single_service_rates,
-      color: "#899a90",
+      color: "#8d9eae",
     },
-  ].map((s) => ({
-    ...s,
-    values: s.values.filter((v) => Number.isFinite(v) && v >= 0),
-  }));
-  const max = Math.max(1, ...series.flatMap((s) => s.values)) * 1.1;
+  ];
+  const valid = (v: number) => Number.isFinite(v) && v >= 0;
+  const max =
+    Math.max(1, ...series.flatMap((s) => s.values.filter(valid))) * 1.15;
+  const count = Math.max(1, ...series.map((s) => s.values.length));
+  const x = (i: number) => 48 + (i / Math.max(1, count - 1)) * 660;
+  const y = (v: number) => 210 - (v / max) * 180;
   return (
-    <section className="run-distribution" aria-label="Run distribution">
+    <section className="run-distribution" aria-label="Benchmark runs">
       <div className="section-heading">
-        <h3>Run distribution</h3>
+        <h3>Throughput by run</h3>
         <small>{report.unit}/s</small>
       </div>
-      {series.map((s) => (
-        <div className="distribution-row" key={s.name}>
-          <span>{s.name}</span>
-          <svg
-            viewBox="0 0 500 36"
-            role="img"
-            aria-label={
-              s.name + " samples: " + (s.values.join(", ") || "not measured")
+      <svg
+        className="run-line-chart"
+        viewBox="0 0 740 255"
+        role="img"
+        aria-label={series
+          .map(
+            (s) =>
+              s.name +
+              ": " +
+              (s.values.filter(valid).join(", ") || "not measured"),
+          )
+          .join("; ")}
+      >
+        {[0, 1, 2, 3, 4].map((i) => (
+          <g key={i}>
+            <line
+              x1="48"
+              x2="708"
+              y1={210 - i * 45}
+              y2={210 - i * 45}
+              stroke="#e7ede7"
+              strokeDasharray={i ? "3 5" : undefined}
+            />
+            <text x="35" y={214 - i * 45} textAnchor="end">
+              {((max * i) / 4).toFixed(1)}
+            </text>
+          </g>
+        ))}
+        {series.map((s) => {
+          const segments: string[] = [];
+          let points: string[] = [];
+          s.values.forEach((v, i) => {
+            if (valid(v)) points.push(`${x(i)},${y(v)}`);
+            else {
+              if (points.length) segments.push(points.join(" "));
+              points = [];
             }
-          >
-            {[0, 1, 2, 3, 4].map((i) => (
-              <line
-                key={i}
-                x1={10 + i * 120}
-                x2={10 + i * 120}
-                y1="0"
-                y2="36"
-                stroke="#e9eee9"
-              />
-            ))}
-            {s.values.length > 0 && (
-              <line
-                x1={10 + (Math.min(...s.values) / max) * 480}
-                x2={10 + (Math.max(...s.values) / max) * 480}
-                y1="18"
-                y2="18"
-                stroke={s.color}
-                strokeWidth="2"
-                opacity=".35"
-              />
-            )}
-            {s.values.map((v, i) => (
-              <circle
-                key={i}
-                cx={10 + (v / max) * 480}
-                cy={18 + ((i % 3) - 1) * 6}
-                r="3.5"
-                fill={s.color}
-              >
-                <title>
-                  Run {i + 1}: {v} {report.unit}/s
-                </title>
-              </circle>
-            ))}
-            {s.values.length > 0 && (
-              <path
-                d={`M${10 + (median(s.values)! / max) * 480} 5v26`}
-                stroke={s.color}
-                strokeWidth="2"
-              >
-                <title>Median: {median(s.values)}</title>
-              </path>
-            )}
-          </svg>
-          <strong>{median(s.values)?.toFixed(2) ?? "—"}</strong>
-        </div>
-      ))}
-      <div className="distribution-axis">
-        <span>0</span>
-        <span>{(max / 2).toFixed(1)}</span>
-        <span>{max.toFixed(1)}</span>
+          });
+          if (points.length) segments.push(points.join(" "));
+          return (
+            <g key={s.name}>
+              {segments.map((p, i) => (
+                <polyline
+                  key={i}
+                  points={p}
+                  fill="none"
+                  stroke={s.color}
+                  strokeWidth="2.5"
+                  strokeLinejoin="round"
+                  strokeLinecap="round"
+                />
+              ))}
+              {s.values.map(
+                (v, i) =>
+                  valid(v) && (
+                    <circle
+                      key={i}
+                      cx={x(i)}
+                      cy={y(v)}
+                      r="4"
+                      fill="#fff"
+                      stroke={s.color}
+                      strokeWidth="2"
+                    >
+                      <title>
+                        {s.name} · run {i + 1}: {v} {report.unit}/s
+                      </title>
+                    </circle>
+                  ),
+              )}
+            </g>
+          );
+        })}
+        {Array.from({ length: Math.min(count, 8) }, (_, i) =>
+          Math.round((i * (count - 1)) / Math.max(1, Math.min(count, 8) - 1)),
+        ).map((i) => (
+          <text key={i} x={x(i)} y="236" textAnchor="middle">
+            Run {i + 1}
+          </text>
+        ))}
+      </svg>
+      <div className="chart-legend">
+        {series.map((s) => (
+          <span key={s.name}>
+            <i style={{ background: s.color }} />
+            {s.name}
+          </span>
+        ))}
       </div>
-      <small className="chart-caption">Dots: runs · line: median</small>
     </section>
   );
 }

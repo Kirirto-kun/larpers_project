@@ -17,13 +17,13 @@ Install Docker with Compose and Python 3.12. From the repository root, copy `.en
 Initialize the pool once. Keep the one-time invitation private.
 
 ```sh
-docker compose -f infra/compose.yaml exec api python -m campus.admin initialize
+docker compose --env-file .env -f infra/compose.yaml exec api python -m campus.admin initialize
 ```
 
 Set up the CA trust for this installation. Export its public certificate and check the API using that CA.
 
 ```sh
-docker compose -f infra/compose.yaml exec -T gateway cat /data/caddy/pki/authorities/local/root.crt > campus-local-ca.pem
+docker compose --env-file .env -f infra/compose.yaml exec -T gateway cat /data/caddy/pki/authorities/local/root.crt > campus-local-ca.pem
 curl --cacert campus-local-ca.pem https://localhost:8443/api/v1/health
 ```
 
@@ -38,22 +38,28 @@ Use an isolated test pool. Set `CATALOG_FILE=/catalog/smoke.json` in its environ
 ```sh
 docker pull python@sha256:935c3c5b12357a7e10caa9c1e6ca5692344d97cf229832ef584be2cec9fc03df
 umask 077
-docker compose -f infra/compose.yaml exec -T api python -m campus.admin owner-cli > campus-smoke-credential.json
+docker compose --env-file .env -f infra/compose.yaml exec -T api python -m campus.admin owner-cli > campus-smoke-credential.json
 python3 infra/smoke.py --ca campus-local-ca.pem --credential-file campus-smoke-credential.json
 ```
 
-The script uploads new data, creates a prepared plan, registers a device, downloads its assigned input, computes the digest in an offline container, uploads the output, waits for acceptance and verifies the downloaded result and completion replay. This test records one computing device. The formal benchmark uses the workload adapters and the physical inventory from the runner integration.
+Add `--ai` to exercise the configured live LLM before execution. Without it, the script uploads new data, creates a prepared plan, registers a device, downloads its assigned input, computes the digest in an offline container, uploads the output, waits for acceptance and verifies the downloaded result and completion replay. This test records one computing device. The formal benchmark uses the workload adapters and the physical inventory from the runner integration.
 
 ## Configure AI planning and workload adapters
 
-Set `LLM_PROVIDER=model-studio` or `openai-compatible`, the exact HTTPS `LLM_BASE_URL`, `LLM_MODEL`, `LLM_API_KEY` and a supported `LLM_JSON_MODE`. Keep the key in deployment configuration. Preview creation returns immediately. Workers continue to claim and report existing jobs when the planner is unavailable. Project excerpts require explicit file selection and consent. The API inspects uploaded ZIP data and validates plan references before assigning work.
+Set `LLM_PROVIDER=model-studio`, `deepseek` or `openai-compatible`, the exact HTTPS `LLM_BASE_URL`, `LLM_MODEL`, `LLM_API_KEY` and a supported `LLM_JSON_MODE`. Keep the key in deployment configuration. Preview creation returns immediately. Workers continue to claim and report existing jobs when the planner is unavailable. Project excerpts require explicit file selection and consent. The API inspects uploaded ZIP data and validates plan references before assigning work.
+
+For DeepSeek, the verified configuration is `LLM_PROVIDER=deepseek`, `LLM_BASE_URL=https://api.deepseek.com`, `LLM_MODEL=deepseek-flash`, `LLM_JSON_MODE=json_object`. The adapter disables thinking for this structured planning call and validates the result with Pydantic. The live capability check and complete HTTPS/Docker run passed on 2026-11-14. See [DeepSeek JSON mode](https://api-docs.deepseek.com/guides/json_mode/). Keep the credential only in the ignored root `.env`; startup scripts pass that file explicitly to Compose.
 
 Set `CATALOG_FILE` to a trusted catalog with immutable OCI profiles, adapter versions and validation policies. The smoke catalog provides a minimal example. Production workload adapters use the JSON request/response protocol and a bounded runtime with read-only access to the required artifacts. The coordinator uses subprocess timeouts and output limits. Configure the heavy adapter command with its own sandbox and resource limits. The smoke validator is trusted Python shipped with the coordinator and reads a bounded result from its own volume. Model Studio output modes vary by selected endpoint and model. [Provider documentation](https://help.aliyun.com/en/model-studio/qwen-structured-output)
+
+Checkpoint-capable adapters must declare `checkpoint_files` in the catalog. Upload one ZIP containing `campus-checkpoint.json` and every state file. The manifest uses [checkpoint-manifest.schema.json](contracts/schemas/checkpoint-manifest.schema.json): compatibility digest plus each file's relative path, size and SHA-256. The server checks the exact archive contents and all required files before making an artifact available. Publish its pointer with the current attempt proof and increasing sequence. Worker code is responsible for capturing a consistent full training state.
+
+Adapters that can execute any assigned item subset may set `adaptive_batches=true`, `initial_batch_units` and `max_batch_units`. Only never-leased work tasks are split. The server uses accepted durations on the same node/runtime/parameters for a 10-second target and shortens the tail. A worker may supply `cached_artifact_digests` and its measured `transfer_bytes_per_second` in capabilities. Among fresh compatible tasks belonging to the next fair owner, the scheduler considers missing input bytes and accepted compute rates. After 30 seconds queued work keeps FIFO priority. These hints grant no artifact access and never replace checksum validation. Issued item IDs stay fixed across retries. Benchmark batches remain fixed; benchmark `concurrency` is a limit **per node**, matching standalone runs.
 
 ## Develop and test
 
 ```sh
-docker compose -f infra/compose.yaml up -d db
+docker compose --env-file .env -f infra/compose.yaml up -d db
 uv sync --locked --project server
 uv run --project server alembic -c server/alembic.ini upgrade head
 uv run --project server pytest server/tests -q

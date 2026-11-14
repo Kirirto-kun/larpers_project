@@ -12,6 +12,8 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
 BASE = ["docker", "compose", "-f", str(ROOT / "infra/compose.yaml")]
+if (ROOT / ".env").is_file():
+    BASE.extend(["--env-file", str(ROOT / ".env")])
 FILES = ("database.dump", "artifacts.tar")
 
 

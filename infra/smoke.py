@@ -108,7 +108,7 @@ class Client:
         raise TimeoutError(f"Timed out waiting for {path}")
 
 
-def run(client, worker, text):
+def run(client, worker, text, *, ai=False):
     arch = {"arm64": "arm64", "aarch64": "arm64", "x86_64": "amd64", "AMD64": "amd64"}[
         platform.machine()
     ]
@@ -133,47 +133,51 @@ def run(client, worker, text):
             },
         ],
     }
-    preview = client.call(
-        "POST",
-        "/job-previews",
-        {
-            "recipe_id": "sha256",
-            "inputs": [binding],
-            "prepared_plan": {
-                "plan_revision": 1,
-                "input_manifest_digest": checksum(canonical(manifest)),
-                "execution_kind": "single",
-                "retry_policy": {},
-                "job_deadline_at": (
-                    datetime.now(UTC) + timedelta(minutes=5)
-                ).isoformat(),
-                "stages": [
-                    {
-                        "stage_id": "checksum",
-                        "adapter": ADAPTER,
-                        "variants": [
-                            {
-                                "variant_id": f"python-{arch}",
-                                "image_digest": IMAGE,
-                                "platform": target,
-                                "accelerator": "cpu",
-                                "resource_requirements": LIMITS,
-                            }
-                        ],
-                        "argv": ["python", "-c", PROGRAM],
-                        "working_dir": "/workspace",
-                        "bindings": [binding],
-                        "outputs": [{"path": "checksum.txt", "max_bytes": 65}],
-                        "task_deadline_ms": 30_000,
-                        "validation_policy": "full",
-                        "resume_policy": "restart",
-                    }
-                ],
-            },
+    request = {
+        "recipe_id": "sha256",
+        "inputs": [binding],
+        "prepared_plan": {
+            "plan_revision": 1,
+            "input_manifest_digest": checksum(canonical(manifest)),
+            "execution_kind": "single",
+            "retry_policy": {},
+            "job_deadline_at": (datetime.now(UTC) + timedelta(minutes=5)).isoformat(),
+            "stages": [
+                {
+                    "stage_id": "checksum",
+                    "adapter": ADAPTER,
+                    "variants": [
+                        {
+                            "variant_id": f"python-{arch}",
+                            "image_digest": IMAGE,
+                            "platform": target,
+                            "accelerator": "cpu",
+                            "resource_requirements": LIMITS,
+                        }
+                    ],
+                    "argv": ["python", "-c", PROGRAM],
+                    "working_dir": "/workspace",
+                    "bindings": [binding],
+                    "outputs": [{"path": "checksum.txt", "max_bytes": 65}],
+                    "task_deadline_ms": 30_000,
+                    "validation_policy": "full",
+                    "resume_policy": "restart",
+                }
+            ],
         },
-    )
+    }
+    if ai:
+        template = request.pop("prepared_plan")
+        request["prompt"] = (
+            "Calculate the SHA-256 checksum of the selected file using the registered sha256 recipe. "
+            "Return a ready plan using this exact argv, outputs, stage and runtime profile. "
+            "No question is needed because the input and all execution details are supplied. "
+            "Include evidence from request and catalog. Plan template: "
+            + json.dumps(template)
+        )
+    preview = client.call("POST", "/job-previews", request)
     preview = client.poll(
-        "/job-previews/" + preview["id"], {"inspecting", "planning", "validating"}, 15
+        "/job-previews/" + preview["id"], {"inspecting", "planning", "validating"}, 90
     )
     if preview["state"] != "ready":
         raise RuntimeError(f"Preview failed: {preview['error_code']}")
@@ -314,12 +318,18 @@ def main():
     parser.add_argument("--ca", required=True)
     parser.add_argument("--credential-file", type=Path, required=True)
     parser.add_argument("--text", default="Campus Edge Fabric — проверка — 校园计算")
+    parser.add_argument(
+        "--ai",
+        action="store_true",
+        help="Obtain and validate the plan using the configured LLM",
+    )
     args = parser.parse_args()
     credentials = json.loads(args.credential_file.read_text())
     run(
         Client(args.origin, args.ca, credentials),
         Client(args.origin, args.ca, None),
         args.text,
+        ai=args.ai,
     )
 
 

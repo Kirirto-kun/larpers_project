@@ -77,11 +77,6 @@ export function App() {
         </footer>
       </aside>
       <div className="main">
-        <div className="topbar">
-          <span>
-            <b>larpool</b>
-          </span>
-        </div>
         <main className="content">
           <Routes>
             <Route path="/" element={<Overview />} />

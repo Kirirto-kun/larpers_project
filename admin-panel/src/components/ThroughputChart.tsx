@@ -40,9 +40,15 @@ export function ThroughputChart({ report: b }: { report: Benchmark }) {
         </div>
       )}
       {rows.map((r) => (
-        <div className="chart-row" key={r.name}>
+        <div
+          className={
+            "chart-row comparison-row" +
+            (r.name === "Pool" ? " pool-comparison" : "")
+          }
+          key={r.name}
+        >
           <span>{r.name}</span>
-          <div>
+          <div className="comparison-track">
             <div
               className="bar"
               style={{

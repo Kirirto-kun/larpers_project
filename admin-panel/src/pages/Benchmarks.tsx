@@ -5,6 +5,7 @@ import { useResource } from "../lib/hooks";
 import { post, errorText } from "../lib/api";
 import type { Benchmark, Node } from "../lib/types";
 import { PageHeader, ErrorBox, Empty, Status } from "../components/Common";
+import { RunDistribution } from "../components/RunDistribution";
 import { ThroughputChart } from "../components/ThroughputChart";
 import { Button } from "../components/ui/button";
 export function Benchmarks({ admin }: { admin: boolean }) {
@@ -170,6 +171,7 @@ export function Benchmarks({ admin }: { admin: boolean }) {
             {report.workload} / {report.experiment_id}
           </h2>
           <ThroughputChart report={report} />
+          <RunDistribution report={report} />
           <dl>
             <dt>Input digest</dt>
             <dd>

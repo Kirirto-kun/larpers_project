@@ -1,0 +1,15 @@
+.env
+.venv/
+__pycache__/
+.pytest_cache/
+.ruff_cache/
+*.pyc
+/campus-data/
+/apps/portal/src/generated/
+/apps/console/src/generated/
+/runner/internal/generated/
+/sdk/python/campus/generated/
+/apps/portal/dist/
+/apps/console/dist/
+/campus-local-ca.pem
+/campus-smoke-credential.json

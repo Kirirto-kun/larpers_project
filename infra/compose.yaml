@@ -1,0 +1,71 @@
+services:
+  db:
+    image: postgres:17.12-alpine@sha256:34261f594522cf41dfcb76aefd42b9d201098b0e6b23c9c68733f169e4218b6f
+    environment:
+      POSTGRES_USER: campus
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-campus}
+      POSTGRES_DB: campus
+    ports:
+      - "127.0.0.1:${POSTGRES_PORT:-5432}:5432"
+    volumes:
+      - database:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U campus -d campus"]
+      interval: 2s
+      timeout: 3s
+      retries: 30
+
+  api:
+    build:
+      context: ..
+      dockerfile: infra/Dockerfile
+    init: true
+    environment:
+      DATABASE_URL: postgresql+psycopg://campus:${POSTGRES_PASSWORD:-campus}@db:5432/campus
+      PUBLIC_ORIGIN: ${PUBLIC_ORIGIN:-https://localhost:8443}
+      SECURE_COOKIES: "true"
+      STORAGE_DIR: /state
+      PORTAL_DIST: /ui/portal
+      CONSOLE_DIST: /ui/console
+      CATALOG_FILE: ${CATALOG_FILE:-}
+      TLS_FINGERPRINT_SHA256: ${TLS_FINGERPRINT_SHA256:-}
+      LLM_PROVIDER: ${LLM_PROVIDER:-disabled}
+      LLM_BASE_URL: ${LLM_BASE_URL:-}
+      LLM_MODEL: ${LLM_MODEL:-}
+      LLM_API_KEY: ${LLM_API_KEY:-}
+      LLM_JSON_MODE: ${LLM_JSON_MODE:-json_object}
+    volumes:
+      - artifacts:/state
+      - ../apps/portal/dist:/ui/portal:ro
+      - ../apps/console/dist:/ui/console:ro
+      - ./catalog:/catalog:ro
+    depends_on:
+      db:
+        condition: service_healthy
+    command:
+      - sh
+      - -ec
+      - |
+        alembic -c /app/server/alembic.ini upgrade head
+        exec uvicorn campus.main:app --host 0.0.0.0 --port 8000 --no-access-log --proxy-headers --forwarded-allow-ips '*'
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+
+  gateway:
+    image: caddy:2.10.2-alpine@sha256:4c6e91c6ed0e2fa03efd5b44747b625fec79bc9cd06ac5235a779726618e530d
+    environment:
+      CAMPUS_HOST: ${CAMPUS_HOST:-localhost}
+    ports:
+      - "${CAMPUS_BIND:-127.0.0.1}:${CAMPUS_PORT:-8443}:443"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - tls:/data
+      - caddy_config:/config
+    depends_on:
+      - api
+
+volumes:
+  database:
+  artifacts:
+  tls:
+  caddy_config:

@@ -1,0 +1,567 @@
+{
+  "responses": {
+    "health": {
+      "schema": null,
+      "body": {
+        "status": "ok"
+      },
+      "status": 200
+    },
+    "protocol": {
+      "schema": "Protocol",
+      "body": {
+        "lease_ms": 60000,
+        "heartbeat_interval_ms": 10000,
+        "long_poll_ms": 25000
+      },
+      "status": 200
+    },
+    "me": {
+      "schema": "Identity",
+      "body": {
+        "id": "00000000-0000-4000-8000-000000000001",
+        "name": "Fixture user",
+        "pool_id": "00000000-0000-4000-8000-000000000001",
+        "role": "owner"
+      },
+      "status": 200
+    },
+    "get_preview": {
+      "schema": "Preview",
+      "body": {
+        "id": "00000000-0000-4000-8000-000000000004",
+        "state": "ready",
+        "plan_revision": 1,
+        "plan": {
+          "plan_revision": 1,
+          "input_manifest_digest": "1111111111111111111111111111111111111111111111111111111111111111",
+          "execution_kind": "single",
+          "job_deadline_at": "2026-11-14T07:00:00Z",
+          "retry_policy": {},
+          "stages": [
+            {
+              "stage_id": "embed",
+              "adapter": {
+                "id": "embeddings",
+                "version": "1"
+              },
+              "variants": [
+                {
+                  "variant_id": "cpu",
+                  "image_digest": "campus/embeddings@sha256:1111111111111111111111111111111111111111111111111111111111111111",
+                  "platform": "linux/arm64",
+                  "accelerator": "cpu",
+                  "resource_requirements": {
+                    "cpu_millis": 1000,
+                    "memory_bytes": 268435456,
+                    "disk_bytes": 1048576,
+                    "gpu_slots": 0,
+                    "vram_bytes": 0
+                  }
+                }
+              ],
+              "argv": [
+                "python",
+                "embed.py"
+              ],
+              "working_dir": "/workspace",
+              "outputs": [
+                {
+                  "path": "vectors.json",
+                  "max_bytes": 1048576
+                }
+              ],
+              "task_deadline_ms": 30000,
+              "validation_policy": "full",
+              "resume_policy": "restart"
+            }
+          ]
+        },
+        "plan_digest": "1111111111111111111111111111111111111111111111111111111111111111"
+      },
+      "status": 200
+    },
+    "create_preview": {
+      "schema": "Preview",
+      "body": {
+        "id": "00000000-0000-4000-8000-000000000004",
+        "state": "ready",
+        "plan_revision": 1,
+        "plan": {
+          "plan_revision": 1,
+          "input_manifest_digest": "1111111111111111111111111111111111111111111111111111111111111111",
+          "execution_kind": "single",
+          "job_deadline_at": "2026-11-14T07:00:00Z",
+          "retry_policy": {},
+          "stages": [
+            {
+              "stage_id": "embed",
+              "adapter": {
+                "id": "embeddings",
+                "version": "1"
+              },
+              "variants": [
+                {
+                  "variant_id": "cpu",
+                  "image_digest": "campus/embeddings@sha256:1111111111111111111111111111111111111111111111111111111111111111",
+                  "platform": "linux/arm64",
+                  "accelerator": "cpu",
+                  "resource_requirements": {
+                    "cpu_millis": 1000,
+                    "memory_bytes": 268435456,
+                    "disk_bytes": 1048576,
+                    "gpu_slots": 0,
+                    "vram_bytes": 0
+                  }
+                }
+              ],
+              "argv": [
+                "python",
+                "embed.py"
+              ],
+              "working_dir": "/workspace",
+              "outputs": [
+                {
+                  "path": "vectors.json",
+                  "max_bytes": 1048576
+                }
+              ],
+              "task_deadline_ms": 30000,
+              "validation_policy": "full",
+              "resume_policy": "restart"
+            }
+          ]
+        },
+        "plan_digest": "1111111111111111111111111111111111111111111111111111111111111111"
+      },
+      "status": 202
+    },
+    "answer_preview": {
+      "schema": "Preview",
+      "body": {
+        "id": "00000000-0000-4000-8000-000000000004",
+        "state": "planning",
+        "plan_revision": 2,
+        "plan": {
+          "plan_revision": 1,
+          "input_manifest_digest": "1111111111111111111111111111111111111111111111111111111111111111",
+          "execution_kind": "single",
+          "job_deadline_at": "2026-11-14T07:00:00Z",
+          "retry_policy": {},
+          "stages": [
+            {
+              "stage_id": "embed",
+              "adapter": {
+                "id": "embeddings",
+                "version": "1"
+              },
+              "variants": [
+                {
+                  "variant_id": "cpu",
+                  "image_digest": "campus/embeddings@sha256:1111111111111111111111111111111111111111111111111111111111111111",
+                  "platform": "linux/arm64",
+                  "accelerator": "cpu",
+                  "resource_requirements": {
+                    "cpu_millis": 1000,
+                    "memory_bytes": 268435456,
+                    "disk_bytes": 1048576,
+                    "gpu_slots": 0,
+                    "vram_bytes": 0
+                  }
+                }
+              ],
+              "argv": [
+                "python",
+                "embed.py"
+              ],
+              "working_dir": "/workspace",
+              "outputs": [
+                {
+                  "path": "vectors.json",
+                  "max_bytes": 1048576
+                }
+              ],
+              "task_deadline_ms": 30000,
+              "validation_policy": "full",
+              "resume_policy": "restart"
+            }
+          ]
+        },
+        "plan_digest": "1111111111111111111111111111111111111111111111111111111111111111",
+        "question": null
+      },
+      "status": 202
+    },
+    "cancel_preview": {
+      "schema": "Preview",
+      "body": {
+        "id": "00000000-0000-4000-8000-000000000004",
+        "state": "cancelled",
+        "plan_revision": 1,
+        "plan": {
+          "plan_revision": 1,
+          "input_manifest_digest": "1111111111111111111111111111111111111111111111111111111111111111",
+          "execution_kind": "single",
+          "job_deadline_at": "2026-11-14T07:00:00Z",
+          "retry_policy": {},
+          "stages": [
+            {
+              "stage_id": "embed",
+              "adapter": {
+                "id": "embeddings",
+                "version": "1"
+              },
+              "variants": [
+                {
+                  "variant_id": "cpu",
+                  "image_digest": "campus/embeddings@sha256:1111111111111111111111111111111111111111111111111111111111111111",
+                  "platform": "linux/arm64",
+                  "accelerator": "cpu",
+                  "resource_requirements": {
+                    "cpu_millis": 1000,
+                    "memory_bytes": 268435456,
+                    "disk_bytes": 1048576,
+                    "gpu_slots": 0,
+                    "vram_bytes": 0
+                  }
+                }
+              ],
+              "argv": [
+                "python",
+                "embed.py"
+              ],
+              "working_dir": "/workspace",
+              "outputs": [
+                {
+                  "path": "vectors.json",
+                  "max_bytes": 1048576
+                }
+              ],
+              "task_deadline_ms": 30000,
+              "validation_policy": "full",
+              "resume_policy": "restart"
+            }
+          ]
+        },
+        "plan_digest": "1111111111111111111111111111111111111111111111111111111111111111"
+      },
+      "status": 200
+    },
+    "get_job": {
+      "schema": "Job",
+      "body": {
+        "id": "00000000-0000-4000-8000-000000000002",
+        "owner_id": "00000000-0000-4000-8000-000000000001",
+        "state": "queued",
+        "purpose": "work",
+        "created_at": "2026-11-14T06:00:00Z",
+        "accepted_units": 0,
+        "failed_units": 0,
+        "total_units": 1,
+        "tasks": [
+          {
+            "id": "00000000-0000-4000-8000-000000000005",
+            "stage_id": "embed",
+            "state": "retry_wait",
+            "generation": 2,
+            "units": 1,
+            "node_id": "00000000-0000-4000-8000-000000000003",
+            "error_code": "LEASE_EXPIRED"
+          }
+        ],
+        "artifacts": []
+      },
+      "status": 200
+    },
+    "create_job": {
+      "schema": "Job",
+      "body": {
+        "id": "00000000-0000-4000-8000-000000000002",
+        "owner_id": "00000000-0000-4000-8000-000000000001",
+        "state": "queued",
+        "purpose": "work",
+        "created_at": "2026-11-14T06:00:00Z",
+        "accepted_units": 0,
+        "failed_units": 0,
+        "total_units": 1,
+        "tasks": [
+          {
+            "id": "00000000-0000-4000-8000-000000000005",
+            "stage_id": "embed",
+            "state": "retry_wait",
+            "generation": 2,
+            "units": 1,
+            "node_id": "00000000-0000-4000-8000-000000000003",
+            "error_code": "LEASE_EXPIRED"
+          }
+        ],
+        "artifacts": []
+      },
+      "status": 201
+    },
+    "cancel_job": {
+      "schema": "Job",
+      "body": {
+        "id": "00000000-0000-4000-8000-000000000002",
+        "owner_id": "00000000-0000-4000-8000-000000000001",
+        "state": "cancelled",
+        "purpose": "work",
+        "created_at": "2026-11-14T06:00:00Z",
+        "accepted_units": 0,
+        "failed_units": 0,
+        "total_units": 1,
+        "tasks": [
+          {
+            "id": "00000000-0000-4000-8000-000000000005",
+            "stage_id": "embed",
+            "state": "retry_wait",
+            "generation": 2,
+            "units": 1,
+            "node_id": "00000000-0000-4000-8000-000000000003",
+            "error_code": "LEASE_EXPIRED"
+          }
+        ],
+        "artifacts": []
+      },
+      "status": 200
+    },
+    "get_node": {
+      "schema": "Node",
+      "body": {
+        "id": "00000000-0000-4000-8000-000000000003",
+        "name": "Fixture laptop",
+        "state": "ready",
+        "capabilities": {
+          "os": "linux",
+          "arch": "arm64",
+          "cpu_logical": 8,
+          "memory_available_bytes": 1073741824,
+          "disk_available_bytes": 1073741824,
+          "runtime": {
+            "type": "docker",
+            "version": "29",
+            "healthy": true
+          },
+          "power_state": "ac",
+          "offered_budget": {
+            "cpu_millis": 1000,
+            "memory_bytes": 268435456,
+            "disk_bytes": 1048576,
+            "gpu_slots": 0,
+            "vram_bytes": 0
+          },
+          "preflight_revision": 1
+        },
+        "last_seen_at": "2026-11-14T06:00:00Z",
+        "accepted_units": 0,
+        "active_attempts": 0
+      },
+      "status": 200
+    },
+    "control_node": {
+      "schema": "Node",
+      "body": {
+        "id": "00000000-0000-4000-8000-000000000003",
+        "name": "Fixture laptop",
+        "state": "draining",
+        "capabilities": {
+          "os": "linux",
+          "arch": "arm64",
+          "cpu_logical": 8,
+          "memory_available_bytes": 1073741824,
+          "disk_available_bytes": 1073741824,
+          "runtime": {
+            "type": "docker",
+            "version": "29",
+            "healthy": true
+          },
+          "power_state": "ac",
+          "offered_budget": {
+            "cpu_millis": 1000,
+            "memory_bytes": 268435456,
+            "disk_bytes": 1048576,
+            "gpu_slots": 0,
+            "vram_bytes": 0
+          },
+          "preflight_revision": 1
+        },
+        "last_seen_at": "2026-11-14T06:00:00Z",
+        "accepted_units": 0,
+        "active_attempts": 0
+      },
+      "status": 200
+    },
+    "pool_summary": {
+      "schema": "PoolSummary",
+      "body": {
+        "pool_id": "00000000-0000-4000-8000-000000000001",
+        "nodes": 1,
+        "ready_nodes": 1,
+        "jobs_by_state": {
+          "queued": 1
+        },
+        "accepted_units": 0
+      },
+      "status": 200
+    },
+    "job_logs": {
+      "schema": "LogPage",
+      "body": {
+        "entries": [],
+        "cursor": 0,
+        "truncated": false
+      },
+      "status": 200
+    },
+    "pool_events": {
+      "schema": "EventPage",
+      "body": {
+        "events": [
+          {
+            "event_id": 1,
+            "occurred_at": "2026-11-14T06:00:00Z",
+            "entity_type": "node",
+            "entity_id": "00000000-0000-4000-8000-000000000003",
+            "type": "node_updated",
+            "payload": {
+              "state": "ready"
+            }
+          }
+        ],
+        "cursor": 1
+      },
+      "status": 200
+    },
+    "job_events": {
+      "schema": "EventPage",
+      "body": {
+        "events": [
+          {
+            "event_id": 1,
+            "occurred_at": "2026-11-14T06:00:00Z",
+            "entity_type": "job",
+            "entity_id": "00000000-0000-4000-8000-000000000002",
+            "type": "job_updated",
+            "payload": {
+              "state": "queued"
+            }
+          }
+        ],
+        "cursor": 1
+      },
+      "status": 200
+    },
+    "preview_events": {
+      "schema": "EventPage",
+      "body": {
+        "events": [
+          {
+            "event_id": 1,
+            "occurred_at": "2026-11-14T06:00:00Z",
+            "entity_type": "preview",
+            "entity_id": "00000000-0000-4000-8000-000000000004",
+            "type": "preview_updated",
+            "payload": {
+              "state": "ready"
+            }
+          }
+        ],
+        "cursor": 1
+      },
+      "status": 200
+    },
+    "list_recipes": {
+      "schema": null,
+      "body": [
+        {
+          "id": "embeddings",
+          "name": "Search documents",
+          "description": "Create a searchable document index",
+          "adapter": {
+            "id": "embeddings",
+            "version": "1"
+          }
+        }
+      ],
+      "status": 200
+    },
+    "list_environments": {
+      "schema": null,
+      "body": [],
+      "status": 200
+    },
+    "list_jobs": {
+      "schema": null,
+      "body": [
+        {
+          "id": "00000000-0000-4000-8000-000000000002",
+          "owner_id": "00000000-0000-4000-8000-000000000001",
+          "state": "queued",
+          "purpose": "work",
+          "created_at": "2026-11-14T06:00:00Z",
+          "accepted_units": 0,
+          "failed_units": 0,
+          "total_units": 1,
+          "tasks": [
+            {
+              "id": "00000000-0000-4000-8000-000000000005",
+              "stage_id": "embed",
+              "state": "retry_wait",
+              "generation": 2,
+              "units": 1,
+              "node_id": "00000000-0000-4000-8000-000000000003",
+              "error_code": "LEASE_EXPIRED"
+            }
+          ],
+          "artifacts": []
+        }
+      ],
+      "status": 200
+    },
+    "list_nodes": {
+      "schema": null,
+      "body": [
+        {
+          "id": "00000000-0000-4000-8000-000000000003",
+          "name": "Fixture laptop",
+          "state": "ready",
+          "capabilities": {
+            "os": "linux",
+            "arch": "arm64",
+            "cpu_logical": 8,
+            "memory_available_bytes": 1073741824,
+            "disk_available_bytes": 1073741824,
+            "runtime": {
+              "type": "docker",
+              "version": "29",
+              "healthy": true
+            },
+            "power_state": "ac",
+            "offered_budget": {
+              "cpu_millis": 1000,
+              "memory_bytes": 268435456,
+              "disk_bytes": 1048576,
+              "gpu_slots": 0,
+              "vram_bytes": 0
+            },
+            "preflight_revision": 1
+          },
+          "last_seen_at": "2026-11-14T06:00:00Z",
+          "accepted_units": 0,
+          "active_attempts": 0
+        }
+      ],
+      "status": 200
+    },
+    "list_credits": {
+      "schema": null,
+      "body": [],
+      "status": 200
+    },
+    "list_benchmarks": {
+      "schema": null,
+      "body": [],
+      "status": 200
+    }
+  }
+}

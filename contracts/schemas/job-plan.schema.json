@@ -1,0 +1,441 @@
+{
+  "$defs": {
+    "AdapterRef": {
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "pattern": "^[a-zA-Z0-9][a-zA-Z0-9._-]{0,63}$",
+          "title": "Id",
+          "type": "string"
+        },
+        "version": {
+          "pattern": "^[a-zA-Z0-9][a-zA-Z0-9._-]{0,63}$",
+          "title": "Version",
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "version"
+      ],
+      "title": "AdapterRef",
+      "type": "object"
+    },
+    "Evidence": {
+      "additionalProperties": false,
+      "properties": {
+        "detail": {
+          "maxLength": 256,
+          "minLength": 1,
+          "title": "Detail",
+          "type": "string"
+        },
+        "source": {
+          "maxLength": 512,
+          "minLength": 1,
+          "title": "Source",
+          "type": "string"
+        }
+      },
+      "required": [
+        "source",
+        "detail"
+      ],
+      "title": "Evidence",
+      "type": "object"
+    },
+    "InputBinding": {
+      "additionalProperties": false,
+      "properties": {
+        "archive": {
+          "default": false,
+          "title": "Archive",
+          "type": "boolean"
+        },
+        "artifact_id": {
+          "format": "uuid",
+          "title": "Artifact Id",
+          "type": "string"
+        },
+        "mount_path": {
+          "maxLength": 512,
+          "minLength": 1,
+          "title": "Mount Path",
+          "type": "string"
+        }
+      },
+      "required": [
+        "artifact_id",
+        "mount_path"
+      ],
+      "title": "InputBinding",
+      "type": "object"
+    },
+    "JobPlan": {
+      "additionalProperties": false,
+      "properties": {
+        "assumptions": {
+          "items": {
+            "maxLength": 256,
+            "minLength": 1,
+            "type": "string"
+          },
+          "maxItems": 24,
+          "title": "Assumptions",
+          "type": "array"
+        },
+        "evidence": {
+          "items": {
+            "$ref": "#/$defs/Evidence"
+          },
+          "maxItems": 64,
+          "title": "Evidence",
+          "type": "array"
+        },
+        "execution_kind": {
+          "enum": [
+            "single",
+            "map",
+            "dag"
+          ],
+          "title": "Execution Kind",
+          "type": "string"
+        },
+        "input_manifest_digest": {
+          "pattern": "^[a-f0-9]{64}$",
+          "title": "Input Manifest Digest",
+          "type": "string"
+        },
+        "job_deadline_at": {
+          "format": "date-time",
+          "title": "Job Deadline At",
+          "type": "string"
+        },
+        "plan_revision": {
+          "exclusiveMinimum": 0.0,
+          "maximum": 9.223372036854776e+18,
+          "title": "Plan Revision",
+          "type": "integer"
+        },
+        "project_digest": {
+          "anyOf": [
+            {
+              "pattern": "^[a-f0-9]{64}$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Project Digest"
+        },
+        "questions": {
+          "items": {
+            "$ref": "#/$defs/Question"
+          },
+          "maxItems": 1,
+          "title": "Questions",
+          "type": "array"
+        },
+        "retry_policy": {
+          "$ref": "#/$defs/RetryPolicy"
+        },
+        "schema_version": {
+          "const": "1",
+          "default": "1",
+          "title": "Schema Version",
+          "type": "string"
+        },
+        "stages": {
+          "items": {
+            "$ref": "#/$defs/Stage"
+          },
+          "maxItems": 24,
+          "minItems": 1,
+          "title": "Stages",
+          "type": "array"
+        }
+      },
+      "required": [
+        "plan_revision",
+        "input_manifest_digest",
+        "execution_kind",
+        "stages",
+        "job_deadline_at",
+        "retry_policy"
+      ],
+      "title": "JobPlan",
+      "type": "object"
+    },
+    "Output": {
+      "additionalProperties": false,
+      "properties": {
+        "max_bytes": {
+          "exclusiveMinimum": 0.0,
+          "maximum": 9.223372036854776e+18,
+          "title": "Max Bytes",
+          "type": "integer"
+        },
+        "path": {
+          "maxLength": 512,
+          "minLength": 1,
+          "title": "Path",
+          "type": "string"
+        },
+        "required": {
+          "default": true,
+          "title": "Required",
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "path",
+        "max_bytes"
+      ],
+      "title": "Output",
+      "type": "object"
+    },
+    "Question": {
+      "additionalProperties": false,
+      "properties": {
+        "prompt": {
+          "maxLength": 256,
+          "minLength": 1,
+          "title": "Prompt",
+          "type": "string"
+        },
+        "question_id": {
+          "pattern": "^[a-zA-Z0-9][a-zA-Z0-9._-]{0,63}$",
+          "title": "Question Id",
+          "type": "string"
+        }
+      },
+      "required": [
+        "question_id",
+        "prompt"
+      ],
+      "title": "Question",
+      "type": "object"
+    },
+    "Resources": {
+      "additionalProperties": false,
+      "properties": {
+        "cpu_millis": {
+          "exclusiveMinimum": 0.0,
+          "maximum": 9.223372036854776e+18,
+          "title": "Cpu Millis",
+          "type": "integer"
+        },
+        "disk_bytes": {
+          "exclusiveMinimum": 0.0,
+          "maximum": 9.223372036854776e+18,
+          "title": "Disk Bytes",
+          "type": "integer"
+        },
+        "gpu_slots": {
+          "default": 0,
+          "maximum": 64.0,
+          "minimum": 0.0,
+          "title": "Gpu Slots",
+          "type": "integer"
+        },
+        "memory_bytes": {
+          "exclusiveMinimum": 0.0,
+          "maximum": 9.223372036854776e+18,
+          "title": "Memory Bytes",
+          "type": "integer"
+        },
+        "vram_bytes": {
+          "default": 0,
+          "maximum": 9.223372036854776e+18,
+          "minimum": 0.0,
+          "title": "Vram Bytes",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "cpu_millis",
+        "memory_bytes",
+        "disk_bytes"
+      ],
+      "title": "Resources",
+      "type": "object"
+    },
+    "RetryPolicy": {
+      "additionalProperties": false,
+      "properties": {
+        "backoff_ms": {
+          "default": 1000,
+          "maximum": 60000.0,
+          "minimum": 0.0,
+          "title": "Backoff Ms",
+          "type": "integer"
+        },
+        "max_attempts": {
+          "default": 3,
+          "maximum": 3.0,
+          "minimum": 1.0,
+          "title": "Max Attempts",
+          "type": "integer"
+        }
+      },
+      "title": "RetryPolicy",
+      "type": "object"
+    },
+    "Stage": {
+      "additionalProperties": false,
+      "properties": {
+        "adapter": {
+          "$ref": "#/$defs/AdapterRef"
+        },
+        "argv": {
+          "items": {
+            "maxLength": 4096,
+            "type": "string"
+          },
+          "maxItems": 64,
+          "minItems": 1,
+          "title": "Argv",
+          "type": "array"
+        },
+        "bindings": {
+          "items": {
+            "$ref": "#/$defs/InputBinding"
+          },
+          "maxItems": 32,
+          "title": "Bindings",
+          "type": "array"
+        },
+        "depends_on": {
+          "items": {
+            "pattern": "^[a-zA-Z0-9][a-zA-Z0-9._-]{0,63}$",
+            "type": "string"
+          },
+          "maxItems": 24,
+          "title": "Depends On",
+          "type": "array"
+        },
+        "network_policy": {
+          "const": "none",
+          "default": "none",
+          "title": "Network Policy",
+          "type": "string"
+        },
+        "outputs": {
+          "items": {
+            "$ref": "#/$defs/Output"
+          },
+          "maxItems": 32,
+          "minItems": 1,
+          "title": "Outputs",
+          "type": "array"
+        },
+        "parameters": {
+          "additionalProperties": true,
+          "maxProperties": 32,
+          "title": "Parameters",
+          "type": "object"
+        },
+        "resume_policy": {
+          "enum": [
+            "checkpoint",
+            "restart",
+            "unsupported"
+          ],
+          "title": "Resume Policy",
+          "type": "string"
+        },
+        "stage_id": {
+          "pattern": "^[a-zA-Z0-9][a-zA-Z0-9._-]{0,63}$",
+          "title": "Stage Id",
+          "type": "string"
+        },
+        "task_deadline_ms": {
+          "maximum": 86400000.0,
+          "minimum": 1000.0,
+          "title": "Task Deadline Ms",
+          "type": "integer"
+        },
+        "validation_policy": {
+          "pattern": "^[a-zA-Z0-9][a-zA-Z0-9._-]{0,63}$",
+          "title": "Validation Policy",
+          "type": "string"
+        },
+        "variants": {
+          "items": {
+            "$ref": "#/$defs/Variant"
+          },
+          "maxItems": 8,
+          "minItems": 1,
+          "title": "Variants",
+          "type": "array"
+        },
+        "working_dir": {
+          "maxLength": 512,
+          "minLength": 1,
+          "title": "Working Dir",
+          "type": "string"
+        }
+      },
+      "required": [
+        "stage_id",
+        "adapter",
+        "variants",
+        "argv",
+        "working_dir",
+        "outputs",
+        "task_deadline_ms",
+        "validation_policy",
+        "resume_policy"
+      ],
+      "title": "Stage",
+      "type": "object"
+    },
+    "Variant": {
+      "additionalProperties": false,
+      "properties": {
+        "accelerator": {
+          "enum": [
+            "cpu",
+            "cuda"
+          ],
+          "title": "Accelerator",
+          "type": "string"
+        },
+        "image_digest": {
+          "maxLength": 256,
+          "pattern": "^[a-z0-9][a-z0-9./:_-]*@sha256:[a-f0-9]{64}$",
+          "title": "Image Digest",
+          "type": "string"
+        },
+        "platform": {
+          "enum": [
+            "linux/amd64",
+            "linux/arm64"
+          ],
+          "title": "Platform",
+          "type": "string"
+        },
+        "resource_requirements": {
+          "$ref": "#/$defs/Resources"
+        },
+        "variant_id": {
+          "pattern": "^[a-zA-Z0-9][a-zA-Z0-9._-]{0,63}$",
+          "title": "Variant Id",
+          "type": "string"
+        }
+      },
+      "required": [
+        "variant_id",
+        "image_digest",
+        "platform",
+        "accelerator",
+        "resource_requirements"
+      ],
+      "title": "Variant",
+      "type": "object"
+    }
+  },
+  "$ref": "#/$defs/JobPlan",
+  "$schema": "https://json-schema.org/draft/2020-12/schema"
+}

@@ -17,7 +17,7 @@ class Driver(unittest.TestCase):
         requests=[]
         def send(request,timeout):
             requests.append(request);return Response(payloads.pop(0))
-        with TemporaryDirectory() as directory, patch.object(driver.urllib.request,'urlopen',send):
+        with TemporaryDirectory() as directory, patch.object(driver,'open_request',send):
             result=driver.collect('http://127.0.0.1:8000',{'concurrency':2},Path(directory),token='not-a-real-token',interval=0)
             self.assertEqual(result['state'],'succeeded')
             self.assertEqual(requests[0].get_method(),'POST')
@@ -26,10 +26,22 @@ class Driver(unittest.TestCase):
             self.assertEqual(json.loads((Path(directory)/'raw.json').read_text())['records'],[])
             self.assertNotIn('not-a-real-token',''.join(f.read_text() for f in Path(directory).iterdir()))
     def test_timeout_keeps_id_and_does_not_resubmit(self):
-        with TemporaryDirectory() as directory, patch.object(driver.urllib.request,'urlopen',side_effect=[Response({'id':'b-1'}),Response({'id':'b-1','state':'running'})]) as send:
+        with TemporaryDirectory() as directory, patch.object(driver,'open_request',side_effect=[Response({'id':'b-1'}),Response({'id':'b-1','state':'running'})]) as send:
             with self.assertRaises(TimeoutError):driver.collect('http://localhost:8000',{},Path(directory),timeout=0)
             self.assertEqual(send.call_count,2)
             self.assertEqual(json.loads((Path(directory)/'created.json').read_text())['id'],'b-1')
+    def test_resume_never_resubmits_and_mismatch_is_rejected(self):
+        with TemporaryDirectory() as directory:
+            out=Path(directory)
+            with patch.object(driver,'open_request',side_effect=[Response({'id':'b-1'}),Response({'id':'b-1','state':'running'})]):
+                with self.assertRaises(TimeoutError):driver.collect('http://localhost:8000',{'a':1},out,timeout=0)
+            with patch.object(driver,'open_request',side_effect=[Response({'id':'b-1','state':'succeeded'}),Response({'records':[]})]) as send:
+                driver.collect('http://localhost:8000',{'a':1},out,resume=True)
+                self.assertTrue(all(call.args[0].get_method()=='GET' for call in send.call_args_list))
+            with self.assertRaises(ValueError):driver.collect('http://localhost:8000',{'a':2},out,resume=True)
+            with self.assertRaises(ValueError):driver.collect('http://localhost:8000',{'a':1},out)
+    def test_redirect_is_rejected(self):
+        with self.assertRaises(ValueError):driver.NoRedirect().redirect_request(None,None,302,'',{},'https://other.example')
     def test_remote_http_and_url_credentials_rejected(self):
         for url in ['http://campus.example','https://user:password@example.com','file:///tmp/data']:
             with self.subTest(url=url),TemporaryDirectory() as directory:

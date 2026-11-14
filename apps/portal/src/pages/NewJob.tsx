@@ -24,6 +24,7 @@ export function NewJob() {
   const [busy, setBusy] = useState(false);
   const [progress, setProgress] = useState("");
   const key = useRef("");
+  const submittedRevision = useRef("");
   const lock = useRef(false);
   const generation = useRef(0);
   useEffect(() => {
@@ -38,7 +39,14 @@ export function NewJob() {
     const refresh = () => {
       void api<Preview>("/job-previews/" + id)
         .then((p) => {
-          if (live) setPreview(p);
+          if (live)
+            setPreview((previous) =>
+              previous &&
+              previous.id === p.id &&
+              previous.plan_revision > p.plan_revision
+                ? previous
+                : p,
+            );
         })
         .catch((e) => {
           if (live) setError(errorText(e));
@@ -120,7 +128,11 @@ export function NewJob() {
     lock.current = true;
     setBusy(true);
     try {
-      if (!key.current) key.current = crypto.randomUUID();
+      const revision = `${preview.id}:${preview.plan_revision}`;
+      if (!key.current || submittedRevision.current !== revision) {
+        key.current = crypto.randomUUID();
+        submittedRevision.current = revision;
+      }
       const job = await post<Job>(
         "/jobs",
         { preview_id: preview.id, plan_revision: preview.plan_revision },
@@ -216,8 +228,8 @@ export function NewJob() {
             </details>
           ))}
           <p className="muted">
-            No file fragments selected by default. Review the text for secrets
-            before sharing.
+            First 4 KiB of each supported text file are shown. No file fragments
+            selected by default. Review the text for secrets before sharing.
           </p>
           <label className="check">
             <input

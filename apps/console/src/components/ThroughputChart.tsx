@@ -4,7 +4,7 @@ import { Metric } from "./Common";
 export function ThroughputChart({ report: b }: { report: Benchmark }) {
   const c = comparison(b);
   const rows = [
-    ...b.node_ids.map((id) => ({
+    ...[...new Set(b.node_ids)].map((id) => ({
       name: id,
       value: median(b.standalone.find((s) => s.node_id === id)?.rates || []),
     })),
@@ -17,7 +17,7 @@ export function ThroughputChart({ report: b }: { report: Benchmark }) {
       <div className="metrics">
         <Metric
           label="Pool throughput"
-          value={c ? c.pool.toFixed(2) : "—"}
+          value={median(b.pool_rates)?.toFixed(2) ?? "—"}
           hint={b.unit + "/s"}
         />
         <Metric

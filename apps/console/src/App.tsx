@@ -25,6 +25,15 @@ export function App() {
       })
       .catch((e) => setError(errorText(e)));
   }, []);
+  useEffect(() => {
+    const expired = () => {
+      setSession(undefined);
+      setCsrf("");
+      setError("Your session expired. Sign in again through the portal.");
+    };
+    window.addEventListener("campus:unauthorized", expired);
+    return () => window.removeEventListener("campus:unauthorized", expired);
+  }, []);
   if (!session)
     return (
       <main className="login card">

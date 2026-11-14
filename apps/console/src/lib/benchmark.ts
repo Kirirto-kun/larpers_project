@@ -1,6 +1,7 @@
 import type { Benchmark } from "./types";
 export function median(v: number[]) {
-  const a = v.filter(Number.isFinite).sort((a, b) => a - b);
+  if (v.some((value) => !Number.isFinite(value) || value < 0)) return null;
+  const a = [...v].sort((a, b) => a - b);
   return a.length
     ? a.length % 2
       ? a[(a.length - 1) / 2]
@@ -8,6 +9,11 @@ export function median(v: number[]) {
     : null;
 }
 export function comparison(b: Benchmark) {
+  if (
+    new Set(b.node_ids).size !== b.node_ids.length ||
+    new Set(b.standalone.map((s) => s.node_id)).size !== b.standalone.length
+  )
+    return null;
   const rates = b.node_ids.map((id) =>
     median(b.standalone.find((s) => s.node_id === id)?.rates || []),
   );

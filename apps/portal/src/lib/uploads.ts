@@ -1,15 +1,27 @@
-import { api, post } from "./api";
+import { api, post, ApiError } from "./api";
 export function excluded(path: string) {
   return path
+    .replaceAll("\\", "/")
     .split("/")
-    .some(
-      (p) =>
-        p === ".git" ||
-        p === "node_modules" ||
-        p === ".env" ||
-        p.startsWith(".env.") ||
-        /\.(pem|key)$/i.test(p),
-    );
+    .some((segment) => {
+      const name = segment.toLowerCase();
+      return (
+        [
+          ".git",
+          "node_modules",
+          ".ssh",
+          ".aws",
+          ".azure",
+          ".npmrc",
+          ".pypirc",
+          "id_rsa",
+          "id_ed25519",
+        ].includes(name) ||
+        name === ".env" ||
+        name.startsWith(".env.") ||
+        /\.(pem|key)$/i.test(name)
+      );
+    });
 }
 export async function upload(file: File, progress: (n: number) => void) {
   const path = file.webkitRelativePath || file.name;
@@ -24,10 +36,25 @@ export async function upload(file: File, progress: (n: number) => void) {
     id = created.id;
     sessionStorage.setItem(key, id);
   }
-  const status = await api<{
+  let status: {
     part_size_bytes: number;
     uploaded_parts: number[];
-  }>("/uploads/" + id);
+    part_checksums?: Record<string, string>;
+  };
+  try {
+    status = await api<{
+      part_size_bytes: number;
+      uploaded_parts: number[];
+      part_checksums?: Record<string, string>;
+    }>("/uploads/" + id);
+  } catch (error) {
+    if (
+      error instanceof ApiError &&
+      ["404", "NOT_FOUND", "UPLOAD_EXPIRED"].includes(error.code)
+    )
+      sessionStorage.removeItem(key);
+    throw error;
+  }
   const partSize = status.part_size_bytes;
   if (!Number.isSafeInteger(partSize) || partSize <= 0)
     throw new Error("Invalid upload part size");
@@ -37,7 +64,7 @@ export async function upload(file: File, progress: (n: number) => void) {
     offset += partSize, part++
   ) {
     const blob = file.slice(offset, offset + partSize);
-    if (!status.uploaded_parts.includes(part)) {
+    {
       const digest = await crypto.subtle.digest(
         "SHA-256",
         await blob.arrayBuffer(),
@@ -45,14 +72,23 @@ export async function upload(file: File, progress: (n: number) => void) {
       const hex = Array.from(new Uint8Array(digest))
         .map((b) => b.toString(16).padStart(2, "0"))
         .join("");
-      await api("/uploads/" + id + "/parts/" + part, {
-        method: "PUT",
-        headers: {
-          "Content-Type": "application/octet-stream",
-          "X-Content-SHA256": hex,
-        },
-        body: blob,
-      });
+      const recorded = status.part_checksums?.[String(part)];
+      if (recorded && recorded !== hex) {
+        sessionStorage.removeItem(key);
+        throw new Error(
+          "Selected file differs from the interrupted upload. Retry to create a new upload.",
+        );
+      }
+      // Without a server checksum, re-send the part idempotently rather than trusting metadata alone.
+      if (!status.uploaded_parts.includes(part) || recorded !== hex)
+        await api("/uploads/" + id + "/parts/" + part, {
+          method: "PUT",
+          headers: {
+            "Content-Type": "application/octet-stream",
+            "X-Content-SHA256": hex,
+          },
+          body: blob,
+        });
     }
     progress(Math.min(file.size, offset + partSize));
   }

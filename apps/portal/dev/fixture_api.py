@@ -34,7 +34,7 @@ class Handler(BaseHTTPRequestHandler):
         if path.startswith('/jobs/'):return self.send(JOBS.get(path.split('/')[2],JOB))
         if path.startswith('/job-previews/'):return self.send(PREVIEW)
         if path.startswith('/uploads/'):
-            upload=UPLOADS.get(path.split('/')[2],{});return self.send({'part_size_bytes':1048576,'uploaded_parts':upload.get('parts',[])})
+            upload=UPLOADS.get(path.split('/')[2],{});return self.send({'part_size_bytes':1048576,'uploaded_parts':upload.get('parts',[]),'part_checksums':upload.get('checksums',{})})
         if path.startswith('/benchmarks/'):return self.send(BENCHMARKS.get(path.split('/')[2],BENCHMARK))
         self.send({'code':'NOT_FOUND','message':'Unknown fixture endpoint'},404)
     def do_POST(self):
@@ -60,7 +60,7 @@ class Handler(BaseHTTPRequestHandler):
         if path.endswith('/control'):NODE['state']={'drain':'draining','stop':'paused','resume':'ready','quarantine':'quarantined','release':'ready'}.get(data.get('action'),'ready')
         return self.send({})
     def do_PUT(self):
-        self.rfile.read(int(self.headers.get('Content-Length',0)));parts=self.path.split('/');identifier=parts[4];part=int(parts[-1]);UPLOADS.setdefault(identifier,{'parts':[]})['parts'].append(part);self.send({})
+        self.rfile.read(int(self.headers.get('Content-Length',0)));parts=self.path.split('/');identifier=parts[4];part=int(parts[-1]);UPLOADS.setdefault(identifier,{'parts':[]})['parts'].append(part);UPLOADS[identifier].setdefault('checksums',{})[str(part)]=self.headers.get('X-Content-SHA256');self.send({})
 if __name__=='__main__':
     print('SYNTHETIC UI FIXTURE API at http://127.0.0.1:8000 — no real compute, AI or measurements',flush=True)
     ThreadingHTTPServer(('127.0.0.1',8000),Handler).serve_forever()

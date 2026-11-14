@@ -18,6 +18,7 @@ export function Contribute() {
   } = useResource<Node[]>("/nodes", "/pool/events");
   const [os, setOs] = useState("macos");
   const [budget, setBudget] = useState(50);
+  const [memoryGiB, setMemoryGiB] = useState(2);
   const [gpu, setGpu] = useState(false);
   const [consent, setConsent] = useState(false);
   const [command, setCommand] = useState("");
@@ -28,7 +29,11 @@ export function Contribute() {
     try {
       const r = await post<{ command: string }>("/invitations", {
         os,
-        offered_budget: { cpu_percent: budget, gpu_allowed: gpu },
+        offered_budget: {
+          cpu_percent: budget,
+          memory_bytes: memoryGiB * 1073741824,
+          gpu_allowed: gpu,
+        },
         consent,
       });
       setCommand(r.command);
@@ -40,11 +45,15 @@ export function Contribute() {
     }
   }
   async function control(id: string, action: string) {
+    setBusy(true);
     try {
       await post("/nodes/" + id + "/control", { action });
       await refresh();
+      setError("");
     } catch (e) {
       setError(errorText(e));
+    } finally {
+      setBusy(false);
     }
   }
   return (
@@ -61,6 +70,7 @@ export function Contribute() {
           <label>
             Operating system
             <select
+              disabled={busy}
               value={os}
               onChange={(e) => {
                 setOs(e.target.value);
@@ -75,6 +85,7 @@ export function Contribute() {
           <label>
             CPU budget · {budget}%
             <input
+              disabled={busy}
               type="range"
               min="10"
               max="100"
@@ -86,8 +97,23 @@ export function Contribute() {
               }}
             />
           </label>
+          <label>
+            Memory budget (GiB)
+            <input
+              disabled={busy}
+              type="number"
+              min="1"
+              step="1"
+              value={memoryGiB}
+              onChange={(e) => {
+                setMemoryGiB(+e.target.value);
+                setCommand("");
+              }}
+            />
+          </label>
           <label className="check">
             <input
+              disabled={busy}
               type="checkbox"
               checked={gpu}
               onChange={(e) => {
@@ -103,6 +129,7 @@ export function Contribute() {
           </small>
           <label className="check">
             <input
+              disabled={busy}
               type="checkbox"
               checked={consent}
               onChange={(e) => {
@@ -112,7 +139,15 @@ export function Contribute() {
             />
             I own or have permission to contribute this device.
           </label>
-          <Button disabled={!consent || busy} onClick={invite}>
+          <Button
+            disabled={
+              !consent ||
+              busy ||
+              !Number.isSafeInteger(memoryGiB) ||
+              memoryGiB < 1
+            }
+            onClick={invite}
+          >
             Generate join command
           </Button>
           {command && (
@@ -190,6 +225,7 @@ export function Contribute() {
               {["drain", "stop", "resume"].map((action) => (
                 <Button
                   key={action}
+                  disabled={busy}
                   variant="outline"
                   onClick={() => void control(node.id, action)}
                 >

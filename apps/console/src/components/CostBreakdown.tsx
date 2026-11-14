@@ -14,6 +14,16 @@ interface Credits {
 }
 export function CostBreakdown() {
   const { data, error } = useResource<Credits>("/credits");
+  const complete =
+    !!data &&
+    data.costs.length > 0 &&
+    data.costs.every(
+      (c) => c.amount !== null && Number.isFinite(c.amount) && c.amount >= 0,
+    );
+  const perUnit =
+    complete && data && data.accepted_units > 0
+      ? data.costs.reduce((sum, c) => sum + c.amount!, 0) / data.accepted_units
+      : null;
   return (
     <section className="card">
       <h2>Contribution & operating costs</h2>
@@ -28,6 +38,15 @@ export function CostBreakdown() {
             Credits are internal accounting, not paid earnings. Cost currency:{" "}
             {data.currency}.
           </small>
+          <p>
+            Cost per accepted unit:{" "}
+            {perUnit === null
+              ? "Insufficient data"
+              : perUnit.toFixed(6) + " " + data.currency}
+            {perUnit !== null && data.costs.some((c) => c.estimated)
+              ? " (estimate)"
+              : ""}
+          </p>
           {data.costs.map((c) => (
             <div className="row" key={c.name}>
               <div>

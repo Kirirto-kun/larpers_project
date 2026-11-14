@@ -124,6 +124,7 @@ test("interrupted upload resumes missing parts with checksums and excludes secre
   const f = await fixtures(page);
   const parts: number[] = [];
   const accepted: number[] = [];
+  const checksums: Record<string, string> = {};
   let created = 0;
   let failed = false;
   await page.route("**/api/v1/uploads**", async (route) => {
@@ -137,7 +138,11 @@ test("interrupted upload resumes missing parts with checksums and excludes secre
       return route.fulfill({ json: { artifact_id: "input-1" } });
     if (request.method() === "GET")
       return route.fulfill({
-        json: { part_size_bytes: 4, uploaded_parts: accepted },
+        json: {
+          part_size_bytes: 4,
+          uploaded_parts: accepted,
+          part_checksums: checksums,
+        },
       });
     const part = Number(path.split("/").at(-1));
     parts.push(part);
@@ -150,10 +155,13 @@ test("interrupted upload resumes missing parts with checksums and excludes secre
       });
     }
     accepted.push(part);
+    checksums[String(part)] = request.headers()["x-content-sha256"];
     return route.fulfill({ json: {} });
   });
   await page.goto("new");
-  await page.getByRole("textbox", { name: "Request", exact: true }).fill("Index corpus");
+  await page
+    .getByRole("textbox", { name: "Request", exact: true })
+    .fill("Index corpus");
   await page.getByLabel("Project or dataset files").setInputFiles([
     {
       name: "corpus.txt",
@@ -179,9 +187,35 @@ test("interrupted upload resumes missing parts with checksums and excludes secre
 test("editing input invalidates the ready plan", async ({ page }) => {
   await fixtures(page);
   await prepare(page);
-  await page.getByRole("textbox", { name: "Request", exact: true }).fill("Different input");
+  await page
+    .getByRole("textbox", { name: "Request", exact: true })
+    .fill("Different input");
   await expect(
     page.getByRole("button", { name: "Run task", exact: true }),
   ).toHaveCount(0);
   await expect(page.getByLabel("I reviewed")).not.toBeChecked();
+});
+
+test("expired session returns to sign-in instead of trapping the member in a stale workspace", async ({
+  page,
+}) => {
+  await fixtures(page);
+  await page.goto("new");
+  await page
+    .getByRole("textbox", { name: "Request", exact: true })
+    .fill("Index documents");
+  await page.getByLabel("I reviewed").check();
+  await page.route("**/api/v1/job-previews", (route) =>
+    route.fulfill({
+      status: 401,
+      json: { code: "UNAUTHORIZED", message: "Session expired" },
+    }),
+  );
+  await page.getByRole("button", { name: "Prepare execution plan" }).click();
+  await expect(
+    page.getByRole("heading", { name: "Welcome to Campus Pool" }),
+  ).toBeVisible();
+  await expect(
+    page.getByRole("button", { name: "Sign in", exact: true }),
+  ).toBeEnabled();
 });

@@ -22,7 +22,7 @@ Identify at least one measured bottleneck (network, model startup, validator, di
 
 `python3 tools/benchmark/run.py --base-url https://COORDINATOR --config experiment.json --out docs/submission/results/RUN_ID`
 
-Set CAMPUS_BENCHMARK_TOKEN in the environment to an authorized scoped credential; do not commit it. The collector saves configuration, server experiment ID, snapshots, and raw export. Its provisional raw-export shape is documented in tools/benchmark/README.md; adapt at integration if needed.
+Set CAMPUS_BENCHMARK_TOKEN in the environment to an authorized scoped credential; do not commit it. The collector saves configuration, coordinator origin, server experiment ID, snapshots, and raw export. After a timeout, repeat the command with --resume and the same configuration/output directory; it never resubmits the experiment. Its provisional raw-export shape is documented in tools/benchmark/README.md; adapt at integration if needed.
 
 `python3 tools/benchmark/report.py --input docs/submission/results/RUN_ID/raw.json --out docs/submission/results/RUN_ID/report`
 

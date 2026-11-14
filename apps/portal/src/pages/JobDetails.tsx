@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useParams } from "react-router-dom";
 import { useResource } from "../lib/hooks";
 import { api, post, errorText } from "../lib/api";
@@ -9,6 +9,9 @@ import { Button } from "../components/ui/button";
 import { PageHeader, Status, ErrorBox, Metric } from "../components/Common";
 export function JobDetails() {
   const { id } = useParams();
+  return <JobDetailsContent key={id} id={id!} />;
+}
+function JobDetailsContent({ id }: { id: string }) {
   const {
     data: job,
     error,
@@ -26,7 +29,10 @@ export function JobDetails() {
   const [searchId, setSearchId] = useState("");
   const [search, setSearch] = useState<Job>();
   const [busy, setBusy] = useState(false);
+  const logLock = useRef(false);
   async function loadLogs(cursor?: string) {
+    if (logLock.current) return;
+    logLock.current = true;
     try {
       const page = await api<NonNullable<typeof logs>>(
         "/jobs/" +
@@ -34,14 +40,23 @@ export function JobDetails() {
           "/logs" +
           (cursor ? "?cursor=" + encodeURIComponent(cursor) : ""),
       );
-      setLogs((previous) =>
-        cursor && previous
-          ? { ...page, lines: [...previous.lines, ...page.lines] }
-          : page,
-      );
+      setLogs((previous) => {
+        const lines =
+          cursor && previous ? [...previous.lines, ...page.lines] : page.lines;
+        return {
+          ...page,
+          lines: lines.slice(-2000),
+          truncated:
+            page.truncated ||
+            !!(cursor && previous?.truncated) ||
+            lines.length > 2000,
+        };
+      });
       setLogError("");
     } catch (e) {
       setLogError(errorText(e));
+    } finally {
+      logLock.current = false;
     }
   }
   useEffect(() => {
@@ -50,19 +65,27 @@ export function JobDetails() {
   useEffect(() => {
     if (!searchId) return;
     let active = true;
+    let timer: ReturnType<typeof setTimeout>;
     const poll = async () => {
       try {
         const result = await api<Job>("/jobs/" + searchId);
-        if (active) setSearch(result);
+        if (!active) return;
+        setSearch(result);
+        setError("");
+        if (
+          ["succeeded", "failed", "cancelled", "partial"].includes(result.state)
+        )
+          return;
       } catch (e) {
-        if (active) setError(errorText(e));
+        if (!active) return;
+        setError(errorText(e));
       }
+      if (active) timer = setTimeout(() => void poll(), 2000);
     };
     void poll();
-    const timer = setInterval(() => void poll(), 2000);
     return () => {
       active = false;
-      clearInterval(timer);
+      clearTimeout(timer);
     };
   }, [searchId]);
   if (!job)

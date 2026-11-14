@@ -35,6 +35,6 @@ Choose the training recipe or upload train.py, permitted requirements and a non-
 
 ## Contribute and observe
 
-Contribute compute requires the device owner's consent. Choose OS and CPU budget, optionally opt in to verified GPU use, and generate a short-lived command. Run it on the contributing laptop and inspect preflight; missing Docker/CUDA is an actionable error. Use Drain/Stop to control participation. Device credentials do not grant user/admin privileges.
+Contribute compute requires the device owner's consent. Choose OS and CPU budget, optionally opt in to verified GPU use, and generate a short-lived command. Run it on the contributing laptop and inspect preflight; missing Docker/CUDA is an actionable error. Choose CPU and memory budgets; GPU use is separate opt-in. Use Drain/Stop to control participation. Device credentials do not grant user/admin privileges.
 
 Open the console for devices, attempts and measured benchmarks. Only authorized owners/admins see control actions and experiment creation; server authorization remains authoritative. A disconnected event stream triggers snapshot refresh and reconnection. Reloading JobDetails observes the existing job rather than starting another one.

@@ -118,6 +118,11 @@ export interface Benchmark {
     gpu_percent: number | null;
     window_ms: number;
     gaps: number;
+    samples?: {
+      elapsed_ms: number;
+      cpu_percent: number | null;
+      gpu_percent: number | null;
+    }[];
   }[];
   bottleneck: string;
   flags: string[];

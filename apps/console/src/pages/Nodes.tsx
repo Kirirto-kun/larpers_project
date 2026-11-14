@@ -88,6 +88,12 @@ export function Nodes({ admin }: { admin: boolean }) {
               {node.offered_budget.gpu_allowed ? "Opted in" : "Not offered"}
             </dd>
           </dl>
+          {node.gpus.map((gpu) => (
+            <div className="notice" key={gpu.id}>
+              {gpu.vendor} GPU · {bytes(gpu.vram_bytes)} VRAM · CUDA{" "}
+              {gpu.cuda_verified ? "verified" : "not verified"}
+            </div>
+          ))}
           {node.preflight.map((c) => (
             <p key={c.name}>
               {c.ok ? "✓" : "!"} {c.name}: {c.message}

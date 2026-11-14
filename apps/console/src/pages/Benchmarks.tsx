@@ -1,3 +1,4 @@
+import { TimingChart, UtilizationChart } from "../components/MeasurementCharts";
 import { useState } from "react";
 import { useResource } from "../lib/hooks";
 import { post, errorText } from "../lib/api";
@@ -182,28 +183,8 @@ export function Benchmarks({ admin }: { admin: boolean }) {
             <dt>Bottleneck</dt>
             <dd>{report.bottleneck || "Not identified"}</dd>
           </dl>
-          <h3>Timing breakdown (ms)</h3>
-          {Object.entries(report.timings_ms).map(([k, v]) => (
-            <div className="row" key={k}>
-              <span>{k}</span>
-              <span>{v}</span>
-            </div>
-          ))}
-          <h3>CPU/GPU utilization</h3>
-          <p className="muted">
-            Samples collected every 1,000 ms; averages require a disclosed
-            measurement window and gaps.
-          </p>
-          {report.utilization.map((u) => (
-            <div className="row" key={u.node_id}>
-              <b>{u.node_id}</b>
-              <span>
-                CPU {u.cpu_percent ?? "Not measured"} · GPU{" "}
-                {u.gpu_percent ?? "Not measured"} · window {u.window_ms} ms ·{" "}
-                {u.gaps} gaps
-              </span>
-            </div>
-          ))}
+          <TimingChart timings={report.timings_ms} />
+          <UtilizationChart records={report.utilization} />
           <h3>Standalone measurement provenance</h3>
           {report.standalone.map((s) => (
             <p key={s.node_id}>
@@ -240,6 +221,12 @@ export function Benchmarks({ admin }: { admin: boolean }) {
                 onChange={async (e) => {
                   const file = e.target.files?.[0];
                   if (!file) return;
+                  if (file.size > 10 * 1024 * 1024) {
+                    setMessage(
+                      "Standalone import exceeds 10 MiB. Split records into smaller files.",
+                    );
+                    return;
+                  }
                   try {
                     await post(
                       "/benchmarks/" + report.id + "/standalone-results",

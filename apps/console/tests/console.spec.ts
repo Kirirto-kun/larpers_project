@@ -62,3 +62,125 @@ test("empty state remains honest on mobile", async ({ page }) => {
     ),
   ).toBeTruthy();
 });
+
+test("raw utilization gaps, timing stages and unknown means remain explicit", async ({
+  page,
+}) => {
+  const { benchmark } = await import("./fixtures");
+  await fixtures(page);
+  await page.route("**/api/v1/benchmarks", (route) =>
+    route.fulfill({
+      json: [
+        {
+          ...benchmark,
+          utilization: [
+            {
+              node_id: "node-1",
+              cpu_percent: 0,
+              gpu_percent: null,
+              window_ms: 4000,
+              gaps: 2,
+              samples: [
+                { elapsed_ms: 0, cpu_percent: 0, gpu_percent: null },
+                { elapsed_ms: 1000, cpu_percent: 50, gpu_percent: null },
+                { elapsed_ms: 4000, cpu_percent: 70, gpu_percent: null },
+              ],
+            },
+          ],
+        },
+      ],
+    }),
+  );
+  await page.goto("benchmarks");
+  await page.getByRole("button", { name: "embeddings · experiment-1" }).click();
+  await expect(
+    page.getByRole("img", { name: "node-1 CPU and GPU utilization over time" }),
+  ).toBeVisible();
+  await expect(
+    page.getByText("Window 4,000 ms · 2 gaps · 3 samples"),
+  ).toBeVisible();
+  await expect(
+    page.getByRole("region", { name: "Timing breakdown chart" }),
+  ).toContainText("Not measured");
+});
+
+test("missing baseline and duplicate participants do not produce an efficiency claim", async ({
+  page,
+}) => {
+  const { benchmark } = await import("./fixtures");
+  await fixtures(page);
+  await page.route("**/api/v1/benchmarks", (route) =>
+    route.fulfill({
+      json: [{ ...benchmark, node_ids: ["node-1", "node-1"], standalone: [] }],
+    }),
+  );
+  await page.goto("benchmarks");
+  await page.getByRole("button", { name: "embeddings · experiment-1" }).click();
+  await expect(
+    page.getByText("Insufficient data", { exact: true }),
+  ).toBeVisible();
+});
+
+test("changed concurrency creates a distinct experiment without relabelling saved results", async ({
+  page,
+}) => {
+  const { benchmark } = await import("./fixtures");
+  await fixtures(page);
+  const submissions: any[] = [];
+  let reports = [benchmark];
+  await page.route("**/api/v1/benchmarks", async (route) => {
+    if (route.request().method() === "POST") {
+      const body = route.request().postDataJSON();
+      submissions.push(body);
+      const b = {
+        ...benchmark,
+        ...body,
+        id: "new-" + submissions.length,
+        experiment_id: "experiment-" + (submissions.length + 1),
+      };
+      reports = [...reports, b];
+      return route.fulfill({ status: 202, json: b });
+    }
+    return route.fulfill({ json: reports });
+  });
+  await page.goto("benchmarks");
+  await page
+    .getByLabel("Immutable input digest")
+    .fill("sha256:immutable-corpus");
+  await page.getByLabel("Lab laptop").check();
+  await page.getByRole("button", { name: "Create new experiment" }).click();
+  await expect(
+    page.getByRole("heading", { name: "embeddings / experiment-2" }),
+  ).toBeVisible();
+  await page.getByLabel("Concurrency", { exact: true }).fill("4");
+  await page.getByRole("button", { name: "Create new experiment" }).click();
+  await expect(
+    page.getByRole("heading", { name: "embeddings / experiment-3" }),
+  ).toBeVisible();
+  expect(submissions.map((s) => s.concurrency)).toEqual([2, 4]);
+  expect(reports[0].concurrency).toBe(2);
+});
+
+test("server denial of an admin action remains visible and does not pretend success", async ({
+  page,
+}) => {
+  await fixtures(page);
+  await page.route("**/api/v1/nodes/*/control", (route) =>
+    route.fulfill({
+      status: 403,
+      json: {
+        code: "FORBIDDEN",
+        message: "Only the owner may stop this device",
+        request_id: "request-123",
+      },
+    }),
+  );
+  await page.goto("nodes");
+  await page.getByRole("button", { name: "Lab laptop" }).click();
+  await page.getByRole("button", { name: "stop", exact: true }).click();
+  await expect(page.getByRole("alert")).toContainText(
+    "Only the owner may stop this device",
+  );
+  await expect(page.getByRole("alert")).toContainText("request-123");
+  await expect(page.getByText("ready", { exact: true })).toBeVisible();
+});

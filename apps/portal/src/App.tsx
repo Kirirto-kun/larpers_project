@@ -12,6 +12,7 @@ import { JobDetails } from "./pages/JobDetails";
 export function App() {
   const [session, setSession] = useState<Session | null>();
   const [error, setError] = useState("");
+  const [signingIn, setSigningIn] = useState(false);
   const [token, setToken] = useState("");
   useEffect(() => {
     api<Session>("/auth/me")
@@ -25,6 +26,15 @@ export function App() {
           setError(errorText(e));
       });
   }, []);
+  useEffect(() => {
+    const expired = () => {
+      setSession(null);
+      setCsrf("");
+      setError("Your session expired. Sign in again.");
+    };
+    window.addEventListener("campus:unauthorized", expired);
+    return () => window.removeEventListener("campus:unauthorized", expired);
+  }, []);
   if (session === undefined)
     return <main className="login">Connecting to Campus Pool…</main>;
   if (!session)
@@ -35,15 +45,20 @@ export function App() {
         <form
           onSubmit={async (e) => {
             e.preventDefault();
+            if (signingIn) return;
+            setSigningIn(true);
             try {
               const s = await post<Session>("/auth/login", {
                 invitation: token,
               });
+              setToken("");
               setSession(s);
               setCsrf(s.csrf_token || "");
               setError("");
             } catch (e) {
               setError(errorText(e));
+            } finally {
+              setSigningIn(false);
             }
           }}
         >
@@ -57,7 +72,7 @@ export function App() {
               autoComplete="off"
             />
           </label>
-          <Button>Sign in</Button>
+          <Button disabled={signingIn}>Sign in</Button>
           <ErrorBox message={error} />
         </form>
       </main>
@@ -103,6 +118,10 @@ export function App() {
               onClick={async () => {
                 try {
                   await post("/auth/logout", {});
+                  Object.keys(sessionStorage)
+                    .filter((k) => k.startsWith("campus-upload:"))
+                    .forEach((k) => sessionStorage.removeItem(k));
+                  setToken("");
                   setSession(null);
                   setCsrf("");
                 } catch (e) {

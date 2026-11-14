@@ -8,7 +8,7 @@ import math
 import statistics
 from pathlib import Path
 
-MATCH_FIELDS = ('workload_digest', 'input_digest', 'quality_policy', 'resource_settings', 'unit', 'input_distribution', 'batch_policy', 'concurrency', 'cold')
+MATCH_FIELDS = ('workload_digest', 'input_digest', 'quality_policy', 'resource_settings', 'unit', 'input_distribution', 'batch_policy', 'concurrency', 'cold', 'measurement_mode', 'timing_scope', 'model_digest', 'image_digest', 'adapter_digest', 'precision', 'result_cache_enabled')
 
 def number(value):
     return isinstance(value, (int, float)) and not isinstance(value, bool) and math.isfinite(value)
@@ -18,6 +18,8 @@ def rate(record):
     duration = record.get('elapsed_ms')
     if not number(duration) or duration <= 0:
         raise ValueError('elapsed_ms must be positive and finite')
+    if not isinstance(record.get('results'), list):
+        raise ValueError('Explicit results list required; missing data is not zero work')
     accepted = set()
     for result in record.get('results', []):
         if result.get('state') != 'accepted':
@@ -38,8 +40,12 @@ def build_report(data):
     for key in MATCH_FIELDS:
         if key not in config:
             raise ValueError(f'Missing experiment setting: {key}')
+    if config['measurement_mode'] not in ('normal', 'fault_injection') or config['timing_scope'] not in ('end_to_end', 'steady_state'):
+        raise ValueError('Explicit measurement mode and timing scope required')
+    if config['result_cache_enabled'] is not False:
+        raise ValueError('Evaluation result cache must be disabled')
     nodes = config['compute_node_ids']
-    if not nodes or len(nodes) != len(set(nodes)):
+    if not isinstance(nodes,list) or not nodes or not all(isinstance(n,str) and n for n in nodes) or len(nodes) != len(set(nodes)):
         raise ValueError('compute_node_ids must be nonempty and unique')
     flags = []
     records = data.get('records', [])
@@ -65,11 +71,18 @@ def build_report(data):
             groups[node].append(rate(record))
             provenance.append({'record_id': record_id, 'node_id': node, 'source': record.get('provenance', 'Unspecified local timing'), 'credential_verified': record.get('credential_verified', False)})
         elif kind in ('pool', 'single_service'):
-            if kind == 'pool' and set(record.get('compute_node_ids', [])) != set(nodes):
+            participants=record.get('compute_node_ids', [])
+            if kind == 'pool' and (len(participants)!=len(nodes) or set(participants)!=set(nodes)):
                 raise ValueError('Pool compute participants differ from the baseline denominator')
+            if kind == 'single_service' and record.get('node_id') not in nodes:
+                raise ValueError('Single-service node must belong to the compute series')
             (pool if kind == 'pool' else service).append(rate(record))
         else:
             raise ValueError(f'Unsupported series kind: {kind}')
+    if config['measurement_mode']=='fault_injection':
+        flags.append('Fault-injection experiment; do not present this as normal throughput.')
+    if not config.get('git_sha'):
+        flags.append('Final git SHA missing; not final submission evidence.')
     baseline = {node: summarize(values) for node, values in groups.items()}
     pool_summary = summarize(pool)
     sufficient = pool_summary is not None and all(v is not None and v['median'] > 0 for v in baseline.values())
@@ -106,7 +119,8 @@ def export(data, output):
         writer = csv.writer(stream)
         writer.writerow(['series','median','min','max','repetitions','unit'])
         for name, values in [*report['standalone'].items(), ('single_service', report['single_service']), ('pool', report['pool'])]:
-            writer.writerow([name, *([values[k] for k in ('median','min','max','repetitions')] if values else [None,None,None,0]), report['unit']])
+            safe_name = "'"+name if isinstance(name,str) and name.startswith(('=', '+', '-', '@', '\t', '\r')) else name
+            writer.writerow([safe_name, *([values[k] for k in ('median','min','max','repetitions')] if values else [None,None,None,0]), report['unit']])
     return report
 
 def main():

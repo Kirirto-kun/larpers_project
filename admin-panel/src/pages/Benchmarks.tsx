@@ -26,11 +26,11 @@ export function Benchmarks({ admin }: { admin: boolean }) {
   const [busy, setBusy] = useState(false);
   const report = reports?.find((b) => b.id === selected);
   return (
-    <>
+    <div className="workspace-page">
       <PageHeader eyebrow="" title="Benchmarks" />
       <ErrorBox message={error || message} />
       {admin && (
-        <section className="card">
+        <section className="workspace-section">
           <h2>New experiment</h2>
           <form
             className="experiment-form"
@@ -143,7 +143,7 @@ export function Benchmarks({ admin }: { admin: boolean }) {
           </form>
         </section>
       )}
-      <section className="card">
+      <section className="workspace-section">
         <h2>Saved experiments</h2>
         {reports?.length === 0 && (
           <Empty>
@@ -165,7 +165,7 @@ export function Benchmarks({ admin }: { admin: boolean }) {
         ))}
       </section>
       {report && (
-        <section className="card">
+        <section className="workspace-section">
           <h2>
             {report.workload} / {report.experiment_id}
           </h2>
@@ -243,6 +243,6 @@ export function Benchmarks({ admin }: { admin: boolean }) {
           )}
         </section>
       )}
-    </>
+    </div>
   );
 }

@@ -9,10 +9,10 @@ export function Jobs() {
   const [selected, setSelected] = useState("");
   const job = data?.find((j) => j.id === selected);
   return (
-    <>
+    <div className="workspace-page">
       <PageHeader eyebrow="" title="Jobs" />
       <ErrorBox message={error} />
-      <section className="card">
+      <section className="workspace-section">
         {data?.length === 0 && <Empty>No jobs yet.</Empty>}
         {data?.map((j) => (
           <div className="row" key={j.id}>
@@ -35,7 +35,7 @@ export function Jobs() {
         ))}
       </section>
       {job && (
-        <section className="card">
+        <section className="workspace-section">
           <h2>{job.name}</h2>
           <p>{job.validation_level || "Quality not verified"}</p>
           {job.failed_units > 0 && (
@@ -47,6 +47,6 @@ export function Jobs() {
           <a href={"/jobs/" + job.id}>Open outputs in the user portal →</a>
         </section>
       )}
-    </>
+    </div>
   );
 }

@@ -22,10 +22,10 @@ export function Nodes({ admin }: { admin: boolean }) {
   const [busy, setBusy] = useState(false);
   const node = data?.find((n) => n.id === selected);
   return (
-    <>
+    <div className="workspace-page">
       <PageHeader eyebrow="" title="Devices" />
       <ErrorBox message={error || message} />
-      <section className="card table-wrap">
+      <section className="workspace-section table-wrap">
         <table>
           <thead>
             <tr>
@@ -67,7 +67,7 @@ export function Nodes({ admin }: { admin: boolean }) {
         {data?.length === 0 && <Empty>No devices registered.</Empty>}
       </section>
       {node && (
-        <section className="card">
+        <section className="workspace-section">
           <h2>{node.name}</h2>
           <dl>
             <dt>CPU utilization</dt>
@@ -146,6 +146,6 @@ export function Nodes({ admin }: { admin: boolean }) {
           <AttemptTimeline attempts={node.attempts || []} />
         </section>
       )}
-    </>
+    </div>
   );
 }

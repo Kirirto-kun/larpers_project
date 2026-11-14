@@ -1252,3 +1252,100 @@ summary {
     font-size: 11px;
   }
 }
+
+/* All workspace pages share the overview surface and section rhythm. */
+.workspace-page {
+  background: #fff;
+  border: 1px solid #dfe4df;
+  border-radius: 8px;
+  padding: 30px 32px 8px;
+}
+.workspace-page > .page-header {
+  margin: 0 0 30px;
+}
+.workspace-page > .page-header h1 {
+  margin: 0;
+  font-size: 24px;
+}
+.workspace-section {
+  padding: 26px 0;
+  border-top: 1px solid #e6eae5;
+}
+.workspace-page > .page-header + .workspace-section {
+  border-top: 0;
+  padding-top: 0;
+}
+.workspace-page > .table-wrap {
+  padding-right: 0;
+  padding-left: 0;
+}
+.workspace-page th:first-child,
+.workspace-page td:first-child {
+  padding-left: 0;
+}
+.workspace-page th:last-child,
+.workspace-page td:last-child {
+  padding-right: 0;
+}
+.workspace-section > .row:first-child {
+  padding-top: 0;
+}
+.workspace-section > .metrics {
+  gap: 0;
+  margin: 0 0 28px;
+}
+.workspace-section > .metrics .metric {
+  border: 0;
+  border-radius: 0;
+  background: none;
+  border-left: 1px solid #e6eae5;
+  padding: 0 24px;
+}
+.workspace-section > .metrics .metric:first-child {
+  border-left: 0;
+  padding-left: 0;
+}
+.workspace-section > section {
+  padding: 24px 0;
+  border-top: 1px solid #e6eae5;
+}
+.workspace-section > section > h3 {
+  margin-bottom: 16px;
+}
+.workspace-section article.card {
+  border: 0;
+  border-radius: 0;
+  box-shadow: none;
+  background: none;
+  padding: 20px 0 0;
+  margin-bottom: 0;
+}
+.workspace-section article.card + article.card {
+  border-top: 1px solid #e6eae5;
+  margin-top: 20px;
+}
+.workspace-section .empty {
+  border: 0;
+  border-radius: 0;
+  background: #fafbf9;
+}
+@media (max-width: 950px) {
+  .workspace-section > .metrics {
+    row-gap: 24px;
+  }
+  .workspace-section > .metrics .metric:nth-child(3) {
+    border-left: 0;
+    padding-left: 0;
+  }
+}
+@media (max-width: 640px) {
+  .workspace-page {
+    padding: 22px 18px 0;
+  }
+  .workspace-section > .metrics .metric {
+    padding: 0 12px;
+  }
+  .workspace-section > .metrics .metric strong {
+    font-size: 26px;
+  }
+}

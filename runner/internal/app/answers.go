@@ -76,64 +76,81 @@ func validateAnswers(request answerRequest) error {
 }
 
 func (a *App) sendAnswers(ctx context.Context, c *client.Client, state *submission, path string) (preview, error) {
+	if state.SubmissionStarted || state.JobID != "" {
+		return preview{}, errors.New("answers cannot change a submitted job")
+	}
+	return sendPreviewAnswers(ctx, c, state.PreviewID, state.PendingAnswers, func(pending *pendingAnswers, revision json.RawMessage) error {
+		state.PendingAnswers = pending
+		state.Revision = revision
+		return session.AtomicJSON(path, state)
+	})
+}
+
+type saveAnswerState func(*pendingAnswers, json.RawMessage) error
+
+func sendPreviewAnswers(ctx context.Context, c *client.Client, previewID string, pending *pendingAnswers, save saveAnswerState) (preview, error) {
 	var result preview
-	pending := state.PendingAnswers
-	if pending == nil || !validID(state.PreviewID) || !validID(pending.Key) || state.SubmissionStarted || state.JobID != "" {
-		return result, errors.New("answers cannot change a submitted job or an invalid saved preview")
+	if pending == nil || !validID(previewID) || !validID(pending.Key) {
+		return result, errors.New("answers require a valid saved preview and pending explicit answer")
 	}
 	if err := validateAnswers(pending.Request); err != nil {
 		return result, err
 	}
-	err := c.DoOnce(ctx, "POST", "/job-previews/"+state.PreviewID+"/answers", pending.Request, &result, pending.Key)
+	err := c.DoOnce(ctx, "POST", "/job-previews/"+previewID+"/answers", pending.Request, &result, pending.Key)
 	if err != nil {
 		var rejected *client.APIError
 		if errors.As(err, &rejected) && rejected.Status >= 400 && rejected.Status < 500 && rejected.Status != 429 {
-			state.PendingAnswers = nil
-			state.Revision = nil
-			if saveErr := session.AtomicJSON(path, state); saveErr != nil {
+			if saveErr := save(nil, nil); saveErr != nil {
 				return result, fmt.Errorf("answer was rejected but saving recovery state failed: %w", saveErr)
 			}
 			return result, fmt.Errorf("preview answers rejected; correct the explicit values and resume the same preview: %w", err)
 		}
 		return result, fmt.Errorf("preview answer acknowledgement unknown; run campus run --resume to inspect the same preview without repeating the answer: %w", err)
 	}
-	if result.ID != "" && result.ID != state.PreviewID {
+	if result.ID != "" && result.ID != previewID {
 		return result, errors.New("answer receipt changed the preview_id; saved answers remain resumable")
 	}
 	if result.ID == "" || result.State == "" || !validRevision(result.Revision) {
-		return a.reconcileAnswers(ctx, c, state, path)
+		return reconcilePreviewAnswers(ctx, c, previewID, pending, save)
 	}
-	state.PendingAnswers = nil
-	state.Revision = nil
-	if validRevision(result.Revision) {
-		state.Revision = result.Revision
+	var before, after int64
+	json.Unmarshal(pending.Request.Revision, &before)
+	json.Unmarshal(result.Revision, &after)
+	if !terminalPreviewState(result.State) && after <= before {
+		return result, errors.New("answer acknowledgement remains unknown at the saved revision; no answer was repeated; resume later")
 	}
-	if err = session.AtomicJSON(path, state); err != nil {
+	if err = save(nil, result.Revision); err != nil {
 		return result, err
 	}
 	return result, nil
 }
 
 func (a *App) reconcileAnswers(ctx context.Context, c *client.Client, state *submission, path string) (preview, error) {
+	return reconcilePreviewAnswers(ctx, c, state.PreviewID, state.PendingAnswers, func(pending *pendingAnswers, revision json.RawMessage) error {
+		state.PendingAnswers = pending
+		state.Revision = revision
+		return session.AtomicJSON(path, state)
+	})
+}
+
+func reconcilePreviewAnswers(ctx context.Context, c *client.Client, previewID string, pending *pendingAnswers, save saveAnswerState) (preview, error) {
 	var result preview
-	if state.PendingAnswers == nil || !validID(state.PreviewID) {
+	if pending == nil || !validID(previewID) {
 		return result, errors.New("invalid saved answer reconciliation state")
 	}
-	if err := c.Do(ctx, "GET", "/job-previews/"+state.PreviewID, nil, &result, ""); err != nil {
+	if err := c.Do(ctx, "GET", "/job-previews/"+previewID, nil, &result, ""); err != nil {
 		return result, err
 	}
-	if result.ID != state.PreviewID {
+	if result.ID != previewID {
 		return result, errors.New("coordinator returned a mismatched preview while reconciling the answer")
 	}
 	var before, after int64
-	json.Unmarshal(state.PendingAnswers.Request.Revision, &before)
+	json.Unmarshal(pending.Request.Revision, &before)
 	json.Unmarshal(result.Revision, &after)
 	if !terminalPreviewState(result.State) && (!validRevision(result.Revision) || after <= before) {
 		return result, errors.New("answer acknowledgement remains unknown at the saved revision; no answer was repeated; resume later or discard this never-submitted preview")
 	}
-	state.PendingAnswers = nil
-	state.Revision = result.Revision
-	if err := session.AtomicJSON(path, state); err != nil {
+	if err := save(nil, result.Revision); err != nil {
 		return result, err
 	}
 	return result, nil

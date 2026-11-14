@@ -1,5 +1,6 @@
 import json
 from pathlib import Path
+from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -22,6 +23,7 @@ class Adapter(BaseModel):
     unit: str = "task"
     weight: int = Field(default=1, ge=1, le=10_000)
     command: list[str] = Field(default_factory=list)
+    builtin: Literal["project"] | None = None
     recipe: dto.Recipe | None = None
     search_stage: dto.Stage | None = None
     probe_stage: dto.Stage | None = None
@@ -55,7 +57,15 @@ class Catalog:
                 raise ValueError("Initial batch exceeds maximum batch size")
             if item.checkpoints and not item.checkpoint_files:
                 raise ValueError("Checkpoint adapters must declare every required state file")
-            if item.parallel and not item.command:
+            if item.builtin and (
+                item.ref.id not in {"campus.project-map", "campus.project-reduce"}
+                or item.ref.version != "1"
+                or item.command
+            ):
+                raise ValueError(
+                    "Only the registered project metadata adapters may use the builtin runtime"
+                )
+            if item.parallel and not item.command and not item.builtin:
                 raise ValueError("A parallel adapter requires a bounded runtime command")
 
     def adapter(self, ref):

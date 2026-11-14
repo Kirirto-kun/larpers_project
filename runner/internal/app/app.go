@@ -30,6 +30,9 @@ Commands:
   join INVITE [--no-serve] [--gpu]        Redeem a device invitation and participate
   serve [--profiles FILE] [--gpu]         Offer this device until stopped
   leave --drain | --stop                 Finish active work or stop immediately
+  login [--email EMAIL] [--password-stdin] Save a private member credential
+  logout                                Revoke and remove the saved CLI login
+  run [--yes] [--wait] [--to DIR]         Run the campus.json distributed project
   run [--gpu] [--data DIR:/data] [--output PATH] -- PROGRAM [ARG...]
   run --resume                          Reconcile the persisted preview/submission
   run --resume --answers FILE            Answer the saved preview, then run its plan
@@ -40,7 +43,7 @@ Commands:
   benchmark-local --manifest FILE --repetitions 3 --out FILE
   version                               Print the runner version
 
-Device invitations do not grant member scope. Set CAMPUS_TOKEN for run/logs/fetch/cancel.
+Device invitations do not grant member scope. Use campus login or CAMPUS_TOKEN.
 Add --managed to install/connect/join/serve to allow web pause/resume and contribution modes.
 Use campus COMMAND --help for command options. HTTPS certificate verification is required;
 HTTP is supported only for loopback development coordinators.
@@ -65,7 +68,10 @@ type App struct {
 	ManagedPollInterval time.Duration
 }
 
-type config struct{ StateDir, Endpoint, CAFile string }
+type config struct {
+	StateDir, Endpoint, CAFile string
+	TrustedCAPEM               []byte
+}
 type statusError struct {
 	code int
 	err  error
@@ -168,6 +174,10 @@ func (a *App) Run(ctx context.Context, args []string) int {
 			err = a.serve(ctx, cfg, args)
 		case "leave":
 			err = a.leave(cfg, args)
+		case "login":
+			err = a.login(ctx, cfg, args)
+		case "logout":
+			err = a.logout(ctx, cfg, args)
 		case "run":
 			err = a.run(ctx, cfg, args)
 		case "logs":
@@ -326,8 +336,12 @@ func loadIdentity(dir string) (session.Identity, error) {
 func apiClient(cfg config, endpoint, credential, sessionID string) (*client.Client, error) {
 	transport := http.DefaultTransport.(*http.Transport).Clone()
 	transport.TLSClientConfig = &tls.Config{MinVersion: tls.VersionTLS12}
-	if cfg.CAFile != "" {
-		data, err := os.ReadFile(cfg.CAFile)
+	if cfg.CAFile != "" || len(cfg.TrustedCAPEM) > 0 {
+		data := cfg.TrustedCAPEM
+		var err error
+		if cfg.CAFile != "" {
+			data, err = os.ReadFile(cfg.CAFile)
+		}
 		if err != nil {
 			return nil, fmt.Errorf("read CA file: %w", err)
 		}
@@ -352,13 +366,57 @@ func (a *App) member(ctx context.Context, cfg config) (*client.Client, error) {
 		return nil, err
 	}
 	credential := a.Getenv("CAMPUS_TOKEN")
+	endpoint := cfg.Endpoint
+	if credential == "" {
+		var saved memberLogin
+		e := readJSON(filepath.Join(cfg.StateDir, "member.json"), 3<<20, &saved)
+		if e == nil {
+			if endpoint != "" {
+				probe, err := apiClient(cfg, endpoint, "", "")
+				if err != nil {
+					return nil, err
+				}
+				if probe.BaseURL != saved.Endpoint {
+					return nil, errors.New("saved member login belongs to a different coordinator; run campus login for this endpoint or set CAMPUS_TOKEN")
+				}
+			}
+			if saved.Token == "" || saved.UserID == "" || saved.Endpoint == "" {
+				return nil, errors.New("invalid saved member login; run campus login again")
+			}
+			if saved.ExpiresAt != nil {
+				expires, err := time.Parse(time.RFC3339Nano, *saved.ExpiresAt)
+				if err != nil || !expires.After(time.Now()) {
+					return nil, errors.New("saved member login expired; run campus login again")
+				}
+			}
+			credential, endpoint = saved.Token, saved.Endpoint
+			if cfg.CAFile == "" {
+				cfg.TrustedCAPEM = []byte(saved.CAPEM)
+			}
+		} else if !os.IsNotExist(e) {
+			return nil, e
+		}
+	} else {
+		// CI may override just the credential while retaining the selected
+		// coordinator and its private approved CA. Never transfer saved trust to
+		// a different explicitly selected endpoint.
+		var saved memberLogin
+		if e := readJSON(filepath.Join(cfg.StateDir, "member.json"), 3<<20, &saved); e == nil {
+			if endpoint == "" {
+				endpoint = saved.Endpoint
+			}
+			check, e := apiClient(config{}, endpoint, "", "")
+			if e == nil && check.BaseURL == saved.Endpoint && cfg.CAFile == "" {
+				cfg.TrustedCAPEM = []byte(saved.CAPEM)
+			}
+		}
+	}
 	if credential == "" {
 		credential = identity.MemberCredential
 	}
 	if credential == "" {
-		return nil, errors.New("member credential required: set CAMPUS_TOKEN; a device invitation grants participation only")
+		return nil, errors.New("member credential required: run campus login or set CAMPUS_TOKEN; a device invitation grants participation only")
 	}
-	endpoint := cfg.Endpoint
 	if endpoint == "" {
 		endpoint = identity.Endpoint
 	}

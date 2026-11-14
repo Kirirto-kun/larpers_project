@@ -87,6 +87,11 @@ def prepare(plan, inputs, catalog, max_tasks, *, batch_policy=None, budget_secon
     result = {}
     for stage in plan.stages:
         adapter = catalog.adapter(stage.adapter)
+        if adapter.builtin == "project":
+            from ..project_execution import prepare_stage_tasks
+
+            result[stage.stage_id] = prepare_stage_tasks(stage, inputs, max_tasks)
+            continue
         data = {
             "stage": payload(stage),
             "inputs": inputs,

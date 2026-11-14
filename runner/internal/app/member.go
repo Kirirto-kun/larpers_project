@@ -39,11 +39,13 @@ type binding struct {
 }
 type previewRequest = generated.PreviewRequest
 type preview struct {
-	ID       string          `json:"id"`
-	State    string          `json:"state"`
-	Revision json.RawMessage `json:"plan_revision"`
-	Question json.RawMessage `json:"question"`
-	Plan     json.RawMessage `json:"plan"`
+	ID           string          `json:"id"`
+	State        string          `json:"state"`
+	Revision     json.RawMessage `json:"plan_revision"`
+	Question     json.RawMessage `json:"question"`
+	Plan         json.RawMessage `json:"plan"`
+	ErrorCode    string          `json:"error_code"`
+	ErrorMessage string          `json:"error_message"`
 }
 type submission struct {
 	Endpoint          string          `json:"endpoint,omitempty"`
@@ -110,7 +112,7 @@ func snapshot(ctx context.Context, c *client.Client, root, destination, kind str
 	return artifact, m, err
 }
 
-func (a *App) run(ctx context.Context, cfg config, args []string) error {
+func (a *App) runCommand(ctx context.Context, cfg config, args []string) error {
 	f := a.flags("run")
 	gpu := f.Bool("gpu", false, "require GPU; never silently fall back to CPU")
 	data := f.String("data", "", "explicit dataset directory mounted read-only at /data")

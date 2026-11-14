@@ -12,7 +12,7 @@ from .errors import Problem
 from .planner import service as planner
 
 DATA = Path(__file__).parent / "data"
-RELEASE = "runner-20261115-r7"
+RELEASE = "runner-20261115-r8"
 EXAMPLES = [
     {
         "id": "cpu",

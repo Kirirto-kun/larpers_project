@@ -83,7 +83,7 @@ func TestManagedRunAssignmentUploadsAndCompletesDeclaredOutputName(t *testing.T)
 			}
 			completes++
 			fmt.Fprint(w, `{"attempt_id":"attempt","task_id":"task","state":"verifying","submitted_at":"2026-11-15T00:00:00Z"}`)
-		case "/api/v1/attempts/attempt/logs":
+		case "/api/v1/attempts/attempt/logs", "/api/v1/attempts/attempt/telemetry":
 			w.WriteHeader(204)
 		case "/api/v1/attempts/attempt/renew":
 			fmt.Fprint(w, `{"lease_remaining_ms":3000,"task_remaining_ms":9000}`)

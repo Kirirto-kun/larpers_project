@@ -4,7 +4,7 @@ import (
 	"campus/runner/internal/session"
 	"encoding/json"
 	"errors"
-	"os"
+	"io"
 	"path/filepath"
 	"sync"
 	"time"
@@ -66,7 +66,12 @@ func (l *Lease) Publish(state, control string, now time.Time) error {
 	if remaining <= 0 {
 		return errors.New("lease expired locally")
 	}
-	b, e := os.ReadFile(filepath.Join(state, "challenge.json"))
+	f, e := session.OpenSharedRead(filepath.Join(state, "challenge.json"))
+	if e != nil {
+		return e
+	}
+	defer f.Close()
+	b, e := io.ReadAll(io.LimitReader(f, 4097))
 	if e != nil {
 		return e
 	}

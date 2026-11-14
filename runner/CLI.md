@@ -260,11 +260,135 @@ Rich assignments distinguish required `outputs` from `optional_outputs`; only
 required paths are passed to the pinned guard's required-output list. Optional
 files are uploaded when produced and may be absent.
 
-## Submit, inspect and retrieve work
+## Sign in and run a distributed project
 
-A device invitation grants worker participation. Member operations require a
-separate member credential in `CAMPUS_TOKEN` (or an explicitly provisioned saved
-member credential). They never substitute the device credential. The coordinator
+Sign in once with your member account. `login` prompts for the email and a hidden
+password; automated sign-in accepts `--email EMAIL --password-stdin`. Passwords
+and tokens are never command arguments or printed. A custom trusted CA is
+optional when the coordinator already has a publicly trusted HTTPS certificate:
+
+```text
+campus login --endpoint https://coordinator.example --ca-file campus-ca.pem
+```
+
+The CLI saves a revocable member credential and a private copy of the approved
+CA PEM in its user configuration/state directory. Subsequent member commands
+reuse that endpoint and trust without repeating flags. Trust stays inside the
+client; login does not change OS certificate trust. Saved credentials are pinned
+to their coordinator. `campus logout` revokes the saved CLI credential and
+removes its active local copy. Login does not replace device enrollment.
+`CAMPUS_TOKEN` overrides the saved member token for CI. An explicit changed
+endpoint requires its own login or an explicit environment token.
+
+From a directory containing `campus.json`, run:
+
+```text
+campus run --wait --to ./results
+```
+
+`--project DIR` chooses another project directory. Output paths are relative to
+that project; `--to` implies `--wait` and must name a directory that does not
+exist. The CLI displays the code/data inventory, effective resource defaults,
+stage task counts and the returned plan. It asks for exact comma-separated code
+paths to share with the LLM, or `none`, then asks `Submit this reviewed plan?`.
+Enter `yes` to approve. Selected files must be UTF-8 text already present in the
+code snapshot, at most 16 files, 8,000 bytes per file and 24,000 bytes total.
+Dataset bytes and private files cannot be selected. EOF or missing choices do
+not approve sharing or submission.
+
+This minimal portable contract creates one map task per input and one reduction:
+
+```json
+{
+  "schema_version": "1",
+  "name": "batch-summary",
+  "data": ["dataset/*.json"],
+  "stages": [
+    {
+      "id": "map",
+      "kind": "map",
+      "inputs": ["dataset/*.json"],
+      "command": ["python", "worker.py", "map", "{input}", "{accelerator}"],
+      "outputs": [{"path": "partial.json", "max_bytes": 1048576}],
+      "accelerator": "cpu"
+    },
+    {
+      "id": "reduce",
+      "kind": "reduce",
+      "depends_on": ["map"],
+      "command": ["python", "worker.py", "reduce"],
+      "outputs": [{"path": "result.json", "max_bytes": 1048576}],
+      "accelerator": "cpu"
+    }
+  ]
+}
+```
+
+Stages are ordered; dependencies name earlier stages exactly. Map inputs select
+declared data using portable, case-sensitive globs: `*`, `?`, `[ab]`, `[!a]`,
+ranges and complete `**` directory segments. `{input}` is allowed only in map
+arguments and becomes `/inputs/<project-relative-file>`. `{accelerator}` becomes
+the selected `cpu` or `cuda` variant. Arguments remain literal; the CLI does not
+build a shell command. Accepted predecessor outputs appear below
+`/inputs/stages/<stage>/<task-id>/<output-path>`. Map stages with dependencies
+still split their own declared data into separate tasks.
+
+Optional `resources` default to `cpu_millis:1000`, `memory_bytes:536870912`,
+`disk_bytes:268435456`, and `vram_bytes:1073741824`; CPU variants reserve zero
+VRAM. `timeout_seconds` defaults to 300 and output `required` defaults to true.
+Resources and output/temporary disk quotas are bounded by the registered
+environments. `accelerator` defaults to `auto`; existing worker GPU consent and
+verified runtime offers still determine which variant can execute.
+
+The project ZIP contains code and metadata; declared data files, runner state,
+results, credentials, virtual environments and symlinks are excluded. Put
+`dataset/` in `.campusignore` when that directory also contains raw downloads or
+other undeclared data. `.campusignore` controls the code snapshot; explicit
+`data` globs still select separately uploaded data. The code snapshot is bounded
+to 10,000 files/256 MiB, and declared data to 511 files/1 GiB. Each data file is
+checksummed and uploaded separately with bounded checksummed parts. Reuse asks
+the coordinator to verify that the current authenticated account owns those
+exact bytes; local IDs are never trusted across accounts or coordinators.
+
+After an explicit approval, the private per-project review binds the exact code,
+data, configuration, endpoint/account and selected sharing choices. CI can reuse
+that unchanged review:
+
+```text
+campus run --yes --wait --to ./new-results
+```
+
+Changed code, data, configuration or credential/coordinator requires another
+explicit review. A fresh run obtains a fresh job key. Preview IDs, requests,
+explicit pending answers, frozen revisions and job receipts persist below
+`<state-dir>/projects/<project-path-hash>/`. After interruption use:
+
+```text
+campus run --resume --wait --to ./results
+campus run --resume --answer question_id=explicit-answer
+campus run --resume --answers ./answers.json
+```
+
+Project answer files use the same single `{question_id,answer}` string format
+described below. A lost answer acknowledgement is inspected without replay;
+only a newer revision or terminal preview resolves it. Once submission starts,
+resume always uses its frozen revision/key, even if local code/config changed or
+was removed. A never-submitted unknown preview can be abandoned with
+`campus run --discard`. A submitted job cannot be discarded.
+
+`--wait` follows queued/running/waiting-for-capacity work and prints accepted
+units and per-task device IDs. Partial/failed/cancelled jobs exit with an error
+and inspection guidance. A partial job with `--to` downloads its accepted
+verified outputs while still reporting failure. All result downloads retain
+safe namespaced paths and use the same bounded atomic checksum verification as
+`fetch`. A missing `campus.json` reports candidate entry points/data and explains
+the required contract; arbitrary scripts are not assumed parallelizable.
+
+## Explicit command submission, inspection and retrieval
+
+A device invitation grants worker participation. Member operations use a saved
+`campus login` credential, `CAMPUS_TOKEN`, or an explicitly provisioned saved
+member credential. They never substitute the device credential. The coordinator
 comes from `--endpoint URL`, `CAMPUS_ENDPOINT`, or the saved identity.
 
 ```powershell

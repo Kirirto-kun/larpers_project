@@ -1,3 +1,47 @@
+# Current distributed-project release: R8
+
+The LAN service is running the distributed-project implementation at
+[Campus](https://10.4.146.76:8443). The canonical private startup override keeps
+the existing database, artifacts, TLS CA and all earlier download routes.
+PostgreSQL remains internal-only. Earlier entries below are historical.
+
+Computing-device starters:
+
+- [Windows Connect.cmd](https://10.4.146.76:8443/downloads/runner-20261115-r8/Connect.cmd)
+- [macOS/Linux Connect.command](https://10.4.146.76:8443/downloads/runner-20261115-r8/Connect.command)
+
+Developer submission uses the separate [CLI ZIP downloads and guide](../docs/DISTRIBUTED_PROJECTS.md).
+After sign-in, run `campus run --wait --to results/run-001` from a prepared
+project. The [Fashion-MNIST project ZIP](https://10.4.146.76:8443/downloads/runner-20261115-r8/fashion-mnist-project.zip)
+contains source/preparation scripts, without dataset bytes. Docker remains a
+manual prerequisite for contributing devices; invitations are entered separately.
+
+R8 fixes a confirmed Windows Docker-bind rename failure by using read-only
+state handles with delete sharing. The real Linux bind-mount regression and
+full Go suite passed. Existing Mac computing clients can continue; use the R8
+developer CLI for the new project submission command.
+
+Strict-CA HTTPS checks verified complete non-image download hashes, all three
+image Range responses, starter attachment headers and private-path 404s.
+The unchanged image archives were fully validated by the release builder and
+reused as hardlinks. No invitation or credential is included.
+
+[SHA256SUMS](https://10.4.146.76:8443/downloads/runner-20261115-r8/SHA256SUMS) SHA-256: `564339ae4c5a810086fbb8a33f57a3aab9c8dd0fccb938f471e2a2712aa656df`.
+Catalog SHA-256: `a63230c3116c601bfb2bf988508b5d62968c75203b930ed408cb0b83c47f26fb`.
+Windows native SHA-256: `b3001ad53cf57148e718be38ed89d929556a07c4de1963852f13355dd042eca8`.
+
+One actual job completed 24/24 tasks across the main Windows computer, RTX 5050
+and Mac. All 60,000 training / 10,000 test images matched an independent
+numerical reference; see the [verification record](../docs/DISTRIBUTED_VERIFICATION.md).
+The owner restarted RTX with R8. Nine measured jobs completed 216/216 tasks;
+an active-worker stop recovered both unfinished tasks on RTX. A separate R8
+CUDA job matched all 65,536 values against an independent CPU reference.
+The small classifier showed no speed gain over the RTX laptop alone; see the
+verification record for complete timings and limitations. Original Mac settings
+were restored, and the root-owned main test worker was stopped cleanly.
+
+---
+
 # Current LAN handoff
 
 ## Windows setup update: R4

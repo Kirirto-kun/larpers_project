@@ -11,6 +11,7 @@ from ..auth import session_for
 from ..db import digest, now, payload, secret_hash, write_lock
 from ..events import emit
 from .batching import observed_rate, resize
+from .placement import order_variants
 from .service import COMPUTE, RUNNABLE, artifact_dto, retry_or_fail, stage_for, update_finished
 
 RESOURCE_KEYS = ("cpu_millis", "memory_bytes", "disk_bytes", "gpu_slots", "vram_bytes")
@@ -65,11 +66,16 @@ def active_attempts(db, node_id, current):
 
 
 def assignment_inputs(db, job, task, stage):
+    bindings = stage.bindings
+    if stage.adapter.id in {"campus.project-map", "campus.project-reduce"}:
+        from ..project_execution import filter_bindings
+
+        bindings = filter_bindings(stage, task.parameters)
     result = [
         dto.AssignmentInput(
             **payload(binding), artifact=artifact_dto(db.get(m.Artifact, binding.artifact_id))
         )
-        for binding in stage.bindings
+        for binding in bindings
     ]
     if stage.depends_on:
         rows = db.execute(
@@ -177,7 +183,19 @@ def claim_work(db, app, actor, session_id, *, worker_policy=None, native=False):
             .limit(1)
         ):
             continue
-        variants = sorted(stage.variants, key=lambda v: v.accelerator != "cuda")
+
+        def rate_for(candidate, active_stage=stage):
+            key = (
+                candidate.image_digest,
+                active_stage.adapter.id,
+                active_stage.adapter.version,
+                digest(active_stage.parameters),
+            )
+            if key not in rates:
+                rates[key] = observed_rate(db, node, active_stage, candidate)
+            return rates[key]
+
+        variants = order_variants(stage, stage.variants, rate_for)
         if job.purpose == "benchmark" and task.units:
             variants = benchmark_variants(db, job, node, variants)
         variant = next(
@@ -314,6 +332,11 @@ def lease(
         node_id=str(node.id),
         generation=attempt.generation,
     )
+    argv = stage.argv
+    if stage.adapter.id in {"campus.project-map", "campus.project-reduce"}:
+        from ..project_execution import resolve_argv
+
+        argv = resolve_argv(stage, task.parameters, variant.accelerator)
     value = dto.Assignment(
         job_id=job.id,
         task_id=task.id,
@@ -331,7 +354,7 @@ def lease(
         image_digest=variant.image_digest,
         platform=variant.platform,
         accelerator=variant.accelerator,
-        argv=stage.argv,
+        argv=argv,
         working_dir=stage.working_dir,
         inputs=assignment_inputs(db, job, task, stage),
         outputs=stage.outputs,

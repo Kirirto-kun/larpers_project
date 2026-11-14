@@ -70,7 +70,7 @@ func (r *Runner) runtime() Runtime {
 }
 
 func readBoundedJSON(path string, dest any) error {
-	f, e := os.Open(path)
+	f, e := session.OpenSharedRead(path)
 	if e != nil {
 		return e
 	}
@@ -269,6 +269,25 @@ func (r *Runner) RunAssignment(ctx context.Context, a client.Assignment) (Result
 	if e != nil {
 		return result, e
 	}
+	logs := telemetry.NewLogBuffer(4<<20, []string{r.Client.Credential, a.LeaseToken})
+	logSink := newAttemptLogSender(r.Client, a.Fence)
+	logCtx, stopLogs := context.WithCancel(runCtx)
+	var logActivity sync.WaitGroup
+	logsFlushed := false
+	defer func() {
+		stopLogs()
+		logActivity.Wait()
+		if !logsFlushed {
+			// Startup and workload errors still need their bounded, redacted
+			// diagnostics. Runtime cleanup runs before this independent flush;
+			// the ordinary attempt fence decides whether logs remain writable.
+			if data := logs.Bytes(); len(data) > 0 {
+				flushCtx, close := context.WithTimeout(context.Background(), 5*time.Second)
+				defer close()
+				_ = logSink.Send(flushCtx, data)
+			}
+		}
+	}()
 	defer func() {
 		cleanCtx, close := context.WithTimeout(context.Background(), 20*time.Second)
 		defer close()
@@ -279,6 +298,11 @@ func (r *Runner) RunAssignment(ctx context.Context, a client.Assignment) (Result
 	if e = r.runtime().Start(runCtx, name); e != nil {
 		return result, e
 	}
+	logActivity.Add(1)
+	go func() {
+		defer logActivity.Done()
+		_ = r.runtime().Logs(logCtx, name, logs)
+	}()
 	// The guard will not start user code until it receives a fresh nonce-bound grant.
 	ready := time.NewTimer(min(30*time.Second, lease.Remaining(time.Now())))
 	tick := time.NewTicker(25 * time.Millisecond)
@@ -310,8 +334,6 @@ func (r *Runner) RunAssignment(ctx context.Context, a client.Assignment) (Result
 	}
 	ready.Stop()
 	tick.Stop()
-	logs := telemetry.NewLogBuffer(4<<20, []string{r.Client.Credential, a.LeaseToken})
-	logSink := newAttemptLogSender(r.Client, a.Fence)
 	observeCtx, stopObserve := context.WithCancel(runCtx)
 	defer stopObserve()
 	var observe sync.WaitGroup
@@ -321,8 +343,6 @@ func (r *Runner) RunAssignment(ctx context.Context, a client.Assignment) (Result
 		observe.Add(1)
 		go func() { defer observe.Done(); r.gpuMetrics(observeCtx, a, metricSink, fail) }()
 	}
-	observe.Add(1)
-	go func() { defer observe.Done(); r.runtime().Logs(observeCtx, name, logs) }()
 	published := map[string]bool{}
 	observe.Add(1)
 	go func() {
@@ -363,6 +383,8 @@ func (r *Runner) RunAssignment(ctx context.Context, a client.Assignment) (Result
 	computeEnd := time.Now()
 	stopObserve()
 	observe.Wait()
+	stopLogs()
+	logActivity.Wait()
 	select {
 	case e := <-failures:
 		return result, e
@@ -425,6 +447,7 @@ func (r *Runner) RunAssignment(ctx context.Context, a client.Assignment) (Result
 		artifact.Path = entry.Path
 		result.Files = append(result.Files, artifact)
 	}
+	logsFlushed = true
 	if b := logs.Bytes(); len(b) > 0 {
 		if e = logSink.Send(runCtx, b); client.Terminal(e) {
 			return result, e

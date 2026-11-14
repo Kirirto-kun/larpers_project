@@ -204,6 +204,29 @@ def register_artifact(db, app, actor, session_id, upload_id):
     return artifact_dto(artifact)
 
 
+def lookup_owned(db, app, actor, sha256, size_bytes, kind):
+    user = actor.member()
+    row = db.scalar(
+        select(m.Artifact)
+        .where(
+            m.Artifact.owner_id == user.id,
+            m.Artifact.pool_id == user.pool_id,
+            m.Artifact.sha256 == sha256,
+            m.Artifact.size_bytes == size_bytes,
+            m.Artifact.kind == kind,
+            m.Artifact.attempt_id.is_(None),
+        )
+        .order_by(m.Artifact.created_at, m.Artifact.id)
+        .limit(1)
+    )
+    if row is None:
+        raise missing()
+    path = app.storage.blob(row.sha256)
+    if not path.is_file() or path.stat().st_size != row.size_bytes:
+        raise missing()
+    return artifact_dto(row)
+
+
 def resolve_download(db, actor, session_id, artifact_id):
     row = db.get(m.Artifact, artifact_id)
     if not row or row.pool_id != actor.user.pool_id:

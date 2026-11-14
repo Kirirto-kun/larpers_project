@@ -131,6 +131,42 @@
           "version": "1"
         }
       }
+    },
+    {
+      "ref": {
+        "id": "campus.project-map",
+        "version": "1"
+      },
+      "image_ids": [
+        "python-cpu-amd64",
+        "python-cpu-arm64",
+        "python-cuda-amd64"
+      ],
+      "policies": [
+        "structural"
+      ],
+      "interactive": false,
+      "parallel": true,
+      "builtin": "project",
+      "unit": "shard"
+    },
+    {
+      "ref": {
+        "id": "campus.project-reduce",
+        "version": "1"
+      },
+      "image_ids": [
+        "python-cpu-amd64",
+        "python-cpu-arm64",
+        "python-cuda-amd64"
+      ],
+      "policies": [
+        "structural"
+      ],
+      "interactive": false,
+      "parallel": false,
+      "builtin": "project",
+      "unit": "stage"
     }
   ]
 }

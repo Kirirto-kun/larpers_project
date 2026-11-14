@@ -78,6 +78,21 @@ func AtomicJSON(path string, value any) error {
 	}
 	return replaceFile(name, path)
 }
+
+// SavePrivateJSON applies the platform's owner-only protection to a credential
+// directory and file, including Windows ACLs where Unix mode bits are insufficient.
+func SavePrivateJSON(path string, value any) error {
+	if err := os.MkdirAll(filepath.Dir(path), 0700); err != nil {
+		return err
+	}
+	if err := protect(filepath.Dir(path)); err != nil {
+		return err
+	}
+	if err := AtomicJSON(path, value); err != nil {
+		return err
+	}
+	return protect(path)
+}
 func LoadOrCreate(dir string) (Identity, error) {
 	var s Identity
 	if e := os.MkdirAll(dir, 0700); e != nil {

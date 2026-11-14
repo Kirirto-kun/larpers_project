@@ -50,6 +50,27 @@ def validate_mount(binding, row):
 
 def validate_plan(db, app, user, plan, request, *, server_evidence=False):
     project, manifest_sha = manifest(db, user, request)
+    if request.project_config:
+        from ..project_execution import validate_project_plan
+
+        metadata = []
+        for item in request.inputs:
+            row = owned_input(db, user, item.artifact_id)
+            metadata.append({**payload(item), "sha256": row.sha256, "size_bytes": row.size_bytes})
+        validate_project_plan(
+            plan,
+            request.project_config,
+            request.project_artifact_id,
+            project,
+            metadata,
+            app.catalog,
+            current_time=now(db),
+            manifest_digest=manifest_sha,
+        )
+    elif any(
+        stage.adapter.id in {"campus.project-map", "campus.project-reduce"} for stage in plan.stages
+    ):
+        raise invalid("Distributed project stages require their explicit project configuration")
     if plan.input_manifest_digest != manifest_sha or plan.project_digest != project:
         raise invalid("Plan does not match the selected immutable inputs")
     current = now(db)
@@ -93,7 +114,10 @@ def validate_plan(db, app, user, plan, request, *, server_evidence=False):
             if not stage.working_dir.startswith("/workspace/"):
                 raise invalid("Working directory must be under /workspace")
             safe_relative(stage.working_dir.removeprefix("/workspace/"))
-        if stage.adapter.id == "campus.python" and request.project_artifact_id:
+        if (
+            stage.adapter.id in {"campus.python", "campus.project-map", "campus.project-reduce"}
+            and request.project_artifact_id
+        ):
             archives = [binding for binding in stage.bindings if binding.archive]
             if (
                 len(archives) != 1
@@ -130,7 +154,7 @@ def validate_plan(db, app, user, plan, request, *, server_evidence=False):
         environments = [app.catalog.environments[key] for key in adapter.image_ids]
         for variant in stage.variants:
             validate_variant(variant, environments, request.accelerator)
-            if stage.adapter.id == "campus.python":
+            if stage.adapter.id in {"campus.python", "campus.project-map", "campus.project-reduce"}:
                 try:
                     validate_command(stage)
                     resource_policy(stage, variant)

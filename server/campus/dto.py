@@ -12,6 +12,8 @@ from pydantic import (
     model_validator,
 )
 
+from .project_schema import ProjectConfig
+
 SHA256 = Annotated[str, StringConstraints(pattern=r"^[a-f0-9]{64}$")]
 ImageDigest = Annotated[
     str, StringConstraints(pattern=r"^[a-z0-9][a-z0-9./:_-]*@sha256:[a-f0-9]{64}$", max_length=256)
@@ -173,7 +175,7 @@ class Stage(DTO):
     variants: list[Variant] = Field(min_length=1, max_length=8)
     argv: list[Annotated[str, StringConstraints(max_length=4096)]] = Field(min_length=1, max_length=64)
     working_dir: FilePath
-    bindings: list[InputBinding] = Field(default_factory=list, max_length=32)
+    bindings: list[InputBinding] = Field(default_factory=list, max_length=512)
     outputs: list[Output] = Field(min_length=1, max_length=32)
     network_policy: Literal["none"] = "none"
     task_deadline_ms: Annotated[int, Field(ge=1000, le=86_400_000)]
@@ -205,7 +207,8 @@ class PreviewRequest(DTO):
     prompt: Annotated[str, StringConstraints(min_length=1, max_length=8000)] | None = None
     recipe_id: Identifier | None = None
     project_artifact_id: UUID | None = None
-    inputs: list[InputBinding] = Field(default_factory=list, max_length=32)
+    inputs: list[InputBinding] = Field(default_factory=list, max_length=512)
+    project_config: ProjectConfig | None = None
     selected_files: list[FilePath] = Field(default_factory=list, max_length=16)
     share_with_llm: bool = False
     accelerator: Accelerator | None = None
@@ -255,7 +258,8 @@ class SearchResult(DTO):
 
 class Artifact(DTO):
     id: UUID
-    name: FilePath
+    # Logical download names may include a server-added stage/task namespace.
+    name: Annotated[str, StringConstraints(min_length=1, max_length=1024)]
     size_bytes: Nonnegative
     sha256: SHA256
     media_type: ShortText
@@ -464,6 +468,15 @@ class AccountCreate(DTO):
 class PasswordLogin(DTO):
     email: Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=254)]
     password: Annotated[str, StringConstraints(min_length=1, max_length=128)]
+
+
+class CLILoginResult(DTO):
+    token: str
+    user_id: UUID
+    pool_id: UUID
+    name: ShortText
+    role: Literal["owner", "admin", "member"]
+    expires_at: AwareDatetime
 
 
 class DeviceRedeem(InviteLogin):

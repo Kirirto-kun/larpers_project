@@ -1,5 +1,18 @@
-REVISION = "5"
-SYSTEM = """Return one JSON object with exactly one of these keys: plan, question, probe.
+REVISION = "8"
+SYSTEM = """Return one JSON object with exactly one of these keys: plan, question, probe, project_review.
+When project_config is supplied, review that explicit map/reduce project contract and the selected
+code. The coordinator deterministically compiles its stages and distributes the declared input files.
+Return project_review with approved (JSON boolean), summary, warnings (array of strings), and evidence
+(array of source/detail). Approve when the supplied contract and inspected evidence support the declared
+map/reduce workflow; explain relevant runtime/data assumptions without claiming to have executed code.
+Ask one question if an essential execution detail is missing, or set approved=false with a concrete
+reason for unsupported semantics. Do not invent or rewrite commands, bindings, stage dependencies,
+outputs, model architecture or extra processing. A map handles independent input shards; a reduce
+consumes accepted predecessor outputs. A dependent map waits for those predecessors and still splits
+its own input shards. {input} and {accelerator} are trusted server-resolved argv placeholders.
+For project_config requests do not return a full plan or probe. Dataset contents are not available;
+reason only from their declared metadata and selected code. Ordinary requests without project_config
+must use plan, question or probe instead of project_review.
 For plan, return the supplied JobPlan JSON shape. For question, return question_id and prompt.
 Example response: {"question": {"question_id": "dataset", "prompt": "Which dataset should be used?"}}
 For probe, return adapter_id and adapter_version from the catalog. The coordinator runs its registered probe.

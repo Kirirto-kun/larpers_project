@@ -2,6 +2,7 @@ import json
 
 import httpx
 import pytest
+from jsonschema import Draft202012Validator
 
 from campus.config import Settings
 from campus.errors import Problem
@@ -119,3 +120,64 @@ def test_transport_timeout_is_bounded(monkeypatch):
         provider.invoke(settings(), {}, 10)
     assert caught.value.code == "PLANNER_TIMEOUT"
     assert len(calls) == 3
+
+
+def test_project_review_receives_its_schema_and_repairs_invalid_shape_within_budget(monkeypatch):
+    requests = []
+
+    def handler(request):
+        requests.append(json.loads(request.content))
+        review = {
+            "approved": "yes" if len(requests) == 1 else True,
+            "summary": "Independent shard contract.",
+        }
+        return httpx.Response(200, json=reply(json.dumps({"project_review": review})))
+
+    mock_client(monkeypatch, handler)
+    result = provider.invoke(settings(), {"project_config": {"schema_version": "1"}}, 10)
+    assert result.project_review.approved and len(requests) == 2
+    supplied = json.loads(requests[0]["messages"][1]["content"])
+    schema = Draft202012Validator(supplied["project_response_schema"])
+    schema.validate({"project_review": {"approved": True, "summary": "A bounded review."}})
+    assert not schema.is_valid({"approved": True, "summary": "Missing outer action."})
+    assert "job_plan_schema" not in supplied
+    assert len(requests[1]["messages"]) == 3
+
+
+def test_invalid_project_reviews_stop_after_three_attempts_without_running_any_plan(monkeypatch):
+    calls = []
+
+    def handler(request):
+        calls.append(request)
+        return httpx.Response(200, json=reply('{"project_review":{"approved":"yes","summary":"bad"}}'))
+
+    mock_client(monkeypatch, handler)
+    with pytest.raises(Problem) as caught:
+        provider.invoke(settings(), {"project_config": {"schema_version": "1"}}, 10)
+    assert caught.value.code == "PLANNER_SCHEMA_INVALID" and len(calls) == 3
+
+
+def test_unwrapped_typed_review_is_normalized_only_for_project_requests():
+    content = json.dumps(
+        {"approved": True, "summary": "Independent map/reduce stages.", "warnings": [], "evidence": []}
+    )
+    answer = provider.parse_response(
+        settings(), json.dumps(reply(content)), {"project_config": {"schema_version": "1"}}
+    )
+    assert answer.project_review.approved and answer.plan is None
+    with pytest.raises(Problem) as caught:
+        provider.parse_response(settings(), json.dumps(reply(content)), {})
+    assert caught.value.code == "PLANNER_SCHEMA_INVALID"
+    for invalid in (
+        {"approved": "true", "summary": "Wrong boolean type."},
+        {"approved": True, "summary": "Unapproved executable field.", "command": ["do-something"]},
+        {
+            "approved": True,
+            "summary": "Mixed actions.",
+            "question": {"question_id": "data", "prompt": "Which data?"},
+        },
+    ):
+        with pytest.raises(Problem):
+            provider.parse_response(
+                settings(), json.dumps(reply(json.dumps(invalid))), {"project_config": {}}
+            )

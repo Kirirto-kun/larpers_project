@@ -1,3 +1,4 @@
+from collections import Counter
 from datetime import timedelta
 
 from sqlalchemy import func, select
@@ -149,6 +150,13 @@ def tasks_for(db, job_id):
 
 def describe(db, job):
     tasks = tasks_for(db, job.id)
+    tasks_by_id = {task.id: task for task in tasks}
+    stage_counts = Counter(task.stage_id for task in tasks)
+    project_job = any(
+        stage["adapter"]["id"] in {"campus.project-map", "campus.project-reduce"}
+        for stage in job.plan["stages"]
+    )
+    final_stage = job.plan["stages"][-1]["stage_id"]
     artifacts = []
     attempts = {
         a.id: a
@@ -162,7 +170,13 @@ def describe(db, job):
         for output in acceptance.result["outputs"]:
             row = db.get(m.Artifact, output["artifact_id"])
             if row:
-                artifacts.append(artifact_dto(row))
+                view = artifact_dto(row)
+                task = tasks_by_id[acceptance.task_id]
+                if project_job and (task.stage_id != final_stage or stage_counts[task.stage_id] > 1):
+                    view = view.model_copy(
+                        update={"name": f"stages/{task.stage_id}/{task.id}/{output['path']}"}
+                    )
+                artifacts.append(view)
     states = {task.state for task in tasks}
     if job.cancelled_at:
         state = "cancelled"

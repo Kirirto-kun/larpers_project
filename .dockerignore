@@ -14,3 +14,4 @@ campus-data
 **/test-results
 **/playwright-report
 /docs
+/examples

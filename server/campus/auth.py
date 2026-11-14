@@ -215,6 +215,23 @@ def login(db, body):
     return identity(user, csrf), token, csrf
 
 
+def cli_login(db, body):
+    write_lock(db)
+    user = db.scalar(select(m.User).where(m.User.email == body.email.lower()))
+    valid = verify_password(body.password, (user.password_hash if user else None) or _DUMMY_PASSWORD)
+    if not valid or user is None:
+        raise unauthorized()
+    row, token, _ = issue_credential(db, user, "cli")
+    return dto.CLILoginResult(
+        token=token,
+        user_id=user.id,
+        pool_id=user.pool_id,
+        name=user.name,
+        role=user.role,
+        expires_at=row.expires_at,
+    )
+
+
 def redeem(db, body):
     invite = use_invite(db, body.token, "device")
     existing = db.scalar(

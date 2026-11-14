@@ -1,0 +1,52 @@
+{
+  "schema_version": "1",
+  "name": "Fashion-MNIST global nearest-centroid classifier",
+  "prompt": "Train one global Fashion-MNIST nearest-centroid classifier. Map training shards to exact per-class pixel sums and counts; reduce them into one model; evaluate disjoint test shards using that model; aggregate all unique predictions and accuracy. Preserve the four declared stages, argv, input coverage, output names and model dependencies. Explain resource and data movement costs.",
+  "data": ["dataset/*.npz"],
+  "stages": [
+    {
+      "id": "fit",
+      "kind": "map",
+      "inputs": ["dataset/train-*.npz"],
+      "depends_on": [],
+      "command": ["python", "worker.py", "train", "--input", "{input}", "--accelerator", "{accelerator}"],
+      "outputs": [{"path": "partial.json", "max_bytes": 1048576}],
+      "accelerator": "auto",
+      "resources": {"cpu_millis": 1000, "memory_bytes": 1073741824, "disk_bytes": 268435456, "vram_bytes": 536870912},
+      "timeout_seconds": 120
+    },
+    {
+      "id": "model",
+      "kind": "reduce",
+      "inputs": [],
+      "depends_on": ["fit"],
+      "command": ["python", "worker.py", "merge", "--accelerator", "{accelerator}"],
+      "outputs": [{"path": "model.json", "max_bytes": 1048576}],
+      "accelerator": "cpu",
+      "resources": {"cpu_millis": 1000, "memory_bytes": 536870912, "disk_bytes": 268435456, "vram_bytes": 0},
+      "timeout_seconds": 120
+    },
+    {
+      "id": "evaluate",
+      "kind": "map",
+      "inputs": ["dataset/test-*.npz"],
+      "depends_on": ["model"],
+      "command": ["python", "worker.py", "evaluate", "--input", "{input}", "--accelerator", "{accelerator}"],
+      "outputs": [{"path": "predictions.json", "max_bytes": 1048576}],
+      "accelerator": "auto",
+      "resources": {"cpu_millis": 1000, "memory_bytes": 1073741824, "disk_bytes": 268435456, "vram_bytes": 536870912},
+      "timeout_seconds": 120
+    },
+    {
+      "id": "aggregate",
+      "kind": "reduce",
+      "inputs": [],
+      "depends_on": ["evaluate", "model"],
+      "command": ["python", "worker.py", "finalize", "--accelerator", "{accelerator}"],
+      "outputs": [{"path": "result.json", "max_bytes": 1048576}],
+      "accelerator": "cpu",
+      "resources": {"cpu_millis": 1000, "memory_bytes": 536870912, "disk_bytes": 268435456, "vram_bytes": 0},
+      "timeout_seconds": 120
+    }
+  ]
+}

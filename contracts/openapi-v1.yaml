@@ -127,7 +127,7 @@
             "type": "string"
           },
           "name": {
-            "maxLength": 512,
+            "maxLength": 1024,
             "minLength": 1,
             "title": "Name",
             "type": "string"
@@ -752,6 +752,55 @@
           "disk_bytes"
         ],
         "title": "Budget",
+        "type": "object"
+      },
+      "CLILoginResult": {
+        "additionalProperties": false,
+        "properties": {
+          "expires_at": {
+            "format": "date-time",
+            "title": "Expires At",
+            "type": "string"
+          },
+          "name": {
+            "maxLength": 256,
+            "minLength": 1,
+            "title": "Name",
+            "type": "string"
+          },
+          "pool_id": {
+            "format": "uuid",
+            "title": "Pool Id",
+            "type": "string"
+          },
+          "role": {
+            "enum": [
+              "owner",
+              "admin",
+              "member"
+            ],
+            "title": "Role",
+            "type": "string"
+          },
+          "token": {
+            "title": "Token",
+            "type": "string"
+          },
+          "user_id": {
+            "format": "uuid",
+            "title": "User Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "token",
+          "user_id",
+          "pool_id",
+          "name",
+          "role",
+          "expires_at"
+        ],
+        "title": "CLILoginResult",
         "type": "object"
       },
       "Capabilities": {
@@ -2755,7 +2804,7 @@
             "items": {
               "$ref": "#/components/schemas/InputBinding"
             },
-            "maxItems": 32,
+            "maxItems": 512,
             "title": "Inputs",
             "type": "array"
           },
@@ -2780,6 +2829,16 @@
               }
             ],
             "title": "Project Artifact Id"
+          },
+          "project_config": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ProjectConfig"
+              },
+              {
+                "type": "null"
+              }
+            ]
           },
           "prompt": {
             "anyOf": [
@@ -2823,6 +2882,209 @@
           }
         },
         "title": "PreviewRequest",
+        "type": "object"
+      },
+      "ProjectConfig": {
+        "additionalProperties": false,
+        "properties": {
+          "data": {
+            "items": {
+              "maxLength": 512,
+              "minLength": 1,
+              "type": "string"
+            },
+            "maxItems": 32,
+            "title": "Data",
+            "type": "array"
+          },
+          "name": {
+            "maxLength": 256,
+            "minLength": 1,
+            "title": "Name",
+            "type": "string"
+          },
+          "prompt": {
+            "anyOf": [
+              {
+                "maxLength": 8000,
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Prompt"
+          },
+          "schema_version": {
+            "const": "1",
+            "title": "Schema Version",
+            "type": "string"
+          },
+          "stages": {
+            "items": {
+              "$ref": "#/components/schemas/ProjectStage"
+            },
+            "maxItems": 24,
+            "minItems": 1,
+            "title": "Stages",
+            "type": "array"
+          }
+        },
+        "required": [
+          "schema_version",
+          "name",
+          "data",
+          "stages"
+        ],
+        "title": "ProjectConfig",
+        "type": "object"
+      },
+      "ProjectOutput": {
+        "additionalProperties": false,
+        "properties": {
+          "max_bytes": {
+            "maximum": 536870912.0,
+            "minimum": 1.0,
+            "title": "Max Bytes",
+            "type": "integer"
+          },
+          "path": {
+            "maxLength": 512,
+            "minLength": 1,
+            "title": "Path",
+            "type": "string"
+          },
+          "required": {
+            "default": true,
+            "title": "Required",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "path",
+          "max_bytes"
+        ],
+        "title": "ProjectOutput",
+        "type": "object"
+      },
+      "ProjectResources": {
+        "additionalProperties": false,
+        "properties": {
+          "cpu_millis": {
+            "default": 1000,
+            "maximum": 4000.0,
+            "minimum": 1.0,
+            "title": "Cpu Millis",
+            "type": "integer"
+          },
+          "disk_bytes": {
+            "default": 268435456,
+            "maximum": 536870912.0,
+            "minimum": 1048576.0,
+            "title": "Disk Bytes",
+            "type": "integer"
+          },
+          "memory_bytes": {
+            "default": 536870912,
+            "maximum": 4294967296.0,
+            "minimum": 33554432.0,
+            "title": "Memory Bytes",
+            "type": "integer"
+          },
+          "vram_bytes": {
+            "default": 1073741824,
+            "maximum": 4294967296.0,
+            "minimum": 0.0,
+            "title": "Vram Bytes",
+            "type": "integer"
+          }
+        },
+        "title": "ProjectResources",
+        "type": "object"
+      },
+      "ProjectStage": {
+        "additionalProperties": false,
+        "properties": {
+          "accelerator": {
+            "default": "auto",
+            "enum": [
+              "auto",
+              "cpu",
+              "cuda"
+            ],
+            "title": "Accelerator",
+            "type": "string"
+          },
+          "command": {
+            "items": {
+              "maxLength": 4096,
+              "type": "string"
+            },
+            "maxItems": 64,
+            "minItems": 1,
+            "title": "Command",
+            "type": "array"
+          },
+          "depends_on": {
+            "items": {
+              "pattern": "^[a-zA-Z0-9][a-zA-Z0-9._-]{0,63}$",
+              "type": "string"
+            },
+            "maxItems": 24,
+            "title": "Depends On",
+            "type": "array"
+          },
+          "id": {
+            "pattern": "^[a-zA-Z0-9][a-zA-Z0-9._-]{0,63}$",
+            "title": "Id",
+            "type": "string"
+          },
+          "inputs": {
+            "items": {
+              "maxLength": 512,
+              "minLength": 1,
+              "type": "string"
+            },
+            "maxItems": 32,
+            "title": "Inputs",
+            "type": "array"
+          },
+          "kind": {
+            "enum": [
+              "map",
+              "reduce"
+            ],
+            "title": "Kind",
+            "type": "string"
+          },
+          "outputs": {
+            "items": {
+              "$ref": "#/components/schemas/ProjectOutput"
+            },
+            "maxItems": 32,
+            "minItems": 1,
+            "title": "Outputs",
+            "type": "array"
+          },
+          "resources": {
+            "$ref": "#/components/schemas/ProjectResources"
+          },
+          "timeout_seconds": {
+            "default": 300,
+            "maximum": 86400.0,
+            "minimum": 1.0,
+            "title": "Timeout Seconds",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "id",
+          "kind",
+          "command",
+          "outputs"
+        ],
+        "title": "ProjectStage",
         "type": "object"
       },
       "Protocol": {
@@ -3311,7 +3573,7 @@
             "items": {
               "$ref": "#/components/schemas/InputBinding"
             },
-            "maxItems": 32,
+            "maxItems": 512,
             "title": "Bindings",
             "type": "array"
           },
@@ -4089,6 +4351,88 @@
           }
         ],
         "summary": "Admin Users"
+      }
+    },
+    "/api/v1/artifacts/lookup": {
+      "get": {
+        "operationId": "lookup_owned_artifact",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "sha256",
+            "required": true,
+            "schema": {
+              "pattern": "^[a-f0-9]{64}$",
+              "title": "Sha256",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "size_bytes",
+            "required": true,
+            "schema": {
+              "minimum": 0,
+              "title": "Size Bytes",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "kind",
+            "required": false,
+            "schema": {
+              "default": "input",
+              "enum": [
+                "input",
+                "project"
+              ],
+              "title": "Kind",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Artifact"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Validation error"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "API error"
+          }
+        },
+        "security": [
+          {
+            "Bearer": []
+          },
+          {
+            "BrowserSession": []
+          }
+        ],
+        "summary": "Lookup Owned Artifact"
       }
     },
     "/api/v1/artifacts/{artifact_id}/content": {
@@ -4942,6 +5286,93 @@
           }
         ],
         "summary": "Issue Cli"
+      }
+    },
+    "/api/v1/auth/cli-login": {
+      "post": {
+        "operationId": "cli_login",
+        "parameters": [],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PasswordLogin"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CLILoginResult"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Validation error"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "API error"
+          }
+        },
+        "security": [],
+        "summary": "Cli Login"
+      }
+    },
+    "/api/v1/auth/cli-logout": {
+      "post": {
+        "operationId": "cli_logout",
+        "parameters": [],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Validation error"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "API error"
+          }
+        },
+        "security": [
+          {
+            "Bearer": []
+          }
+        ],
+        "summary": "Cli Logout"
       }
     },
     "/api/v1/auth/login": {

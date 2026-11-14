@@ -4,6 +4,8 @@ The coordinator accepts jobs, schedules compatible devices and publishes verifie
 
 Start with the [краткое руководство пользователя](docs/WEB_PRODUCT.md) for accounts, computer connection and jobs. Deployment and existing private-runtime upgrades are covered in [Web operations](docs/WEB_OPERATIONS.md). Actual test results and supported boundaries are in [Web verification](docs/WEB_VERIFICATION.md).
 
+To submit a code-and-data project from a terminal, follow [Distributed projects](docs/DISTRIBUTED_PROJECTS.md): sign in once, review `campus.json`, then run `campus run --wait --to ./results`. Explicit map/reduce stages can use multiple connected computers; the guide includes the complete Fashion-MNIST example and explains CPU/CUDA requirements and supported limits.
+
 ## Start the coordinator
 
 Install Node.js 22 with npm, Docker with Compose and Python 3.12. For a new installation, copy `.env.example` to `.env` from the repository root. The startup scripts build both web apps before building the API image. For an existing installation, follow [Web operations](docs/WEB_OPERATIONS.md) to retain its private configuration and volumes. Run one of these commands.

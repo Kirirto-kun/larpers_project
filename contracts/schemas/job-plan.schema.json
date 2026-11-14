@@ -302,7 +302,7 @@
           "items": {
             "$ref": "#/$defs/InputBinding"
           },
-          "maxItems": 32,
+          "maxItems": 512,
           "title": "Bindings",
           "type": "array"
         },

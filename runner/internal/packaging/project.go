@@ -23,6 +23,8 @@ type Rules struct {
 	MaxFiles int
 	MaxBytes int64
 	Ignore   []string
+	// Exclude is mandatory and cannot be negated by .campusignore.
+	Exclude []string
 }
 type File struct {
 	Path      string `json:"path"`
@@ -66,7 +68,7 @@ func SafePath(name string) error {
 
 func secret(name string) bool {
 	for _, part := range strings.Split(strings.ToLower(name), "/") {
-		if part == ".git" || part == ".hg" || part == ".svn" || part == ".campus-env" || part == ".campus-site" || part == ".venv" || part == "venv" || part == "node_modules" || part == "__pycache__" || part == ".ssh" || part == ".aws" || part == ".azure" || part == ".config" || part == ".campus" || part == ".env" || strings.HasPrefix(part, ".env.") || strings.HasPrefix(part, "id_rsa") || strings.HasPrefix(part, "id_ed25519") || part == "credentials.json" || part == "credentials" || part == ".netrc" || part == ".npmrc" || strings.HasSuffix(part, ".pem") || strings.HasSuffix(part, ".key") || strings.HasSuffix(part, ".p12") {
+		if part == ".git" || part == ".hg" || part == ".svn" || part == ".codex" || part == ".campus-env" || part == ".campus-site" || part == ".venv" || part == "venv" || part == "node_modules" || part == "__pycache__" || part == ".ssh" || part == ".aws" || part == ".azure" || part == ".config" || part == ".campus" || part == ".env" || strings.HasPrefix(part, ".env.") || strings.HasPrefix(part, "id_rsa") || strings.HasPrefix(part, "id_ed25519") || part == "credentials.json" || part == "member.json" || part == "identity.json" || part == "credentials" || part == ".netrc" || part == ".npmrc" || strings.HasSuffix(part, ".pem") || strings.HasSuffix(part, ".key") || strings.HasSuffix(part, ".p12") {
 			return true
 		}
 	}
@@ -106,6 +108,11 @@ func patternMatch(pattern, name string) bool {
 func ignored(name string, r Rules) bool {
 	if secret(name) {
 		return true
+	}
+	for _, pattern := range r.Exclude {
+		if patternMatch(pattern, name) {
+			return true
+		}
 	}
 	skip := false
 	for _, line := range r.Ignore {

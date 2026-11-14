@@ -11,7 +11,9 @@ from ..errors import Problem
 from ..events import emit
 from ..jobs.adapters import prepare, read_json_result
 from ..jobs.service import cancel, create_job, owned_preview
+from ..project_execution import compile_plan, prepare_tasks
 from .inspection import inspect
+from .project_reviews import cached_review, review_key
 from .validation import manifest, validate_plan
 
 
@@ -31,7 +33,7 @@ def describe(row):
 def plan_job(db, app, actor, body):
     user = actor.member()
     write_lock(db)
-    if not body.prepared_plan and not body.prompt:
+    if not body.prepared_plan and not body.prompt and not body.project_config:
         raise Problem("PROMPT_REQUIRED", "A prompt or a prepared plan is required", 422)
     if body.prepared_plan and (body.selected_files or body.share_with_llm):
         raise Problem("INVALID_REQUEST", "A prepared plan does not share data with the planner", 422)
@@ -155,6 +157,8 @@ def context_for(db, app, row, user, request):
             ),
         }
     )
+    if request.project_config:
+        context["project_config"] = payload(request.project_config)
     if row.probe_job_id:
         results = list(
             db.scalars(select(m.Acceptance).join(m.Task).where(m.Task.job_id == row.probe_job_id))
@@ -184,14 +188,58 @@ def prepare_preview(app, claim_data):
         request = dto.PreviewRequest.model_validate(row.request)
         context = context_for(db, app, row, user, request)
         budget = (row.deadline_at - now(db)).total_seconds()
+        project_plan = None
+        cached = None
+        cache_key = None
+        if request.project_config:
+            inventory = input_inventory(db, request)
+            project_plan = compile_plan(
+                request.project_config,
+                request.project_artifact_id,
+                context["project_digest"],
+                inventory,
+                app.catalog,
+                now(db),
+                revision=revision,
+                manifest_digest=context["input_manifest_digest"],
+            )
+            project_plan.job_deadline_at = now(db) + timedelta(minutes=30)
+            cache_key = review_key(app.settings, context)
+            cached = cached_review(db, user, cache_key)
     plan = request.prepared_plan
+    approved_review = None
     if plan is None:
-        proposal = app.planner(app.settings, context, budget)
-        if proposal.question:
-            return {"question": proposal.question}
-        if proposal.probe:
-            return {"probe": proposal.probe}
-        plan = proposal.plan
+        if cached is None:
+            proposal = app.planner(app.settings, context, budget)
+            if proposal.question:
+                return {"question": proposal.question}
+            if proposal.probe:
+                if request.project_config:
+                    raise Problem(
+                        "INVALID_PLAN", "A project contract cannot request an unrelated probe", 422
+                    )
+                return {"probe": proposal.probe}
+        if request.project_config:
+            review = cached if cached is not None else proposal.project_review
+            if review is None:
+                raise Problem(
+                    "INVALID_PLAN", "A project requires a bounded review of its declared contract", 422
+                )
+            if not review.approved:
+                raise Problem("PROJECT_REVIEW_REJECTED", review.summary[:256], 422)
+            allowed = set(context["allowed_evidence_sources"])
+            if any(item.source not in allowed for item in review.evidence):
+                raise Problem("INVALID_PLAN", "Project review cites uninspected evidence", 422)
+            plan = project_plan
+            plan.assumptions = [*plan.assumptions, review.summary[:256], *review.warnings][:24]
+            plan.evidence = [*plan.evidence, *review.evidence][:64]
+            approved_review = review if cached is None else None
+        else:
+            if proposal.project_review:
+                raise Problem("INVALID_PLAN", "A review alone cannot execute an ordinary request", 422)
+            plan = proposal.plan
+    if plan is None:
+        raise Problem("INVALID_PLAN", "The planner did not return an executable action", 422)
     if plan.plan_revision != revision:
         raise Problem("INVALID_PLAN", "Planner returned the wrong revision", 422)
     if plan.questions:
@@ -206,17 +254,24 @@ def prepare_preview(app, claim_data):
         validate_plan(db, app, user, plan, request, server_evidence=row.probe_job_id is not None)
         row.state = "validating"
         announce(db, row, user)
-        adapter_inputs = []
-        for item in request.inputs:
-            artifact = db.get(m.Artifact, item.artifact_id)
-            adapter_inputs.append(
-                {**payload(item), "sha256": artifact.sha256, "size_bytes": artifact.size_bytes}
-            )
+        adapter_inputs = input_inventory(db, request)
         budget = (row.deadline_at - now(db)).total_seconds()
-    tasks = prepare(
-        plan, adapter_inputs, app.catalog, app.settings.max_tasks_per_job, budget_seconds=budget
+    tasks = (
+        prepare_tasks(plan, request.project_config, adapter_inputs, app.settings.max_tasks_per_job)
+        if request.project_config
+        else prepare(
+            plan, adapter_inputs, app.catalog, app.settings.max_tasks_per_job, budget_seconds=budget
+        )
     )
-    return {"plan": plan, "prepared": tasks}
+    return {"plan": plan, "prepared": tasks, "project_review": approved_review, "review_key": cache_key}
+
+
+def input_inventory(db, request):
+    result = []
+    for item in request.inputs:
+        artifact = db.get(m.Artifact, item.artifact_id)
+        result.append({**payload(item), "sha256": artifact.sha256, "size_bytes": artifact.size_bytes})
+    return result
 
 
 def launch_probe(db, app, row, user, proposal):
@@ -316,6 +371,16 @@ def finish(db, app, claim_data, result=None, error=None):
         row.plan_digest = digest(row.plan)
         row.prepared = result["prepared"]
         row.state = "ready"
+        if result.get("project_review") is not None:
+            emit(
+                db,
+                user.pool_id,
+                "preview",
+                row.id,
+                "project_review_accepted",
+                cache_key=result["review_key"],
+                owner_id=str(user.id),
+            )
     else:
         return
     announce(db, row, user)

@@ -5,7 +5,7 @@ import time
 from contextlib import asynccontextmanager
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Annotated
+from typing import Annotated, Literal
 from uuid import UUID, uuid4
 
 from fastapi import Depends, FastAPI, Header, Query, Request, Response
@@ -143,6 +143,7 @@ class RequestLimit:
                 f"{Prefix}/auth/login",
                 f"{Prefix}/auth/register",
                 f"{Prefix}/auth/account",
+                f"{Prefix}/auth/cli-login",
                 f"{Prefix}/invitations/redeem",
             }:
                 bucket, capacity, refill = "entry", 30, 0.5
@@ -370,6 +371,19 @@ def create_app(settings=None, *, enable_background=True, planning_provider=provi
         auth.revoke(ctx.db, ctx.actor, ctx.actor.credential.id)
         response.delete_cookie(auth.COOKIE)
         response.delete_cookie(auth.CSRF_COOKIE)
+
+    @app.post(f"{Prefix}/auth/cli-login", operation_id="cli_login")
+    def cli_login(body: dto.PasswordLogin, db: DBDep, request: Request) -> dto.CLILoginResult:
+        origin = request.headers.get("origin")
+        if origin is not None and origin != settings.public_origin:
+            raise Problem("CSRF_REQUIRED", "The request origin is not allowed", 403)
+        return auth.cli_login(db, body)
+
+    @app.post(f"{Prefix}/auth/cli-logout", status_code=204, operation_id="cli_logout")
+    def cli_logout(ctx: ContextDep):
+        if ctx.actor.credential.scope != "cli":
+            raise auth.forbidden()
+        auth.revoke(ctx.db, ctx.actor, ctx.actor.credential.id)
 
     @app.get(f"{Prefix}/auth/me", operation_id="me")
     def me(ctx: ContextDep, request: Request) -> dto.Identity:
@@ -699,6 +713,15 @@ def create_app(settings=None, *, enable_background=True, planning_provider=provi
             write_lock(db)
             actor = auth.authenticate(db, request, settings)
             return uploads.register_artifact(db, runtime, actor, session_id, upload_id)
+
+    @app.get(f"{Prefix}/artifacts/lookup", operation_id="lookup_owned_artifact")
+    def lookup_owned_artifact(
+        ctx: ContextDep,
+        sha256: dto.SHA256,
+        size_bytes: Annotated[int, Query(ge=0)],
+        kind: Literal["input", "project"] = "input",
+    ) -> dto.Artifact:
+        return uploads.lookup_owned(ctx.db, ctx.runtime, ctx.actor, sha256, size_bytes, kind)
 
     @app.get(
         f"{Prefix}/artifacts/{{artifact_id}}/content",

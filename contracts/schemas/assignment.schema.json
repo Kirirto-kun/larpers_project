@@ -88,6 +88,18 @@
           "title": "Attempt Id",
           "type": "string"
         },
+        "checkpoint_compatibility_digest": {
+          "anyOf": [
+            {
+              "pattern": "^[a-f0-9]{64}$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Checkpoint Compatibility Digest"
+        },
         "generation": {
           "exclusiveMinimum": 0.0,
           "title": "Generation",

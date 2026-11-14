@@ -149,6 +149,18 @@
             "title": "Attempt Id",
             "type": "string"
           },
+          "checkpoint_compatibility_digest": {
+            "anyOf": [
+              {
+                "pattern": "^[a-f0-9]{64}$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Checkpoint Compatibility Digest"
+          },
           "generation": {
             "exclusiveMinimum": 0.0,
             "title": "Generation",
@@ -2702,6 +2714,21 @@
           "adapter": {
             "$ref": "#/components/schemas/AdapterRef"
           },
+          "batch_policy": {
+            "additionalProperties": {
+              "exclusiveMinimum": 0.0,
+              "type": "integer"
+            },
+            "maxProperties": 16,
+            "title": "Batch Policy",
+            "type": "object"
+          },
+          "concurrency": {
+            "default": 1,
+            "exclusiveMinimum": 0.0,
+            "title": "Concurrency",
+            "type": "integer"
+          },
           "config_digest": {
             "pattern": "^[a-f0-9]{64}$",
             "title": "Config Digest",
@@ -2997,6 +3024,11 @@
             "title": "Part Count",
             "type": "integer"
           },
+          "part_size_bytes": {
+            "exclusiveMinimum": 0.0,
+            "title": "Part Size Bytes",
+            "type": "integer"
+          },
           "parts": {
             "items": {
               "$ref": "#/components/schemas/UploadPart"
@@ -3017,6 +3049,7 @@
         "required": [
           "id",
           "state",
+          "part_size_bytes",
           "part_count",
           "parts"
         ],

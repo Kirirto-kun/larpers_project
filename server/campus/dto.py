@@ -5,7 +5,9 @@ from uuid import UUID
 from pydantic import AwareDatetime, BaseModel, ConfigDict, Field, StringConstraints
 
 SHA256 = Annotated[str, StringConstraints(pattern=r"^[a-f0-9]{64}$")]
-ImageDigest = Annotated[str, StringConstraints(pattern=r"^[a-z0-9][a-z0-9./:_-]*@sha256:[a-f0-9]{64}$", max_length=256)]
+ImageDigest = Annotated[
+    str, StringConstraints(pattern=r"^[a-z0-9][a-z0-9./:_-]*@sha256:[a-f0-9]{64}$", max_length=256)
+]
 ShortText = Annotated[str, StringConstraints(min_length=1, max_length=256)]
 Identifier = Annotated[str, StringConstraints(pattern=r"^[a-zA-Z0-9][a-zA-Z0-9._-]{0,63}$")]
 FilePath = Annotated[str, StringConstraints(min_length=1, max_length=512)]
@@ -13,7 +15,9 @@ Positive = Annotated[int, Field(gt=0)]
 Nonnegative = Annotated[int, Field(ge=0)]
 Accelerator = Literal["cpu", "cuda"]
 NodeState = Literal["preflight", "ready", "draining", "paused", "offline", "quarantined"]
-PreviewState = Literal["inspecting", "planning", "needs_input", "validating", "ready", "failed", "cancelled"]
+PreviewState = Literal[
+    "inspecting", "planning", "needs_input", "validating", "ready", "failed", "cancelled"
+]
 
 
 class DTO(BaseModel):
@@ -243,7 +247,9 @@ class Task(DTO):
 class Job(DTO):
     id: UUID
     owner_id: UUID
-    state: Literal["queued", "running", "waiting_for_capacity", "succeeded", "partial", "failed", "cancelled"]
+    state: Literal[
+        "queued", "running", "waiting_for_capacity", "succeeded", "partial", "failed", "cancelled"
+    ]
     purpose: Literal["work", "probe", "search", "benchmark"]
     created_at: AwareDatetime
     accepted_units: Nonnegative
@@ -286,6 +292,7 @@ class Assignment(AttemptProof):
     network_policy: Literal["none"]
     resume_checkpoint: Artifact | None = None
     validator_policy: Identifier
+    checkpoint_compatibility_digest: SHA256 | None = None
     item_ids: list[ShortText]
     parameters: dict[str, Any]
 
@@ -363,6 +370,7 @@ class UploadPart(DTO):
 class Upload(DTO):
     id: UUID
     state: Literal["pending", "ready", "expired"]
+    part_size_bytes: Positive
     part_count: Nonnegative
     parts: list[UploadPart]
     artifact: Artifact | None = None
@@ -517,6 +525,8 @@ class AdapterResponse(DTO):
 class StandaloneRecord(DTO):
     schema_version: Literal["1"] = "1"
     node_id: UUID
+    concurrency: Positive = 1
+    batch_policy: dict[str, Positive] = Field(default_factory=dict, max_length=16)
     manifest_digest: SHA256
     config_digest: SHA256
     model_digest: SHA256 | None = None

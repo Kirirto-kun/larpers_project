@@ -236,6 +236,21 @@
         "adapter": {
           "$ref": "#/$defs/AdapterRef"
         },
+        "batch_policy": {
+          "additionalProperties": {
+            "exclusiveMinimum": 0.0,
+            "type": "integer"
+          },
+          "maxProperties": 16,
+          "title": "Batch Policy",
+          "type": "object"
+        },
+        "concurrency": {
+          "default": 1,
+          "exclusiveMinimum": 0.0,
+          "title": "Concurrency",
+          "type": "integer"
+        },
         "config_digest": {
           "pattern": "^[a-f0-9]{64}$",
           "title": "Config Digest",

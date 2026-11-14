@@ -1,4 +1,5 @@
 """Export the v1 contract and generate client DTOs from the committed contract."""
+
 import argparse
 import json
 import re
@@ -16,10 +17,16 @@ TARGETS = {
     "python": ROOT / "sdk/python/campus/generated/api.py",
 }
 SCHEMAS = {
-    "job-plan": "JobPlan", "assignment": "Assignment", "capabilities": "Capabilities",
-    "events": "Event", "standalone-record": "StandaloneRecord", "benchmark-report": "BenchmarkReport",
-    "adapter-request": "AdapterRequest", "adapter-response": "AdapterResponse",
-    "result-manifest": "ResultManifest", "search-result": "SearchResult",
+    "job-plan": "JobPlan",
+    "assignment": "Assignment",
+    "capabilities": "Capabilities",
+    "events": "Event",
+    "standalone-record": "StandaloneRecord",
+    "benchmark-report": "BenchmarkReport",
+    "adapter-request": "AdapterRequest",
+    "adapter-response": "AdapterResponse",
+    "result-manifest": "ResultManifest",
+    "search-result": "SearchResult",
 }
 
 
@@ -40,7 +47,9 @@ def contract():
     from campus import dto
 
     for name in {*(SCHEMAS.values()), "Error"}:
-        schema = getattr(dto, name).model_json_schema(ref_template="#/components/schemas/{model}")
+        schema = getattr(dto, name).model_json_schema(
+            ref_template="#/components/schemas/{model}"
+        )
         for key, value in schema.pop("$defs", {}).items():
             api["components"]["schemas"].setdefault(key, value)
         api["components"]["schemas"].setdefault(name, schema)
@@ -48,11 +57,28 @@ def contract():
         api["components"]["schemas"].pop(name, None)
     public = {"health", "protocol", "redeem_device", "login"}
     device = {
-        "join_node", "put_capabilities", "node_telemetry", "claim_work", "attempt_status", "attempt_started",
-        "renew_attempt", "complete_attempt", "fail_attempt", "release_attempt", "publish_checkpoint",
-        "append_log", "attempt_telemetry", "submit_standalone",
+        "join_node",
+        "put_capabilities",
+        "node_telemetry",
+        "claim_work",
+        "attempt_status",
+        "attempt_started",
+        "renew_attempt",
+        "complete_attempt",
+        "fail_attempt",
+        "release_attempt",
+        "publish_checkpoint",
+        "append_log",
+        "attempt_telemetry",
+        "submit_standalone",
     }
-    dual = {"create_upload", "upload_status", "put_upload_part", "finalize_upload", "download_artifact"}
+    dual = {
+        "create_upload",
+        "upload_status",
+        "put_upload_part",
+        "finalize_upload",
+        "download_artifact",
+    }
     for path, methods in api["paths"].items():
         for verb, operation in methods.items():
             op = operation["operationId"]
@@ -60,33 +86,84 @@ def contract():
             if op not in device | public:
                 operation["security"].append({"BrowserSession": []})
             parameters = operation.setdefault("parameters", [])
-            if op in device | dual and op not in {"join_node", "put_capabilities", "node_telemetry", "submit_standalone"}:
-                parameters.append({"name": "X-Node-Session", "in": "header", "required": op in device,
-                                   "schema": {"type": "string", "format": "uuid"}})
+            if op in device | dual and op not in {
+                "join_node",
+                "put_capabilities",
+                "node_telemetry",
+                "submit_standalone",
+            }:
+                parameters.append(
+                    {
+                        "name": "X-Node-Session",
+                        "in": "header",
+                        "required": op in device,
+                        "schema": {"type": "string", "format": "uuid"},
+                    }
+                )
             if op == "login":
-                parameters.append({"name": "Origin", "in": "header", "required": True, "schema": {"type": "string"}})
+                parameters.append(
+                    {
+                        "name": "Origin",
+                        "in": "header",
+                        "required": True,
+                        "schema": {"type": "string"},
+                    }
+                )
             if verb in {"post", "put", "delete"} and op not in device | public:
-                parameters.append({"name": "X-CSRF-Token", "in": "header", "required": False,
-                                   "description": "Required for browser cookie authentication.",
-                                   "schema": {"type": "string"}})
+                parameters.append(
+                    {
+                        "name": "X-CSRF-Token",
+                        "in": "header",
+                        "required": False,
+                        "description": "Required for browser cookie authentication.",
+                        "schema": {"type": "string"},
+                    }
+                )
             if path.endswith("/events"):
-                parameters.append({"name": "Last-Event-ID", "in": "header", "required": False,
-                                   "schema": {"type": "integer", "minimum": 0}})
-                operation["responses"]["200"]["content"]["text/event-stream"] = {"schema": {"type": "string"}}
+                parameters.append(
+                    {
+                        "name": "Last-Event-ID",
+                        "in": "header",
+                        "required": False,
+                        "schema": {"type": "integer", "minimum": 0},
+                    }
+                )
+                operation["responses"]["200"]["content"]["text/event-stream"] = {
+                    "schema": {"type": "string"}
+                }
             if op == "download_artifact":
-                parameters.append({"name": "Range", "in": "header", "required": False, "schema": {"type": "string"}})
+                parameters.append(
+                    {
+                        "name": "Range",
+                        "in": "header",
+                        "required": False,
+                        "schema": {"type": "string"},
+                    }
+                )
                 for status in ("200", "206"):
                     operation["responses"][status] = {
-                        "description": "Artifact bytes", "content": {"application/octet-stream": {
-                            "schema": {"type": "string", "format": "binary"}}},
+                        "description": "Artifact bytes",
+                        "content": {
+                            "application/octet-stream": {
+                                "schema": {"type": "string", "format": "binary"}
+                            }
+                        },
                     }
             operation["responses"]["422"] = {
-                "description": "Validation error", "content": {"application/json": {
-                    "schema": {"$ref": "#/components/schemas/Error"}}},
+                "description": "Validation error",
+                "content": {
+                    "application/json": {
+                        "schema": {"$ref": "#/components/schemas/Error"}
+                    }
+                },
             }
             operation["responses"]["default"] = {
-                "description": "API error", "content": {"application/json": {
-                    "schema": {"$ref": "#/components/schemas/Error"}}},
+                "description": "API error",
+                "content": {
+                    "application/json": {
+                        "schema": {"$ref": "#/components/schemas/Error"}
+                    }
+                },
             }
     return api
 
@@ -102,11 +179,19 @@ def schema_documents(api):
                 continue
             encoded = json.dumps(components[ref], ensure_ascii=False)
             needed.update(re.findall(r"#/components/schemas/(\w+)", encoded))
-            definitions[ref] = json.loads(encoded.replace("#/components/schemas/", "#/$defs/"))
-        yield ROOT / "contracts/schemas" / f"{slug}.schema.json", dump({
-            "$schema": "https://json-schema.org/draft/2020-12/schema", "$ref": f"#/$defs/{name}",
-            "$defs": definitions,
-        })
+            definitions[ref] = json.loads(
+                encoded.replace("#/components/schemas/", "#/$defs/")
+            )
+        yield (
+            ROOT / "contracts/schemas" / f"{slug}.schema.json",
+            dump(
+                {
+                    "$schema": "https://json-schema.org/draft/2020-12/schema",
+                    "$ref": f"#/$defs/{name}",
+                    "$defs": definitions,
+                }
+            ),
+        )
 
 
 def ts_type(schema):
@@ -126,10 +211,14 @@ def ts_type(schema):
         case "object":
             if "properties" in schema:
                 required = set(schema.get("required", ()))
-                return "{ " + " ".join(
-                    f"{json.dumps(key)}{'' if key in required else '?'}: {ts_type(value)};"
-                    for key, value in schema["properties"].items()
-                ) + " }"
+                return (
+                    "{ "
+                    + " ".join(
+                        f"{json.dumps(key)}{'' if key in required else '?'}: {ts_type(value)};"
+                        for key, value in schema["properties"].items()
+                    )
+                    + " }"
+                )
             additional = schema.get("additionalProperties", {})
             return f"Record<string, {ts_type(additional) if isinstance(additional, dict) else 'unknown'}>"
         case "null" | "boolean" | "string":
@@ -139,8 +228,19 @@ def ts_type(schema):
 
 
 def go_name(name):
-    initials = {"id": "ID", "ids": "IDs", "os": "OS", "url": "URL", "cpu": "CPU", "gpu": "GPU",
-                "gpus": "GPUs", "cuda": "CUDA", "vram": "VRAM", "sha256": "SHA256", "api": "API"}
+    initials = {
+        "id": "ID",
+        "ids": "IDs",
+        "os": "OS",
+        "url": "URL",
+        "cpu": "CPU",
+        "gpu": "GPU",
+        "gpus": "GPUs",
+        "cuda": "CUDA",
+        "vram": "VRAM",
+        "sha256": "SHA256",
+        "api": "API",
+    }
     return "".join(initials.get(piece, piece.capitalize()) for piece in name.split("_"))
 
 
@@ -155,7 +255,9 @@ def go_type(schema):
             return "[]" + go_type(schema.get("items", {}))
         case "object":
             additional = schema.get("additionalProperties", {})
-            return "map[string]" + (go_type(additional) if isinstance(additional, dict) else "any")
+            return "map[string]" + (
+                go_type(additional) if isinstance(additional, dict) else "any"
+            )
         case "integer":
             return "int64"
         case "number":
@@ -176,16 +278,27 @@ def generate_types(api, target):
         content = (ROOT / "server/campus/dto.py").read_text()
         return f"# Generated by contracts/generate.py.\n{content}\n__all__ = {names.split(', ')!r}\n"
     if target in {"portal", "console"}:
-        return "// Generated by contracts/generate.py.\n" + "\n".join(
-            f"export type {name} = {ts_type(schema)};" for name, schema in schemas.items()
-        ) + "\n"
-    output = ["// Code generated by contracts/generate.py. DO NOT EDIT.", "package generated", ""]
+        return (
+            "// Generated by contracts/generate.py.\n"
+            + "\n".join(
+                f"export type {name} = {ts_type(schema)};"
+                for name, schema in schemas.items()
+            )
+            + "\n"
+        )
+    output = [
+        "// Code generated by contracts/generate.py. DO NOT EDIT.",
+        "package generated",
+        "",
+    ]
     for name, schema in schemas.items():
         if "properties" not in schema:
             underlying = go_type(schema)
             output.extend((f"type {name} {underlying}", ""))
             for value in schema.get("enum", ()):
-                output.append(f"const {name}{go_name(value)} {name} = {json.dumps(value)}")
+                output.append(
+                    f"const {name}{go_name(value)} {name} = {json.dumps(value)}"
+                )
             output.append("")
             continue
         required = set(schema.get("required", ()))
@@ -199,7 +312,9 @@ def generate_types(api, target):
         output.extend(("}", ""))
     source = "\n".join(output).rstrip() + "\n"
     if shutil.which("gofmt"):
-        source = subprocess.run(["gofmt"], input=source, check=True, text=True, capture_output=True).stdout
+        source = subprocess.run(
+            ["gofmt"], input=source, check=True, text=True, capture_output=True
+        ).stdout
     return source
 
 

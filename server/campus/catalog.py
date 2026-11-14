@@ -1,0 +1,60 @@
+import json
+from pathlib import Path
+
+from pydantic import BaseModel, ConfigDict, Field
+
+from . import dto
+from .errors import Problem
+
+
+class Adapter(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    ref: dto.AdapterRef
+    image_ids: list[dto.Identifier]
+    policies: list[dto.Identifier]
+    checkpoints: bool = False
+    parallel: bool = False
+    unit: str = "task"
+    weight: int = Field(default=1, ge=1, le=10_000)
+    command: list[str] = Field(default_factory=list)
+    recipe: dto.Recipe | None = None
+    search_stage: dto.Stage | None = None
+    probe_stage: dto.Stage | None = None
+
+
+class CatalogData(BaseModel):
+    environments: list[dto.Environment] = Field(default_factory=list)
+    adapters: list[Adapter] = Field(default_factory=list)
+
+
+class Catalog:
+    def __init__(self, filename=None):
+        data = CatalogData.model_validate_json(Path(filename).read_text()) if filename else CatalogData()
+        self.environments = {item.id: item for item in data.environments}
+        self.adapters = {(item.ref.id, item.ref.version): item for item in data.adapters}
+        self.recipes = {item.recipe.id: item.recipe for item in data.adapters if item.recipe}
+        if (
+            len(self.environments) != len(data.environments)
+            or len(self.adapters) != len(data.adapters)
+            or len(self.recipes) != sum(item.recipe is not None for item in data.adapters)
+        ):
+            raise ValueError("Catalog IDs must be unique")
+        for item in self.adapters.values():
+            if not set(item.image_ids) <= self.environments.keys():
+                raise ValueError("Adapter references an unregistered environment")
+            if item.parallel and not item.command:
+                raise ValueError("A parallel adapter requires a bounded runtime command")
+
+    def adapter(self, ref):
+        adapter = self.adapters.get((ref.id, ref.version))
+        if adapter is None:
+            raise Problem("UNSUPPORTED_ADAPTER", "The adapter version is not registered", 422)
+        return adapter
+
+    def planner_context(self):
+        return json.loads(
+            CatalogData(
+                environments=list(self.environments.values()),
+                adapters=[a.model_copy(update={"command": []}) for a in self.adapters.values()],
+            ).model_dump_json()
+        )

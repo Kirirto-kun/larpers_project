@@ -20,7 +20,9 @@ def validate_refs(schema, document):
 def main():
     api = json.loads(CONTRACT.read_text())
     if (ROOT / "server/campus/main.py").is_file():
-        assert api == contract(), "OpenAPI drift: regenerate with contracts/generate.py --export"
+        assert api == contract(), (
+            "OpenAPI drift: regenerate with contracts/generate.py --export"
+        )
     validate_refs(api, api)
     for path, content in schema_documents(api):
         assert path.read_text() == content, f"Schema drift: {path.name}"
@@ -30,9 +32,13 @@ def main():
         for reply in scenario["responses"].values():
             schema = reply.get("schema")
             if schema:
-                Draft202012Validator({
-                    "$ref": f"#/components/schemas/{schema}", "components": api["components"],
-                }, format_checker=FormatChecker()).validate(reply["body"])
+                Draft202012Validator(
+                    {
+                        "$ref": f"#/components/schemas/{schema}",
+                        "components": api["components"],
+                    },
+                    format_checker=FormatChecker(),
+                ).validate(reply["body"])
     print("OpenAPI, standalone JSON Schemas, and fixture responses are valid")
 
 

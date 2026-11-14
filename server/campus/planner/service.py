@@ -1,0 +1,322 @@
+from datetime import timedelta
+from uuid import uuid4
+
+from pydantic import ValidationError
+from sqlalchemy import func, select
+
+from .. import dto
+from .. import models as m
+from ..db import digest, now, payload, write_lock
+from ..errors import Problem
+from ..events import emit
+from ..jobs.adapters import prepare
+from ..jobs.service import cancel, create_job, owned_preview
+from .inspection import inspect
+from .validation import manifest, validate_plan
+
+
+def describe(row):
+    return dto.Preview(
+        id=row.id,
+        state=row.state,
+        plan_revision=row.revision,
+        plan=row.plan,
+        plan_digest=row.plan_digest,
+        question=row.question,
+        error_code=row.error_code,
+        error_message=row.error_message,
+    )
+
+
+def plan_job(db, app, actor, body):
+    user = actor.member()
+    write_lock(db)
+    if not body.prepared_plan and not body.prompt:
+        raise Problem("PROMPT_REQUIRED", "A prompt or a prepared plan is required", 422)
+    if body.prepared_plan and (body.selected_files or body.share_with_llm):
+        raise Problem("INVALID_REQUEST", "A prepared plan does not share data with the planner", 422)
+    if body.selected_files and not body.share_with_llm:
+        raise Problem("SHARING_REQUIRED", "Confirm sharing selected project files", 422)
+    current = now(db)
+    count = db.scalar(
+        select(func.count())
+        .select_from(m.Preview)
+        .where(
+            m.Preview.owner_id == user.id,
+            m.Preview.created_at > current - timedelta(minutes=1),
+        )
+    )
+    if count >= 20:
+        raise Problem("RATE_LIMITED", "Preview rate limit exceeded", 429, retryable=True)
+    manifest(db, user, body)
+    row = m.Preview(
+        owner_id=user.id,
+        state="inspecting",
+        request=payload(body),
+        deadline_at=current + timedelta(seconds=app.settings.llm_planning_seconds),
+    )
+    db.add(row)
+    db.flush()
+    announce(db, row, user)
+    return describe(row)
+
+
+def answer(db, app, actor, preview_id, body):
+    write_lock(db)
+    row = owned_preview(db, actor, preview_id)
+    if (
+        row.state != "needs_input"
+        or row.revision != body.plan_revision
+        or row.question["question_id"] != body.question_id
+    ):
+        raise Problem("STALE_PREVIEW", "This question no longer belongs to the active revision", 409)
+    row.revision += 1
+    row.answer = payload(body)
+    row.question = None
+    row.probe_job_id = None
+    row.claim_id = row.claim_expires_at = None
+    row.state = "inspecting"
+    row.deadline_at = now(db) + timedelta(seconds=app.settings.llm_planning_seconds)
+    announce(db, row, db.get(m.User, row.owner_id))
+    return describe(row)
+
+
+def cancel_preview(db, actor, preview_id):
+    write_lock(db)
+    row = owned_preview(db, actor, preview_id)
+    if row.state not in {"cancelled", "failed"}:
+        row.state = "cancelled"
+        if row.probe_job_id:
+            cancel(db, db.get(m.Job, row.probe_job_id))
+        announce(db, row, db.get(m.User, row.owner_id))
+    return describe(row)
+
+
+def announce(db, row, user):
+    emit(
+        db,
+        user.pool_id,
+        "preview",
+        row.id,
+        "preview_updated",
+        state=row.state,
+        plan_revision=row.revision,
+    )
+
+
+def claim(db):
+    write_lock(db)
+    current = now(db)
+    rows = db.scalars(
+        select(m.Preview)
+        .where(
+            m.Preview.state.in_(("inspecting", "planning", "validating")),
+            (m.Preview.claim_expires_at.is_(None)) | (m.Preview.claim_expires_at <= current),
+        )
+        .order_by(m.Preview.created_at)
+        .limit(100)
+    )
+    for row in rows:
+        user = db.get(m.User, row.owner_id)
+        if row.deadline_at <= current:
+            set_error(db, row, user, Problem("PLANNER_TIMEOUT", "Planning deadline passed", 503))
+            continue
+        if row.probe_job_id:
+            job = db.get(m.Job, row.probe_job_id)
+            if job.finished_at is None:
+                continue
+        row.claim_id = uuid4()
+        row.claim_expires_at = min(row.deadline_at, current + timedelta(seconds=15))
+        row.state = "planning"
+        announce(db, row, user)
+        return row.id, row.claim_id, row.revision
+
+
+def context_for(db, app, row, user, request):
+    context = inspect(db, app, user, request)
+    context.update(
+        {
+            "prompt": request.prompt,
+            "answer": row.answer,
+            "plan_revision": row.revision,
+            "current_time": now(db).isoformat(),
+            "catalog": app.catalog.planner_context(),
+        }
+    )
+    if row.probe_job_id:
+        results = list(
+            db.scalars(select(m.Acceptance).join(m.Task).where(m.Task.job_id == row.probe_job_id))
+        )
+        if len(results) != 1:
+            raise Problem("PROBE_FAILED", "The registered probe did not return accepted evidence", 422)
+        context["probe"] = {"job_id": str(row.probe_job_id), "verification": results[0].report["level"]}
+    return context
+
+
+def prepare_preview(app, claim_data):
+    preview_id, _, revision = claim_data
+    with app.sessions() as db:
+        row = db.get(m.Preview, preview_id)
+        user = db.get(m.User, row.owner_id)
+        request = dto.PreviewRequest.model_validate(row.request)
+        context = context_for(db, app, row, user, request)
+        budget = (row.deadline_at - now(db)).total_seconds()
+    plan = request.prepared_plan
+    if plan is None:
+        proposal = app.planner(app.settings, context, budget)
+        if proposal.question:
+            return {"question": proposal.question}
+        if proposal.probe:
+            return {"probe": proposal.probe}
+        plan = proposal.plan
+    if plan.plan_revision != revision:
+        raise Problem("INVALID_PLAN", "Planner returned the wrong revision", 422)
+    if plan.questions:
+        return {"question": plan.questions[0]}
+    with app.sessions.begin() as db:
+        row = db.get(m.Preview, preview_id)
+        user = db.get(m.User, row.owner_id)
+        write_lock(db)
+        db.refresh(row)
+        if row.state != "planning" or row.claim_id != claim_data[1] or row.claim_expires_at <= now(db):
+            return {}
+        validate_plan(db, app, user, plan, request)
+        row.state = "validating"
+        announce(db, row, user)
+        adapter_inputs = []
+        for item in request.inputs:
+            artifact = db.get(m.Artifact, item.artifact_id)
+            adapter_inputs.append(
+                {**payload(item), "sha256": artifact.sha256, "size_bytes": artifact.size_bytes}
+            )
+        budget = (row.deadline_at - now(db)).total_seconds()
+    tasks = prepare(
+        plan, adapter_inputs, app.catalog, app.settings.max_tasks_per_job, budget_seconds=budget
+    )
+    return {"plan": plan, "prepared": tasks}
+
+
+def launch_probe(db, app, row, user, proposal):
+    if row.probe_job_id:
+        raise Problem("INVALID_PROBE", "A revision can run only one registered probe", 422)
+    adapter = app.catalog.adapter(
+        dto.AdapterRef(id=proposal.adapter_id, version=proposal.adapter_version)
+    )
+    stage = adapter.probe_stage
+    if (
+        not stage
+        or stage.adapter != adapter.ref
+        or stage.bindings
+        or stage.depends_on
+        or stage.resume_policy == "checkpoint"
+        or stage.validation_policy == "structural"
+    ):
+        raise Problem("INVALID_PROBE", "The requested adapter has no eligible isolated probe", 422)
+    request = dto.PreviewRequest(prompt="Registered capability probe")
+    project, manifest_sha = manifest(db, user, request)
+    deadline = min(row.deadline_at, now(db) + timedelta(seconds=45))
+    plan = dto.JobPlan(
+        plan_revision=row.revision,
+        project_digest=project,
+        input_manifest_digest=manifest_sha,
+        execution_kind="single",
+        stages=[stage.model_copy(update={"task_deadline_ms": min(stage.task_deadline_ms, 15_000)})],
+        job_deadline_at=deadline,
+        retry_policy=dto.RetryPolicy(max_attempts=1),
+    )
+    validate_plan(db, app, user, plan, request)
+    row.probe_job_id = create_job(
+        db,
+        app,
+        user,
+        plan,
+        {stage.stage_id: [{"item_ids": [], "parameters": {}, "units": 0}]},
+        purpose="probe",
+        preview_id=row.id,
+    ).id
+    row.state = "validating"
+
+
+def set_error(db, row, user, error):
+    row.state = "failed"
+    row.error_code, row.error_message = error.code, error.message
+    if row.probe_job_id:
+        cancel(db, db.get(m.Job, row.probe_job_id))
+    announce(db, row, user)
+
+
+def finish(db, app, claim_data, result=None, error=None):
+    write_lock(db)
+    preview_id, claim_id, revision = claim_data
+    row = db.get(m.Preview, preview_id)
+    if (
+        row.state not in {"planning", "validating"}
+        or row.claim_id != claim_id
+        or row.revision != revision
+        or row.claim_expires_at <= now(db)
+    ):
+        return
+    user = db.get(m.User, row.owner_id)
+    row.claim_id = row.claim_expires_at = None
+    if row.deadline_at <= now(db):
+        error = Problem("PLANNER_TIMEOUT", "Planning deadline passed", 503)
+    if error:
+        set_error(db, row, user, error)
+        return
+    if result.get("question"):
+        row.question = payload(result["question"])
+        row.state = "needs_input"
+    elif result.get("probe"):
+        try:
+            launch_probe(db, app, row, user, result["probe"])
+        except Problem as exc:
+            set_error(db, row, user, exc)
+            return
+    elif result.get("plan"):
+        row.plan = payload(result["plan"])
+        if row.probe_job_id:
+            row.plan["evidence"] = [
+                *row.plan["evidence"][:63],
+                {
+                    "source": "probe",
+                    "detail": f"Verified probe job {row.probe_job_id}",
+                },
+            ]
+        row.plan_digest = digest(row.plan)
+        row.prepared = result["prepared"]
+        row.state = "ready"
+    else:
+        return
+    announce(db, row, user)
+
+
+def renew_claim(db, claim_data):
+    write_lock(db)
+    row = db.get(m.Preview, claim_data[0])
+    current = now(db)
+    if (
+        row.claim_id == claim_data[1]
+        and row.state in {"planning", "validating"}
+        and row.claim_expires_at > current
+        and row.deadline_at > current
+    ):
+        row.claim_expires_at = min(row.deadline_at, current + timedelta(seconds=15))
+
+
+def process(app, claim_data):
+    try:
+        result = prepare_preview(app, claim_data)
+    except Problem as exc:
+        with app.sessions.begin() as db:
+            finish(db, app, claim_data, error=exc)
+    except ValidationError:
+        with app.sessions.begin() as db:
+            finish(
+                db,
+                app,
+                claim_data,
+                error=Problem("INVALID_PLAN", "The plan could not be validated", 422),
+            )
+    else:
+        with app.sessions.begin() as db:
+            finish(db, app, claim_data, result=result)

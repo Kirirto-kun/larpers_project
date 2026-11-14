@@ -37,6 +37,15 @@ func Discover(ctx context.Context) (client.Capabilities, error) {
 	if err != nil {
 		return caps, err
 	}
+	caps.CPUAvailableMillis, err = availableCPU(ctx)
+	if err != nil {
+		caps.Diagnostics = append(caps.Diagnostics, "CPU availability sample unavailable; managed contribution remains paused.")
+	}
+	if caps.Runtime.Healthy {
+		if raw, e := Exec(ctx, "docker", "info", "--format", "{{json .}}"); e == nil {
+			applyDockerCapacity(&caps, raw)
+		}
+	}
 	hardware := cachedHardware(ctx)
 	caps.CPUModel = hardware.CPUModel
 	caps.CPUVendor = hardware.CPUVendor

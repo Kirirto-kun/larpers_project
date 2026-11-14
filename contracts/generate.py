@@ -19,6 +19,7 @@ TARGETS = {
 SCHEMAS = {
     "job-plan": "JobPlan",
     "assignment": "Assignment",
+    "native-assignment-v2": "NativeAssignment",
     "capabilities": "Capabilities",
     "events": "Event",
     "standalone-record": "StandaloneRecord",
@@ -56,7 +57,7 @@ def contract():
         api["components"]["schemas"].setdefault(name, schema)
     for name in ("HTTPValidationError", "ValidationError"):
         api["components"]["schemas"].pop(name, None)
-    public = {"health", "protocol", "redeem_device", "login"}
+    public = {"health", "protocol", "redeem_device", "login", "register"}
     device = {
         "join_node",
         "put_capabilities",

@@ -4,50 +4,34 @@ import { bytes } from "./Common";
 export function UploadPicker({
   files,
   onChange,
+  disabled = false,
 }: {
   files: File[];
   onChange: (files: File[]) => void;
+  disabled?: boolean;
 }) {
   const pick = (e: ChangeEvent<HTMLInputElement>) =>
     onChange(Array.from(e.target.files || []));
   return (
     <>
       <label>
-        Project or dataset files
-        <input type="file" multiple onChange={pick} />
+        Код и данные
+        <input type="file" multiple disabled={disabled} onChange={pick} />
       </label>
-      <label>
-        Or select a project folder
-        <input
-          type="file"
-          multiple
-          {...{ webkitdirectory: "" }}
-          onChange={pick}
-        />
-      </label>
-      <small>
-        ZIP projects are inspected by the server before execution. Sensitive
-        files inside archives must also be excluded server-side.
-      </small>
       {files.map((f, i) => (
         <div className="row" key={i}>
           <span>
             {f.webkitRelativePath || f.name}
             {excluded(f.webkitRelativePath || f.name) && (
-              <b> · Excluded (secret or dependency)</b>
+              <b> · Исключён: секрет или служебный файл</b>
             )}
           </span>
           <small>{bytes(f.size)}</small>
         </div>
       ))}
       <p className="muted">
-        {files.filter((f) => !excluded(f.webkitRelativePath || f.name)).length}{" "}
-        included files ·{" "}
-        {bytes(
-          files
-            .filter((f) => !excluded(f.webkitRelativePath || f.name))
-            .reduce((n, f) => n + f.size, 0),
-        )}
+        Файлы кода и данные загрузятся в пул. .env, ключи и служебные папки
+        исключаются. Проверьте содержимое перед загрузкой.
       </p>
     </>
   );

@@ -6,6 +6,7 @@ from ..artifacts.storage import safe_relative, secret_path
 from ..db import digest, now, payload
 from ..errors import Problem
 from ..jobs.scheduler import RESOURCE_KEYS
+from ..native_worker import distinct_paths, input_path, resource_policy, validate_command
 
 
 def invalid(message):
@@ -37,6 +38,8 @@ def manifest(db, user, request):
 def validate_mount(binding, row):
     if binding.archive and row.kind != "project":
         raise invalid("Only a validated project ZIP may be expanded")
+    if binding.archive and binding.mount_path == "/workspace":
+        return
     prefix = "/workspace/" if binding.archive else "/inputs/"
     if not binding.mount_path.startswith(prefix):
         raise invalid("Input mounts must use their declared sandbox directory")
@@ -90,7 +93,18 @@ def validate_plan(db, app, user, plan, request, *, server_evidence=False):
             if not stage.working_dir.startswith("/workspace/"):
                 raise invalid("Working directory must be under /workspace")
             safe_relative(stage.working_dir.removeprefix("/workspace/"))
-        if len({b.mount_path for b in stage.bindings}) != len(stage.bindings):
+        if stage.adapter.id == "campus.python" and request.project_artifact_id:
+            archives = [binding for binding in stage.bindings if binding.archive]
+            if (
+                len(archives) != 1
+                or archives[0].artifact_id != request.project_artifact_id
+                or archives[0].mount_path != "/workspace"
+            ):
+                raise invalid(
+                    "Each Python stage must bind the selected project ZIP exactly once "
+                    "at /workspace with archive=true; add this binding before running"
+                )
+        if not distinct_paths([b.mount_path for b in stage.bindings]):
             raise invalid("Duplicate input mount")
         for binding in stage.bindings:
             row = owned_input(db, user, binding.artifact_id)
@@ -102,7 +116,7 @@ def validate_plan(db, app, user, plan, request, *, server_evidence=False):
         paths = [b.mount_path for b in stage.bindings]
         if any(a.startswith(b + "/") for a in paths for b in paths if a != b):
             raise invalid("Input mounts overlap")
-        if len({o.path for o in stage.outputs}) != len(stage.outputs):
+        if not distinct_paths([o.path for o in stage.outputs]):
             raise invalid("Output paths must be unique")
         for output in stage.outputs:
             if (
@@ -116,6 +130,14 @@ def validate_plan(db, app, user, plan, request, *, server_evidence=False):
         environments = [app.catalog.environments[key] for key in adapter.image_ids]
         for variant in stage.variants:
             validate_variant(variant, environments, request.accelerator)
+            if stage.adapter.id == "campus.python":
+                try:
+                    validate_command(stage)
+                    resource_policy(stage, variant)
+                    for binding in stage.bindings:
+                        input_path(binding)
+                except ValueError as exc:
+                    raise invalid(str(exc)) from exc
     return plan
 
 

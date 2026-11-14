@@ -5,7 +5,7 @@ from uuid import uuid4
 
 from sqlalchemy import select
 
-from .. import dto
+from .. import dto, native_worker, worker_compat
 from .. import models as m
 from ..auth import session_for
 from ..db import digest, now, payload, secret_hash, write_lock
@@ -109,9 +109,15 @@ def checkpoint_for(db, job, task, variant):
     return artifact_dto(db.get(m.Artifact, latest.artifact_id)) if latest else None
 
 
-def claim_work(db, app, actor, session_id):
+def claim_work(db, app, actor, session_id, *, worker_policy=None, native=False):
     write_lock(db)
     node, session = session_for(db, actor, session_id, touch=True)
+    if native and (
+        node.applied_revision != node.settings_revision
+        or node.actual_state != "running"
+        or node.settings_error
+    ):
+        return None
     current = now(db)
     reserved = [
         variant["resource_requirements"]
@@ -174,7 +180,21 @@ def claim_work(db, app, actor, session_id):
         variants = sorted(stage.variants, key=lambda v: v.accelerator != "cuda")
         if job.purpose == "benchmark" and task.units:
             variants = benchmark_variants(db, job, node, variants)
-        variant = next((v for v in variants if compatible(node, v, remaining)), None)
+        variant = next(
+            (
+                v
+                for v in variants
+                if compatible(node, v, remaining)
+                and worker_compat.supports(stage, v, worker_policy, node=node)
+                and (
+                    not native
+                    or native_worker.supports(
+                        stage, v, node, gpu_busy=any(r["gpu_slots"] for r in reserved)
+                    )
+                )
+            ),
+            None,
+        )
         if variant:
             selected_owner = owner.id
             # Owner fairness comes first. Avoid starving older or retrying work
@@ -205,7 +225,20 @@ def claim_work(db, app, actor, session_id):
     if choices:
         _, task, job, owner, stage, variant = min(choices, key=lambda item: item[0])
         resize(db, app, node, job, task, stage, variant)
-        return lease(db, app, node, session, current, job, task, owner, stage, variant)
+        return lease(
+            db,
+            app,
+            node,
+            session,
+            current,
+            job,
+            task,
+            owner,
+            stage,
+            variant,
+            worker_policy=worker_policy,
+            native=native,
+        )
     return None
 
 
@@ -233,7 +266,21 @@ def benchmark_variants(db, job, node, variants):
     ]
 
 
-def lease(db, app, node, session, current, job, task, owner, stage, variant):
+def lease(
+    db,
+    app,
+    node,
+    session,
+    current,
+    job,
+    task,
+    owner,
+    stage,
+    variant,
+    *,
+    worker_policy=None,
+    native=False,
+):
     from .leases import checkpoint_digest
 
     token = token_urlsafe(32)
@@ -267,7 +314,7 @@ def lease(db, app, node, session, current, job, task, owner, stage, variant):
         node_id=str(node.id),
         generation=attempt.generation,
     )
-    return dto.Assignment(
+    value = dto.Assignment(
         job_id=job.id,
         task_id=task.id,
         stage_id=stage.stage_id,
@@ -299,6 +346,18 @@ def lease(db, app, node, session, current, job, task, owner, stage, variant):
             checkpoint_digest(job, task, variant) if stage.resume_policy == "checkpoint" else None
         ),
         parameters={**stage.parameters, **task.parameters},
+    )
+    remaining_ms = int((deadline - current).total_seconds() * 1000)
+    if native:
+        return payload(
+            dto.NativeAssignment.model_validate(
+                native_worker.assignment(payload(value), stage, variant, node, remaining_ms=remaining_ms)
+            )
+        )
+    return (
+        worker_compat.assignment(payload(value), worker_policy, remaining_ms=remaining_ms)
+        if worker_policy
+        else value
     )
 
 

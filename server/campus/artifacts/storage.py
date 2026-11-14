@@ -20,6 +20,12 @@ def safe_relative(path):
         or any(part in {"", ".", ".."} for part in path.split("/"))
     ):
         raise Problem("UNSAFE_PATH", "Only portable relative paths are allowed", 422)
+    for component in path.split("/"):
+        base = component.split(".", 1)[0].upper()
+        if component.rstrip(" .") != component or base in {"CON", "PRN", "AUX", "NUL"} or (
+            len(base) == 4 and base[:3] in {"COM", "LPT"} and base[3] in "123456789"
+        ):
+            raise Problem("UNSAFE_PATH", "Path uses a platform-specific filename alias", 422)
     return PurePosixPath(path)
 
 

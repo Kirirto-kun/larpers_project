@@ -41,6 +41,8 @@ class User(Identified, Base):
     pool_id: Mapped[UUID] = mapped_column(ForeignKey("pools.id"), index=True)
     name: Mapped[str] = mapped_column(String(256))
     role: Mapped[str] = mapped_column(String(16))
+    email: Mapped[str | None] = mapped_column(String(254), unique=True)
+    password_hash: Mapped[str | None] = mapped_column(String(256))
     last_dispatched_at: Mapped[datetime | None]
 
 
@@ -55,6 +57,14 @@ class Node(Identified, Created, Base):
     last_seen_at: Mapped[datetime | None]
     capabilities: Mapped[dict | None] = mapped_column(JSONB)
     current_session_id: Mapped[UUID | None]
+    settings_revision: Mapped[int] = mapped_column(BigInteger, default=1, server_default="1")
+    contribution_mode: Mapped[str] = mapped_column(String(16), default="medium", server_default="medium")
+    desired_state: Mapped[str] = mapped_column(String(16), default="running", server_default="running")
+    applied_revision: Mapped[int] = mapped_column(BigInteger, default=0, server_default="0")
+    actual_state: Mapped[str | None] = mapped_column(String(16))
+    applied_mode: Mapped[str | None] = mapped_column(String(16))
+    settings_error: Mapped[str | None] = mapped_column(String(512))
+    agent_contact_at: Mapped[datetime | None]
 
 
 class Invite(Identified, Created, Base):

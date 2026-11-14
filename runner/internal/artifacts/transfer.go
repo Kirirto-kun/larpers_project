@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"campus/runner/internal/client"
 	"campus/runner/internal/generated"
+	"campus/runner/internal/packaging"
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
@@ -162,6 +163,26 @@ func Upload(ctx context.Context, c *client.Client, path string, fence client.Fen
 
 // UploadAs selects the foundation artifact purpose independently of its local name.
 func UploadAs(ctx context.Context, c *client.Client, path string, fence client.Fence, kind string) (client.Artifact, error) {
+	return uploadNamedAs(ctx, c, path, fence, kind, filepath.Base(path))
+}
+
+// UploadNamed preserves the declared output path independently of its local file.
+// This is used by negotiated workers; legacy Upload retains basename semantics.
+func UploadNamed(ctx context.Context, c *client.Client, path string, fence client.Fence, name string) (client.Artifact, error) {
+	if err := packaging.SafePath(name); err != nil {
+		return client.Artifact{}, err
+	}
+	if len(name) > 512 {
+		return client.Artifact{}, errors.New("upload name exceeds its bound")
+	}
+	kind := "input"
+	if fence.AttemptID != "" {
+		kind = "output"
+	}
+	return uploadNamedAs(ctx, c, path, fence, kind, name)
+}
+
+func uploadNamedAs(ctx context.Context, c *client.Client, path string, fence client.Fence, kind, name string) (client.Artifact, error) {
 	var result client.Artifact
 	switch kind {
 	case "input", "project", "output", "checkpoint":
@@ -179,7 +200,6 @@ func UploadAs(ctx context.Context, c *client.Client, path string, fence client.F
 	if err != nil {
 		return result, err
 	}
-	name := filepath.Base(path)
 	mediaType := "application/octet-stream"
 	body := generated.UploadCreate{Name: name, SHA256: digest, SizeBytes: size, PartSizeBytes: &partSize, Kind: &kind, MediaType: &mediaType}
 	if fence.AttemptID != "" || fence.Generation != 0 || fence.LeaseToken != "" {

@@ -203,6 +203,63 @@ unprepared profile and causes an actionable error when that profile is needed.
 Image architecture and the guard contract are verified before probing; no
 unapproved image is probed. Cross-architecture emulation is not enabled.
 
+## Managed web participation
+
+Add `--managed` to `install`, `connect`, `join` or `serve` to allow the web
+Devices page to pause, resume, drain and choose a contribution mode for this
+foreground invocation. For example:
+
+```text
+campus serve --managed --profiles environments/resolved-profiles.json
+campus install --catalog-url TRUSTED_CATALOG_URL --catalog-sha256 TRUSTED_CATALOG_SHA256 --managed --gpu=false
+```
+
+The supervisor polls device settings about every five seconds using the saved
+device credential. It holds the installation lock and a private snapshot of the
+approved profiles throughout remote pauses. Paused startup fetches settings
+without running compute preflight or opening a worker session. With a new managed
+installation, enrollment precedes compute preflight so its device settings can
+be checked first. Image verification and local GPU consent still happen during
+preparation. `--check-only` retains its local verification behavior.
+
+Low, medium and maximum use 10%, 50% and 90% of sampled idle CPU and currently
+available RAM, bounded by Docker CPU/RAM capacity and optional local owner
+ceilings. Fractional CPU is supported without a one-core floor. Missing CPU or
+Docker capacity measurements leave participation paused. Maximum is intended
+for an idle computer on external power. Web settings cannot enable GPU or
+battery permission; CUDA still requires the local `--gpu` opt-in and successful
+probe. Without `--managed`, the existing conservative contribution budget and
+CLI lifecycle remain unchanged.
+
+Remote pause cancels work and waits for runtime teardown before acknowledging
+the revision. Resume and mode changes create a fresh preflight/session. Explicit
+mode changes stop the old session before new quotas are published. Ambient
+availability changes reduce future admission while existing bounded work
+finishes; reservations prevent extra work when sampled capacity falls below
+active use. Capability increases take effect locally only after the server
+acknowledges a new, monotonically increasing preflight revision. Failed
+publication keeps conservative admission and gates new claims until a fresh
+publication succeeds; existing work continues and local stop remains available. Drain
+blocks new claims, lets active attempts finish, then remains paused until a
+newer running revision. Settings/acknowledgement calls do not require a node
+session, so the supervisor remains reachable while remotely paused. Network
+errors, malformed settings and older servers fail closed; they never switch to
+an unmanaged offer.
+
+Keep the foreground window open. Ctrl+C, `campus leave --stop` and local
+`campus leave --drain` end this invocation, including while remotely paused.
+Later web requests cannot restart a process that has exited. Remote controls
+never overwrite the local leave file. There is no background service or
+autostart installation.
+
+Managed clients send `X-Campus-Worker-Protocol: 2` on API requests to negotiate
+rich bounded assignments. The legacy `campus/0.1.0` user agent remains unchanged.
+Managed result uploads include only declared output paths and retain those
+relative names, including nested paths; incidental workspace changes are omitted.
+Rich assignments distinguish required `outputs` from `optional_outputs`; only
+required paths are passed to the pinned guard's required-output list. Optional
+files are uploaded when produced and may be absent.
+
 ## Submit, inspect and retrieve work
 
 A device invitation grants worker participation. Member operations require a

@@ -3,7 +3,7 @@ from datetime import timedelta
 
 from sqlalchemy import func, select
 
-from . import dto
+from . import device_settings, dto
 from . import models as m
 from .auth import node_state, session_for
 from .db import now, payload, write_lock
@@ -19,6 +19,7 @@ def node_in_pool(db, actor, node_id):
     node = db.get(m.Node, node_id)
     if not node or node.pool_id != actor.user.pool_id:
         raise missing()
+    actor.owns(node.owner_id, node.pool_id)
     return node
 
 
@@ -33,12 +34,20 @@ def describe_node(db, app, node, current):
     )
     return dto.Node(
         id=node.id,
+        owner_id=node.owner_id,
         name=node.name,
         state=node_state(node, current, app.settings.offline_seconds),
         last_seen_at=node.last_seen_at,
         capabilities=node.capabilities,
         accepted_units=units,
         active_attempts=len(active_attempts(db, node.id, current)),
+        settings=device_settings.describe(node),
+        applied_revision=node.applied_revision,
+        actual_state=node.actual_state,
+        applied_mode=node.applied_mode,
+        settings_error=node.settings_error,
+        agent_contact_at=node.agent_contact_at,
+        supports_web_controls=node.applied_revision > 0,
     )
 
 
@@ -52,22 +61,28 @@ def control(db, actor, node_id, body):
         raise Problem("QUARANTINED", "An administrator must release the device", 409)
     if body.action == "release" and node.mode != "quarantined":
         raise Problem("INVALID_STATE", "Only a quarantined device can be released", 409)
-    node.mode = {
+    new_mode = {
         "drain": "draining",
         "stop": "paused",
         "resume": "ready",
         "quarantine": "quarantined",
         "release": "paused",
     }[body.action]
+    desired = {"draining": "draining", "ready": "running"}.get(new_mode, "paused")
+    if node.mode != new_mode or node.desired_state != desired:
+        node.settings_revision += 1
+        node.settings_error = None
+    node.mode = new_mode
+    node.desired_state = desired
     if body.action in {"stop", "quarantine"}:
         # Rotate the session fence immediately, even if resume races the reaper.
         node.current_session_id = None
-        node.capabilities = None
     emit(db, node.pool_id, "node", node.id, "node_controlled", action=body.action)
     return node
 
 
 def summary(db, app, actor):
+    actor.admin()
     user = actor.member()
     current = now(db)
     nodes = list(db.scalars(select(m.Node).where(m.Node.pool_id == user.pool_id)))
@@ -84,6 +99,49 @@ def summary(db, app, actor):
         jobs_by_state=states,
         accepted_units=units,
         ready_nodes=sum(node_state(n, current, app.settings.offline_seconds) == "ready" for n in nodes),
+    )
+
+
+def user_stats(db, app, actor):
+    user = actor.member()
+    current = now(db)
+    nodes = list(db.scalars(select(m.Node).where(m.Node.owner_id == user.id)))
+    jobs = list(
+        db.scalars(
+            select(m.Job)
+            .where(m.Job.owner_id == user.id, m.Job.purpose == "work")
+            .order_by(m.Job.created_at.desc())
+        )
+    )
+    views = [describe(db, job) for job in jobs]
+    ledger = list(
+        db.scalars(
+            select(m.Ledger).where(m.Ledger.contributor_id == user.id).order_by(m.Ledger.created_at)
+        )
+    )
+    history = {}
+    for row in ledger:
+        date = row.created_at.date().isoformat()
+        entry = history.setdefault(date, {"date": date, "accepted_units": 0, "amount": 0})
+        entry["accepted_units"] += row.accepted_units
+        entry["amount"] += row.amount
+    return dto.UserStats(
+        devices_total=len(nodes),
+        devices_online=sum(
+            bool(
+                n.current_session_id
+                and n.last_seen_at
+                and n.last_seen_at + timedelta(seconds=app.settings.offline_seconds) > current
+            )
+            for n in nodes
+        ),
+        accepted_units=sum(row.accepted_units for row in ledger),
+        contributed_seconds=None,
+        jobs_by_state=Counter(view.state for view in views),
+        recent_results=[
+            view for view in views if view.state in {"succeeded", "partial", "failed", "cancelled"}
+        ][:10],
+        history=list(history.values())[-90:],
     )
 
 
@@ -171,7 +229,7 @@ def append_log(db, app, actor, session_id, attempt_id, body):
         attempt.log_truncated = True
         return
     attempt.log_bytes += size
-    gap = body.sequence != (prior.sequence + 1 if prior else 0)
+    gap = body.sequence != prior.sequence + 1 if prior else body.sequence not in {0, 1}
     db.add(m.Log(job_id=job.id, attempt_id=attempt.id, sequence=body.sequence, text=body.text, gap=gap))
 
 
@@ -200,7 +258,7 @@ def append_metric(db, actor, session_id, body, attempt_id=None):
         raise Problem(
             "RATE_LIMITED", "Telemetry is limited to one sample per second", 429, retryable=True
         )
-    gap = body.sequence != (previous.sequence + 1 if previous else 0)
+    gap = body.sequence != previous.sequence + 1 if previous else body.sequence not in {0, 1}
     db.add(
         m.Metric(
             node_id=node.id,

@@ -21,6 +21,28 @@ func (b *Budget) Update(limit client.ResourceLimits) {
 	defer b.mu.Unlock()
 	b.limit = limit
 }
+
+// Constrain applies only reductions while a capability publication is pending.
+// Existing reservations survive; Acquire admits nothing while they exceed the
+// new limit. An unacknowledged increase can never expand admission.
+func (b *Budget) Constrain(next client.ResourceLimits) {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	b.limit.CPUMillis = min(b.limit.CPUMillis, next.CPUMillis)
+	b.limit.MemoryBytes = min(b.limit.MemoryBytes, next.MemoryBytes)
+	b.limit.VRAMBytes = min(b.limit.VRAMBytes, next.VRAMBytes)
+	allowed := map[string]bool{}
+	for _, id := range next.GPUIDs {
+		allowed[id] = true
+	}
+	retained := []string{}
+	for _, id := range b.limit.GPUIDs {
+		if allowed[id] {
+			retained = append(retained, id)
+		}
+	}
+	b.limit.GPUIDs = retained
+}
 func (b *Budget) Acquire(r client.ResourceLimits) (func(), error) {
 	b.mu.Lock()
 	defer b.mu.Unlock()

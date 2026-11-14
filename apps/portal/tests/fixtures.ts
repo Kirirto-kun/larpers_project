@@ -1,234 +1,218 @@
-import { type Page, type Route } from "@playwright/test";
+import type { Page } from "@playwright/test";
+export const identity = {
+  id: "user-1",
+  name: "Анна",
+  email: "anna@example.com",
+  role: "member",
+  pool_id: "pool-1",
+  csrf_token: "csrf-test",
+};
 export const node = {
   id: "node-1",
-  name: "Lab laptop",
-  state: "ready",
-  roles: ["compute"],
-  cpu_logical: 8,
-  memory_available_bytes: 8589934592,
-  gpus: [],
-  offered_budget: {
-    cpu_percent: 50,
-    memory_bytes: 4294967296,
-    gpu_allowed: false,
-  },
-  preflight: [{ name: "Docker", ok: true, message: "Runtime ready" }],
-  last_seen_at: "2026-11-14T06:00:00Z",
-  attempts: [],
-};
-export const job = {
-  id: "job-1",
-  name: "Document corpus",
-  state: "succeeded",
-  accepted_units: 100,
-  failed_units: 0,
-  total_units: 100,
-  stages: [{ stage_id: "embed", state: "succeeded" }],
-  artifacts: [
-    { id: "model-1", name: "model.pt", size_bytes: 4096, ready: true },
-  ],
-  attempts: [],
-  validation_level: "Fixture validation only",
-  metrics: { validation_accuracy: 0.91 },
+  owner_id: "user-1",
+  name: "Мой ноутбук",
+  state: "offline",
+  last_seen_at: null,
+  capabilities: null,
+  accepted_units: 0,
+  active_attempts: 0,
+  settings: { revision: 2, mode: "medium", desired_state: "running" },
+  applied_revision: 1,
+  supports_web_controls: true,
+  agent_contact_at: null,
+  actual_state: null,
+  settings_error: null,
 };
 export const preview = {
   id: "preview-1",
   state: "ready",
   plan_revision: 1,
-  questions: [],
-  summary: "Create a searchable document index",
-  accelerator: "cpu",
-  resume_policy: "restart",
-  outputs: ["index"],
-  assumptions: ["Trusted pool"],
-  evidence: ["Selected recipe"],
-  data_location: "Local coordinator",
-  duration_ms: null,
-};
-export const benchmark = {
-  id: "bench-1",
-  experiment_id: "experiment-1",
-  state: "succeeded",
-  workload: "embeddings",
-  unit: "fragments",
-  input_digest: "sha256:fixture",
-  node_ids: ["node-1"],
-  concurrency: 2,
-  repetitions: 3,
-  cold: false,
-  git_sha: "test-fixture-not-real-measurement",
-  standalone: [
-    {
-      node_id: "node-1",
-      rates: [10, 11, 12],
-      provenance: "Synthetic test fixture",
-    },
-  ],
-  pool_rates: [12, 13, 14],
-  single_service_rates: [9, 10, 11],
-  timings_ms: {
-    transfer: 100,
-    queue: 20,
-    compute: 1000,
-    verify: 200,
-    aggregate: 50,
+  plan_digest: "a".repeat(64),
+  question: null,
+  error_code: null,
+  error_message: null,
+  plan: {
+    plan_revision: 1,
+    execution_kind: "single",
+    assumptions: ["Тестовая задача CPU"],
+    evidence: [],
+    questions: [],
+    job_deadline_at: "2030-01-01T00:00:00Z",
+    stages: [
+      {
+        stage_id: "cpu",
+        adapter: { id: "cpu", version: "1" },
+        variants: [
+          {
+            accelerator: "cpu",
+            resource_requirements: {
+              cpu_millis: 1000,
+              memory_bytes: 268435456,
+              disk_bytes: 1048576,
+              gpu_slots: 0,
+            },
+          },
+        ],
+        outputs: [{ path: "result.txt", required: true, max_bytes: 1000 }],
+        task_deadline_ms: 60000,
+        resume_policy: "restart",
+        argv: ["python", "main.py"],
+      },
+    ],
   },
-  utilization: [
+};
+export const job = {
+  id: "job-1",
+  owner_id: "user-1",
+  purpose: "work",
+  state: "succeeded",
+  created_at: "2026-11-15T00:00:00Z",
+  accepted_units: 1,
+  failed_units: 0,
+  total_units: 1,
+  tasks: [
     {
+      id: "task-1",
+      stage_id: "cpu",
+      state: "succeeded",
+      generation: 1,
+      units: 1,
       node_id: "node-1",
-      cpu_percent: 0,
-      gpu_percent: null,
-      window_ms: 10000,
-      gaps: 1,
+      verification_level: "server",
+      error_code: null,
     },
   ],
-  bottleneck: "Fixture only",
-  flags: ["Synthetic data, not a measured result"],
+  artifacts: [
+    {
+      id: "artifact-1",
+      name: "result.txt",
+      size_bytes: 3,
+      sha256: "b".repeat(64),
+      media_type: "text/plain",
+    },
+  ],
+  search_result: null,
 };
 export async function fixtures(
   page: Page,
   options: {
+    anonymous?: boolean;
+    nodes?: boolean;
     role?: string;
-    partial?: boolean;
-    offline?: boolean;
+    retry?: boolean;
     question?: boolean;
+    partial?: boolean;
     stale?: boolean;
     empty?: boolean;
   } = {},
 ) {
-  let revision = 1;
-  let answered = !options.question;
-  let started = 0;
-  const keys: string[] = [];
-  const requests: { path: string; body: unknown }[] = [];
-  await page.context().route("**/api/v1/**", async (route: Route) => {
-    const req = route.request();
-    const url = new URL(req.url());
-    const path = url.pathname.replace("/api/v1", "");
-    let body: unknown;
+  let logged = !options.anonymous,
+    starts = 0,
+    revision = 1,
+    answered = !options.question;
+  const requests: {
+    path: string;
+    body: any;
+    headers: Record<string, string>;
+  }[] = [];
+  await page.route("**/api/v1/**", async (route) => {
+    const req = route.request(),
+      path = new URL(req.url()).pathname.replace("/api/v1", "");
+    let body;
     try {
       body = req.postDataJSON();
     } catch {}
-    requests.push({ path, body });
-    const json = (data: unknown, status = 200) =>
-      route.fulfill({ status, json: data });
-    if (path.endsWith("/events"))
-      return route.fulfill({
-        contentType: "text/event-stream",
-        body: "event: reset\ndata: {}\n\n",
-      });
+    requests.push({ path, body, headers: req.headers() });
+    const json = (v: unknown, status = 200) =>
+      route.fulfill({ status, json: v });
     if (path === "/auth/me")
+      return logged
+        ? json({ ...identity, role: options.role || "member" })
+        : json({ code: "UNAUTHORIZED", message: "Sign in" }, 401);
+    if (["/auth/register", "/auth/login", "/auth/account"].includes(path)) {
+      logged = true;
+      return json(identity);
+    }
+    if (path === "/auth/logout") {
+      logged = false;
+      return route.fulfill({ status: 204 });
+    }
+    if (path === "/nodes") return json(options.nodes ? [node] : []);
+    if (path.includes("/settings"))
       return json({
-        name: "Test member",
-        role: options.role || "owner",
-        csrf_token: "test-csrf",
+        ...node,
+        settings: { ...node.settings, ...body, revision: 3 },
       });
-    if (path === "/recipes")
-      return json([
-        { id: "embeddings", name: "Document search" },
-        { id: "training", name: "Image classifier" },
-      ]);
-    if (path === "/nodes")
-      return json(
-        options.empty
-          ? []
-          : [{ ...node, state: options.offline ? "offline" : "ready" }],
-      );
-    if (path === "/pool/summary")
+    if (path === "/client-release")
       return json({
-        accepted_units: 100,
-        queued_tasks: 2,
-        running_tasks: 0,
-        recovering_tasks: 1,
-        events: [],
-      });
-    if (path === "/credits")
-      return json({
-        unit_version: "v1",
-        accepted_units: 100,
-        credits: 10,
-        currency: "CNY",
-        costs: [
-          {
-            name: "Energy",
-            amount: null,
-            estimated: true,
-            assumption: "No power meter readings",
-          },
+        version: "r5",
+        downloads: [
+          { os: "windows", label: "Windows", url: "/downloads/start.cmd" },
+          { os: "darwin", label: "macOS", url: "/downloads/start.command" },
         ],
+        requirements: { docker_manual: true },
       });
-    if (path === "/benchmarks") return json(options.empty ? [] : [benchmark]);
-    if (path.includes("/standalone-results")) return json({});
     if (path === "/invitations")
-      return json({ command: "campus join --invitation test-only" });
-    if (path.includes("/control")) return json({});
-    if (path === "/job-previews")
-      return json(
-        {
-          ...preview,
-          state: answered ? "ready" : "needs_input",
-          questions: answered
-            ? []
-            : [{ question_id: "q-1", message: "Which dataset split?" }],
-        },
-        202,
-      );
+      return json({
+        id: "invite-1",
+        token: "private-device-invitation-1234567890",
+        kind: "device",
+        expires_at: "2030-01-01T00:00:00Z",
+      });
+    if (path === "/me/stats")
+      return json({
+        devices_total: options.nodes ? 1 : 0,
+        devices_online: 0,
+        accepted_units: 0,
+        contributed_seconds: null,
+        jobs_by_state: { succeeded: 1 },
+        recent_results: [job],
+        history: [],
+      });
+    if (path === "/recipes" || path === "/examples") return json([]);
     if (path.endsWith("/answers")) {
       answered = true;
       revision++;
       return json({ ...preview, plan_revision: revision });
     }
-    if (path.startsWith("/job-previews/"))
+    if (
+      path === "/job-previews" ||
+      path.startsWith("/examples/") ||
+      path.startsWith("/job-previews/")
+    )
       return json({
         ...preview,
         plan_revision: revision,
         state: answered ? "ready" : "needs_input",
-        questions: answered
-          ? []
-          : [{ question_id: "q-1", message: "Which dataset split?" }],
+        question: answered
+          ? null
+          : { question_id: "q1", prompt: "Какой набор данных?" },
+      });
+    if (path.endsWith("/logs"))
+      return json({
+        entries: [
+          {
+            cursor: 1,
+            attempt_id: "attempt-1",
+            sequence: 1,
+            occurred_at: "2026-11-15T00:00:00Z",
+            text: "Готово",
+            gap: false,
+          },
+        ],
+        cursor: 1,
+        truncated: true,
       });
     if (path === "/jobs" && req.method() === "POST") {
-      started++;
-      keys.push(req.headers()["idempotency-key"]);
-      if (options.stale && started === 1) {
-        revision++;
-        return json(
-          {
-            code: "STALE_PREVIEW",
-            message: "Plan changed; review the current revision",
-          },
-          409,
-        );
-      }
-      if (!options.stale && started === 1)
-        return json(
-          { code: "TEMPORARY", message: "Response lost. Retry safely." },
-          503,
-        );
-      return json(job);
+      starts++;
+      if (options.retry && starts === 1)
+        return json({ code: "TEMPORARY", message: "Соединение прервано" }, 503);
+      return json(job, 201);
     }
-    if (path === "/jobs") return json(options.empty ? [] : [job]);
-    if (path.endsWith("/logs"))
-      return json({ lines: ["Embedding complete"], truncated: true });
-    if (path.startsWith("/jobs/"))
-      return json({
-        ...job,
-        state: options.partial ? "partial" : job.state,
-        failed_units: options.partial ? 3 : 0,
-      });
-    if (path.startsWith("/artifacts/"))
-      return route.fulfill({
-        body: "fixture-model",
-        contentType: "application/octet-stream",
-        headers: { "Content-Disposition": 'attachment; filename="model.pt"' },
-      });
-    return json({});
+    if (path === "/jobs") return json([job]);
+    if (path.startsWith("/jobs/")) return json(job);
+    if (path.startsWith("/artifacts/")) return route.continue();
+    return json({ code: "NOT_FOUND", message: "No fixture for " + path }, 404);
   });
-  return {
-    keys,
-    requests,
-    get started() {
-      return started;
-    },
-  };
+  return { requests };
 }

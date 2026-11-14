@@ -26,6 +26,7 @@ func (a *App) install(ctx context.Context, cfg config, args []string) error {
 	check := flags.Bool("check-only", false, "prepare and check without enrolling")
 	stop := flags.Bool("stop", false, "stop local participation immediately")
 	drain := flags.Bool("drain", false, "finish active work and stop")
+	managed := flags.Bool("managed", false, "allow web pause/resume and bounded contribution profiles")
 	rest, err := parse(flags, args)
 	if err != nil {
 		return err
@@ -51,6 +52,7 @@ func (a *App) install(ctx context.Context, cfg config, args []string) error {
 	if err != nil {
 		return err
 	}
+	public.Managed = *managed
 	catalog, err := installer.FetchCatalog(ctx, public.HTTP, *catalogURL, *catalogSHA)
 	if err != nil {
 		return err
@@ -149,6 +151,9 @@ func (a *App) install(ctx context.Context, cfg config, args []string) error {
 	options := []string{"--bundle", prepared.Root, "--manifest-sha256", prepared.ManifestSHA256, "--gpu=" + strconv.FormatBool(*gpu)}
 	if *check {
 		options = append(options, "--check-only")
+	}
+	if *managed {
+		options = append(options, "--managed")
 	}
 	return a.connect(ctx, cfg, options)
 }

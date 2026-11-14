@@ -152,7 +152,7 @@ def test_posix_starter_selects_actual_rosetta_arm_reuses_cache_and_preserves_exi
     command=[str(shell),'-c','PATH="$PUBLIC_TEST_PATH"; export PATH; exec sh "$1"','public-starter',posix(root/'Connect.command')]
     result=subprocess.run(command,env=env,capture_output=True,text=True,timeout=30)
     assert result.returncode==7,result.stdout+result.stderr
-    assert marker.read_bytes().decode().split('\0')[:-1]==['install','--catalog-url','https://pool.example/downloads/v1/catalog.json','--catalog-sha256',sha(b'{}')]
+    assert marker.read_bytes().decode().split('\0')[:-1]==['install','--catalog-url','https://pool.example/downloads/v1/catalog.json','--catalog-sha256',sha(b'{}'),'--managed']
     args=trace.read_bytes().decode().split('\0')[:-1]
     assert args[-1]=='https://pool.example/downloads/v1/runners/arm64'
     assert '--insecure' not in args and '--location' not in args
@@ -203,7 +203,7 @@ def test_windows_starter_native_cache_checksums_unicode_path_and_exit(tmp_path,n
     result=subprocess.run(command,env=env,cwd=tmp_path,input='',capture_output=True,text=True,errors='replace',timeout=30)
     assert result.returncode==exit_code,result.stdout+result.stderr
     assert ('Press Enter' in result.stdout)==(entry.endswith('.cmd') and exit_code==7)
-    assert json.loads(marker.read_text(encoding='utf-8'))==['install','--catalog-url','https://pool.example/downloads/v1/catalog.json','--catalog-sha256',sha(b'{}'),'--gpu=false']
+    assert json.loads(marker.read_text(encoding='utf-8'))==['install','--catalog-url','https://pool.example/downloads/v1/catalog.json','--catalog-sha256',sha(b'{}'),'--managed','--gpu=false']
     curl_args=json.loads(trace.read_text(encoding='utf-8').splitlines()[0]); assert curl_args[-1]=='https://pool.example/downloads/v1/runners/campus-windows-amd64.exe'
     assert '--insecure' not in curl_args and '--ssl-revoke-best-effort' not in curl_args
     old=trace.read_bytes(); subprocess.run(command,env=env,cwd=tmp_path,input='',capture_output=True,text=True,timeout=30)

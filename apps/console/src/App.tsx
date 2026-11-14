@@ -29,7 +29,7 @@ export function App() {
     const expired = () => {
       setSession(undefined);
       setCsrf("");
-      setError("Your session expired. Sign in again through the portal.");
+      setError("Сессия завершена. Войдите снова через портал.");
     };
     window.addEventListener("campus:unauthorized", expired);
     return () => window.removeEventListener("campus:unauthorized", expired);
@@ -37,62 +37,73 @@ export function App() {
   if (!session)
     return (
       <main className="login card">
-        <h1>Pool console</h1>
+        <h1>Управление Campus</h1>
         <p>
-          Sign in through the <a href="/">user portal</a> to access your pool.
+          Войдите через <a href="/">пользовательский портал</a>.
         </p>
         <ErrorBox message={error} />
       </main>
     );
-  const admin = ["admin", "owner"].includes(session.role);
+  if (session.role === "member")
+    return (
+      <main className="login card">
+        <h1>Доступ для администратора</h1>
+        <p>Управление пулом доступно владельцу и администраторам.</p>
+        <a className="button primary" href="/">
+          К своим задачам и устройствам
+        </a>
+      </main>
+    );
   return (
     <div className="shell">
+      <a className="skip-link" href="#main">
+        К содержимому
+      </a>
       <aside className="sidebar">
         <Link className="brand" to="/">
-          <Layers />
+          <Layers aria-hidden="true" />
           campus pool
         </Link>
-        <nav>
+        <nav aria-label="Управление пулом">
           <NavLink end to="/">
-            <LayoutDashboard size={18} />
-            Overview
+            <LayoutDashboard aria-hidden="true" size={18} />
+            Обзор пула
           </NavLink>
           <NavLink to="/nodes">
-            <Monitor size={18} />
-            Devices
+            <Monitor aria-hidden="true" size={18} />
+            Устройства
           </NavLink>
           <NavLink to="/jobs">
-            <Activity size={18} />
-            Jobs
+            <Activity aria-hidden="true" size={18} />
+            Задачи
           </NavLink>
           <NavLink to="/benchmarks">
-            <ChartNoAxesCombined size={18} />
-            Benchmarks
+            <ChartNoAxesCombined aria-hidden="true" size={18} />
+            Измерения
           </NavLink>
         </nav>
         <footer>
-          POOL OPERATIONS
-          <br />
-          <br />
-          <a href="/">← User workspace</a>
+          УПРАВЛЕНИЕ CAMPUS
+          <p>
+            <a href="/">← Рабочее пространство</a>
+          </p>
         </footer>
       </aside>
       <div className="main">
         <div className="topbar">
-          <span>
-            Pool console / <b>Campus Pool</b>
-          </span>
+          <span>Управление пулом</span>
           <span className="pill">
-            {session.name} · {session.role}
+            {session.name} ·{" "}
+            {session.role === "owner" ? "владелец" : "администратор"}
           </span>
         </div>
-        <main className="content">
+        <main className="content" id="main">
           <Routes>
             <Route path="/" element={<Overview />} />
-            <Route path="/nodes" element={<Nodes admin={admin} />} />
+            <Route path="/nodes" element={<Nodes />} />
             <Route path="/jobs" element={<Jobs />} />
-            <Route path="/benchmarks" element={<Benchmarks admin={admin} />} />
-            <Route path="*" element={<p>Page not found.</p>} />
+            <Route path="/benchmarks" element={<Benchmarks />} />
+            <Route path="*" element={<p>Страница не найдена.</p>} />
           </Routes>
         </main>
       </div>

@@ -16,7 +16,7 @@ from sqlalchemy import select, text
 from sqlalchemy.exc import OperationalError
 from starlette.exceptions import HTTPException
 
-from . import auth, dto, events, observability, search
+from . import auth, device_settings, dto, events, observability, search, worker_compat
 from . import models as m
 from .artifacts import uploads
 from .artifacts.storage import Storage
@@ -30,6 +30,7 @@ from .jobs import service as jobs
 from .limits import RequestRates
 from .planner import provider
 from .planner import service as planner
+from .web_product import mount_routes
 
 log = logging.getLogger(__name__)
 Prefix = "/api/v1"
@@ -138,7 +139,12 @@ class RequestLimit:
         path = request.url.path
         if path.startswith(f"{Prefix}/"):
             remote = request.client.host if request.client else "local"
-            if path in {f"{Prefix}/auth/login", f"{Prefix}/invitations/redeem"}:
+            if path in {
+                f"{Prefix}/auth/login",
+                f"{Prefix}/auth/register",
+                f"{Prefix}/auth/account",
+                f"{Prefix}/invitations/redeem",
+            }:
                 bucket, capacity, refill = "entry", 30, 0.5
             elif request.method != "GET":
                 bucket, capacity, refill = "write", 360, 90
@@ -321,11 +327,7 @@ def create_app(settings=None, *, enable_background=True, planning_provider=provi
     def redeem(body: dto.DeviceRedeem, db: DBDep) -> dto.Credential:
         return auth.redeem(db, body)
 
-    @app.post(f"{Prefix}/auth/login", operation_id="login")
-    def login(body: dto.InviteLogin, db: DBDep, request: Request, response: Response) -> dto.Identity:
-        if request.headers.get("origin") != settings.public_origin:
-            raise Problem("CSRF_REQUIRED", "A matching origin is required", 403)
-        identity, token, csrf = auth.login(db, body)
+    def browser_session(response, token, csrf):
         for name, value, httponly in ((auth.COOKIE, token, True), (auth.CSRF_COOKIE, csrf, False)):
             response.set_cookie(
                 name,
@@ -335,6 +337,31 @@ def create_app(settings=None, *, enable_background=True, planning_provider=provi
                 httponly=httponly,
                 samesite="strict",
             )
+
+    @app.post(f"{Prefix}/auth/register", status_code=201, operation_id="register")
+    def register(
+        body: dto.AccountCreate, db: DBDep, request: Request, response: Response
+    ) -> dto.Identity:
+        if request.headers.get("origin") != settings.public_origin:
+            raise Problem("CSRF_REQUIRED", "A matching origin is required", 403)
+        identity, token, csrf = auth.register(db, body, settings)
+        browser_session(response, token, csrf)
+        return identity
+
+    @app.post(f"{Prefix}/auth/account", operation_id="activate_account")
+    def account(body: dto.AccountCreate, ctx: ContextDep, request: Request) -> dto.Identity:
+        user = auth.set_account(ctx.db, ctx.actor.member(), body)
+        csrf = request.cookies.get(auth.CSRF_COOKIE) if ctx.actor.credential.scope == "browser" else None
+        return auth.identity(user, csrf)
+
+    @app.post(f"{Prefix}/auth/login", operation_id="login")
+    def login(
+        body: dto.InviteLogin | dto.PasswordLogin, db: DBDep, request: Request, response: Response
+    ) -> dto.Identity:
+        if request.headers.get("origin") != settings.public_origin:
+            raise Problem("CSRF_REQUIRED", "A matching origin is required", 403)
+        identity, token, csrf = auth.login(db, body)
+        browser_session(response, token, csrf)
         return identity
 
     @app.post(f"{Prefix}/auth/logout", status_code=204, operation_id="logout")
@@ -516,7 +543,7 @@ def create_app(settings=None, *, enable_background=True, planning_provider=provi
         responses={204: {"description": "No compatible assignment"}},
         operation_id="claim_work",
     )
-    async def work(request: Request, body: dto.WorkRequest) -> dto.Assignment:
+    async def work(request: Request, body: dto.WorkRequest) -> dto.Assignment | dto.NativeAssignment:
         runtime = metadata(request)
         session_id = session_header(request)
 
@@ -524,13 +551,21 @@ def create_app(settings=None, *, enable_background=True, planning_provider=provi
             with runtime.sessions.begin() as db:
                 write_lock(db)
                 actor = auth.authenticate(db, request, settings)
-                return scheduler.claim_work(db, runtime, actor, session_id)
+                native = request.headers.get("x-campus-worker-protocol") == "2"
+                policy = (
+                    None
+                    if native
+                    else worker_compat.policy_for(actor, request.headers.get("user-agent"))
+                )
+                return scheduler.claim_work(
+                    db, runtime, actor, session_id, worker_policy=policy, native=native
+                )
 
         deadline = time.monotonic() + min(body.wait_ms, settings.long_poll_ms) / 1000
         while True:
             assignment = await run_in_threadpool(claim)
             if assignment:
-                return assignment
+                return JSONResponse(assignment) if isinstance(assignment, dict) else assignment
             remaining = deadline - time.monotonic()
             if remaining <= 0 or await request.is_disconnected():
                 return Response(status_code=204)
@@ -551,7 +586,20 @@ def create_app(settings=None, *, enable_background=True, planning_provider=provi
     @app.post(
         f"{Prefix}/attempts/{{attempt_id}}/complete", status_code=202, operation_id="complete_attempt"
     )
-    def complete_attempt(attempt_id: UUID, body: dto.Complete, ctx: ContextDep) -> dto.CompletionReceipt:
+    def complete_attempt(
+        request: Request, attempt_id: UUID, body: dto.Complete, ctx: ContextDep
+    ) -> dto.CompletionReceipt:
+        policy = (
+            None
+            if request.headers.get("x-campus-worker-protocol") == "2"
+            else (worker_compat.policy_for(ctx.actor, request.headers.get("user-agent")))
+        )
+        if policy:
+            try:
+                manifest = worker_compat.result_manifest(payload(body.manifest), policy)
+            except ValueError as exc:
+                raise Problem("INVALID_RESULT", str(exc), 422) from exc
+            body = body.model_copy(update={"manifest": dto.ResultManifest.model_validate(manifest)})
         return leases.complete_attempt(ctx.db, ctx.runtime, ctx.actor, ctx.session_id, attempt_id, body)
 
     @app.post(f"{Prefix}/attempts/{{attempt_id}}/fail", operation_id="fail_attempt")
@@ -673,11 +721,12 @@ def create_app(settings=None, *, enable_background=True, planning_provider=provi
     def nodes(ctx: ContextDep) -> list[dto.Node]:
         user = ctx.actor.member()
         current = now(ctx.db)
+        query = select(m.Node).where(m.Node.pool_id == user.pool_id)
+        if not ctx.actor.privileged:
+            query = query.where(m.Node.owner_id == user.id)
         return [
             observability.describe_node(ctx.db, ctx.runtime, node, current)
-            for node in ctx.db.scalars(
-                select(m.Node).where(m.Node.pool_id == user.pool_id).order_by(m.Node.created_at)
-            )
+            for node in ctx.db.scalars(query.order_by(m.Node.created_at))
         ]
 
     @app.get(f"{Prefix}/nodes/{{node_id}}", operation_id="get_node")
@@ -691,6 +740,38 @@ def create_app(settings=None, *, enable_background=True, planning_provider=provi
         return observability.describe_node(
             ctx.db, ctx.runtime, observability.control(ctx.db, ctx.actor, node_id, body), now(ctx.db)
         )
+
+    @app.get(f"{Prefix}/device/settings", operation_id="get_device_settings")
+    def get_device_settings(ctx: ContextDep) -> dto.DeviceSettings:
+        return device_settings.read(ctx.db, ctx.actor)
+
+    @app.post(f"{Prefix}/device/settings/ack", operation_id="ack_device_settings")
+    def ack_device_settings(body: dto.SettingsAck, ctx: ContextDep) -> dto.DeviceSettings:
+        return device_settings.acknowledge(ctx.db, ctx.actor, body)
+
+    @app.patch(f"{Prefix}/nodes/{{node_id}}/settings", operation_id="set_device_settings")
+    def set_device_settings(node_id: UUID, body: dto.SettingsPatch, ctx: ContextDep) -> dto.Node:
+        node = observability.node_in_pool(ctx.db, ctx.actor, node_id)
+        return observability.describe_node(
+            ctx.db, ctx.runtime, device_settings.update(ctx.db, node, body), now(ctx.db)
+        )
+
+    @app.get(f"{Prefix}/me/stats", operation_id="user_stats")
+    def user_stats(ctx: ContextDep) -> dto.UserStats:
+        return observability.user_stats(ctx.db, ctx.runtime, ctx.actor)
+
+    @app.get(f"{Prefix}/admin/users", operation_id="admin_users")
+    def admin_users(ctx: ContextDep) -> list[dto.Identity]:
+        ctx.actor.admin()
+        return [
+            auth.identity(user)
+            for user in ctx.db.scalars(
+                select(m.User)
+                .where(m.User.pool_id == ctx.actor.user.pool_id)
+                .order_by(m.User.name)
+                .limit(500)
+            )
+        ]
 
     @app.get(f"{Prefix}/pool/summary", operation_id="pool_summary")
     def pool(ctx: ContextDep) -> dto.PoolSummary:
@@ -714,6 +795,7 @@ def create_app(settings=None, *, enable_background=True, planning_provider=provi
 
     @app.get(f"{Prefix}/benchmarks", operation_id="list_benchmarks")
     def list_benchmarks(ctx: ContextDep) -> list[dto.BenchmarkReport]:
+        ctx.actor.admin()
         user = ctx.actor.member()
         return [
             benchmarks.report(ctx.db, row)
@@ -727,12 +809,14 @@ def create_app(settings=None, *, enable_background=True, planning_provider=provi
 
     @app.get(f"{Prefix}/benchmarks/{{benchmark_id}}", operation_id="get_benchmark")
     def get_benchmark(benchmark_id: UUID, ctx: ContextDep) -> dto.BenchmarkReport:
-        ctx.actor.member()
+        ctx.actor.admin()
         return benchmarks.report(ctx.db, benchmarks.owned(ctx.db, ctx.actor, benchmark_id))
 
     @app.get(f"{Prefix}/benchmarks/{{benchmark_id}}/export", operation_id="export_benchmark")
     def export_benchmark(benchmark_id: UUID, ctx: ContextDep) -> dto.BenchmarkReport:
         return get_benchmark(benchmark_id, ctx)
+
+    mount_routes(app, context, Prefix)
 
     @app.get("/admin", include_in_schema=False)
     def admin_redirect():

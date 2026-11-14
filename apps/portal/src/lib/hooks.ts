@@ -21,13 +21,14 @@ export function useResource<T>(path: string, events?: string) {
   useEffect(() => {
     setData(undefined);
     setError("");
-    setConnected(false);
     void refresh();
+    const timer = setInterval(() => void refresh(), 5000);
     const stop = events
       ? subscribe(events, () => void refresh(), setConnected)
       : () => {};
     return () => {
       ++sequence.current;
+      clearInterval(timer);
       stop();
     };
   }, [refresh, events]);

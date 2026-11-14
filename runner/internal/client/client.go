@@ -50,6 +50,7 @@ func SessionFatal(err error) bool {
 }
 
 type Client struct {
+	Managed        bool
 	BaseURL        string
 	Credential     string
 	SessionID      string
@@ -91,6 +92,9 @@ func (c *Client) Request(ctx context.Context, method, route string, body io.Read
 	}
 	req.Header.Set("Accept", "application/json")
 	req.Header.Set("User-Agent", "campus/"+Version)
+	if c.Managed {
+		req.Header.Set("X-Campus-Worker-Protocol", "2")
+	}
 	if c.Credential != "" {
 		req.Header.Set("Authorization", "Bearer "+c.Credential)
 	}

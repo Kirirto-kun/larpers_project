@@ -62,6 +62,7 @@ type Assignment struct {
 	WorkingDir          string         `json:"working_dir"`
 	Inputs              []Artifact     `json:"inputs"`
 	Outputs             []string       `json:"outputs"`
+	OptionalOutputs     []string       `json:"optional_outputs,omitempty"`
 	ResourceLimits      ResourceLimits `json:"resource_limits"`
 	NetworkPolicy       string         `json:"network_policy"`
 	ResumeCheckpoint    *Artifact      `json:"resume_checkpoint"`
@@ -88,6 +89,12 @@ type GPU struct {
 	CUDAVerified bool   `json:"cuda_verified"`
 }
 type Capabilities struct {
+	// Local-only availability and ceilings; the public admission DTO stays stable.
+	CPUAvailableMillis   int64          `json:"cpu_available_millis,omitempty"`
+	DockerCPUMillis      int64          `json:"docker_cpu_millis,omitempty"`
+	DockerMemoryBytes    int64          `json:"docker_memory_bytes,omitempty"`
+	OwnerCPUMillis       int64          `json:"owner_cpu_millis,omitempty"`
+	OwnerMemoryBytes     int64          `json:"owner_memory_bytes,omitempty"`
 	OS                   string         `json:"os"`
 	Arch                 string         `json:"arch"`
 	CPULogical           int            `json:"cpu_logical"`
@@ -169,6 +176,11 @@ func (a Assignment) Validate() error {
 		seen[key] = true
 	}
 	for _, out := range a.Outputs {
+		if err := packaging.SafePath(out); err != nil {
+			return err
+		}
+	}
+	for _, out := range a.OptionalOutputs {
 		if err := packaging.SafePath(out); err != nil {
 			return err
 		}

@@ -141,6 +141,7 @@ func (a *App) connect(ctx context.Context, cfg config, args []string) error {
 	gpu := flags.Bool("gpu", false, "explicitly enable verified NVIDIA computation")
 	stop := flags.Bool("stop", false, "stop local participation immediately")
 	drain := flags.Bool("drain", false, "finish active work, then stop")
+	managed := flags.Bool("managed", false, "allow web pause/resume and bounded contribution profiles")
 	rest, err := parse(flags, args)
 	if err != nil {
 		return err
@@ -279,11 +280,13 @@ func (a *App) connect(ctx context.Context, cfg config, args []string) error {
 			}
 		}
 	}
-	caps, _, err = a.preflightWithCanonical(ctx, metadataPath(bundle.Manifest.Profiles), *gpu, !*check)
-	if err != nil {
-		return err
+	if !*managed || *check {
+		caps, _, err = a.preflightWithCanonical(ctx, metadataPath(bundle.Manifest.Profiles), *gpu, !*check)
+		if err != nil {
+			return err
+		}
+		fmt.Fprintf(a.Stdout, "Проверка пройдена. Бюджет: до %.2f CPU и %.2f GiB RAM; GPU: %t.\n", float64(caps.OfferedBudget.CPUMillis)/1000, float64(caps.OfferedBudget.MemoryBytes)/(1<<30), *gpu)
 	}
-	fmt.Fprintf(a.Stdout, "Проверка пройдена. Бюджет: до %.2f CPU и %.2f GiB RAM; GPU: %t.\n", float64(caps.OfferedBudget.CPUMillis)/1000, float64(caps.OfferedBudget.MemoryBytes)/(1<<30), *gpu)
 	if *check {
 		fmt.Fprintln(a.Stdout, "Устройство проверено; приглашение не использовалось.")
 		return nil
@@ -295,6 +298,9 @@ func (a *App) connect(ctx context.Context, cfg config, args []string) error {
 	options := []string{"--profiles", metadataPath(bundle.Manifest.Profiles)}
 	if *gpu {
 		options = append(options, "--gpu")
+	}
+	if *managed {
+		options = append(options, "--managed")
 	}
 	if identity.Credential != "" {
 		if cfg.Endpoint != "" && !sameCoordinator(cfg.Endpoint, identity.Endpoint) {

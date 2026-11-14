@@ -76,7 +76,7 @@ fi
 verified "$runner" || fail 'cached native client verification failed'
 chmod 700 "$runner"
 if [ -n "$ca" ]; then
-    "$runner" --ca-file "$ca" install --catalog-url '@CATALOG_URL@' --catalog-sha256 '@CATALOG_SHA256@'
+    "$runner" --ca-file "$ca" install --catalog-url '@CATALOG_URL@' --catalog-sha256 '@CATALOG_SHA256@' --managed
 else
-    "$runner" install --catalog-url '@CATALOG_URL@' --catalog-sha256 '@CATALOG_SHA256@'
+    "$runner" install --catalog-url '@CATALOG_URL@' --catalog-sha256 '@CATALOG_SHA256@' --managed
 fi

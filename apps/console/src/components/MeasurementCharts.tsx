@@ -1,188 +1,80 @@
-import type { Benchmark } from "../lib/types";
-import { Empty } from "./Common";
-
-export function TimingChart({ timings }: { timings: Record<string, number> }) {
-  const stages = [
-    "transfer",
-    "queue",
-    "start",
-    "compute",
-    "verify",
-    "aggregate",
+type Sample = {
+  sequence: number;
+  cpu_percent: number | null;
+  gpu_percent: number | null;
+};
+export function UtilizationChart({ samples }: { samples: Sample[] }) {
+  const series = [
+    { key: "cpu_percent" as const, label: "CPU", color: "#24533b" },
+    { key: "gpu_percent" as const, label: "GPU", color: "#356785" },
   ];
-  const max = Math.max(
-    1,
-    ...stages.map((s) => (Number.isFinite(timings[s]) ? timings[s] : 0)),
-  );
+  const min = Math.min(...samples.map((s) => s.sequence));
+  const max = Math.max(min + 1, ...samples.map((s) => s.sequence));
+  const x = (sequence: number) => 40 + (520 * (sequence - min)) / (max - min);
+  const y = (value: number) => 160 - value * 1.3;
   return (
-    <section aria-label="Timing breakdown chart">
-      <h3>Timing breakdown (ms)</h3>
-      {stages.map((stage) => {
-        const value = timings[stage];
-        return (
-          <div className="chart-row" key={stage}>
-            <span>{stage}</span>
-            <div>
-              {Number.isFinite(value) && value >= 0 && (
-                <div
-                  className="bar"
-                  style={{ width: (value / max) * 100 + "%" }}
-                />
-              )}
-            </div>
-            <span>
-              {Number.isFinite(value) && value >= 0
-                ? value.toLocaleString() + " ms"
-                : "Not measured"}
-            </span>
-          </div>
-        );
-      })}
-      <small>
-        Stage durations may overlap; their sum is not necessarily end-to-end
-        time.
-      </small>
-    </section>
-  );
-}
-
-export function UtilizationChart({
-  records,
-}: {
-  records: Benchmark["utilization"];
-}) {
-  return (
-    <section aria-label="Resource utilization charts">
-      <h3>CPU/GPU utilization</h3>
-      <p className="muted">
-        1,000 ms sample interval. Missing samples remain gaps. Utilization is
-        separate from pooling efficiency.
-      </p>
-      {!records.length && <Empty>No utilization measurements.</Empty>}
-      {records.map((record) => {
-        const samples = record.samples || [];
-        const maxTime = Math.max(1000, record.window_ms);
-        const valid = (value: number | null) =>
-          value !== null &&
-          Number.isFinite(value) &&
-          value >= 0 &&
-          value <= 100;
-        const segments = (key: "cpu_percent" | "gpu_percent") => {
-          const paths: string[] = [];
-          let points: string[] = [];
-          let last = -1000;
-          for (const sample of [...samples].sort(
-            (a, b) => a.elapsed_ms - b.elapsed_ms,
-          )) {
-            const value = sample[key];
-            if (!valid(value) || sample.elapsed_ms - last > 1500) {
-              if (points.length) paths.push(points.join(" "));
-              points = [];
-            }
+    <figure className="telemetry-chart">
+      <svg
+        viewBox="0 0 600 200"
+        role="img"
+        aria-label="Загрузка CPU и GPU по отсчётам клиента"
+      >
+        {[0, 50, 100].map((v) => (
+          <g key={v}>
+            <line x1="40" x2="570" y1={y(v)} y2={y(v)} stroke="#d5dfd1" />
+            <text x="2" y={y(v) + 4} fill="#526454" fontSize="13">
+              {v}%
+            </text>
+          </g>
+        ))}
+        {series.map(({ key, color }) => {
+          const segments: Sample[][] = [];
+          let part: Sample[] = [];
+          for (const sample of samples) {
             if (
-              valid(value) &&
-              sample.elapsed_ms >= 0 &&
-              sample.elapsed_ms <= maxTime
-            )
-              points.push(
-                `${40 + (sample.elapsed_ms / maxTime) * 520},${120 - (value as number)}`,
-              );
-            last = sample.elapsed_ms;
+              sample[key] == null ||
+              (part.length && sample.sequence !== part.at(-1)!.sequence + 1)
+            ) {
+              if (part.length) segments.push(part);
+              part = [];
+            }
+            if (sample[key] != null) part.push(sample);
           }
-          if (points.length) paths.push(points.join(" "));
-          return paths;
-        };
-        return (
-          <article className="card" key={record.node_id}>
-            <h3>{record.node_id}</h3>
-            <p>
-              Window {record.window_ms.toLocaleString()} ms · {record.gaps} gaps
-              · {samples.length} samples
-            </p>
-            {samples.length > 0 ? (
-              <svg
-                viewBox="0 0 600 155"
-                role="img"
-                aria-label={`${record.node_id} CPU and GPU utilization over time`}
-                style={{ width: "100%" }}
-              >
-                <path d="M40 20V120H560" stroke="#cfd8cb" fill="none" />
-                <text x="0" y="25" fontSize="11">
-                  100%
-                </text>
-                <text x="15" y="120" fontSize="11">
-                  0%
-                </text>
-                <text x="40" y="145" fontSize="11">
-                  0 ms
-                </text>
-                <text x="490" y="145" fontSize="11">
-                  {maxTime} ms
-                </text>
-                {(["cpu_percent", "gpu_percent"] as const).flatMap(
-                  (key, index) =>
-                    segments(key).map((points, i) => (
-                      <polyline
-                        key={key + i}
-                        points={points}
-                        fill="none"
-                        stroke={index ? "#5a83a0" : "#5b872d"}
-                        strokeWidth="2"
-                      />
-                    )),
-                )}
-              </svg>
-            ) : (
-              <Empty>
-                Raw samples not provided. Only reported averages are shown.
-              </Empty>
-            )}
-            {(["cpu_percent", "gpu_percent"] as const).map((key) => (
-              <div className="chart-row" key={key}>
-                <span>{key === "cpu_percent" ? "CPU mean" : "GPU mean"}</span>
-                <div>
-                  {valid(record[key]) && (
-                    <div
-                      className="bar"
-                      style={{
-                        width: record[key] + "%",
-                        background:
-                          key === "gpu_percent" ? "#5a83a0" : undefined,
-                      }}
+          if (part.length) segments.push(part);
+          return (
+            <g key={key}>
+              {segments.map((segment, i) => (
+                <g key={i}>
+                  <polyline
+                    fill="none"
+                    stroke={color}
+                    strokeWidth="3"
+                    points={segment
+                      .map((s) => `${x(s.sequence)},${y(s[key]!)}`)
+                      .join(" ")}
+                  />
+                  {segment.map((s) => (
+                    <circle
+                      key={s.sequence}
+                      cx={x(s.sequence)}
+                      cy={y(s[key]!)}
+                      r="4"
+                      fill={color}
                     />
-                  )}
-                </div>
-                <span>
-                  {valid(record[key]) ? record[key] + "%" : "Not measured"}
-                </span>
-              </div>
-            ))}
-            <details>
-              <summary>Raw samples</summary>
-              <div className="table-wrap">
-                <table>
-                  <thead>
-                    <tr>
-                      <th>Elapsed ms</th>
-                      <th>CPU %</th>
-                      <th>GPU %</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {samples.map((s, i) => (
-                      <tr key={i}>
-                        <td>{s.elapsed_ms}</td>
-                        <td>{s.cpu_percent ?? "Gap"}</td>
-                        <td>{s.gpu_percent ?? "Gap"}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            </details>
-          </article>
-        );
-      })}
-    </section>
+                  ))}
+                </g>
+              ))}
+            </g>
+          );
+        })}
+        <text x="40" y="190" fill="#526454" fontSize="13">
+          Отсчёты клиента
+        </text>
+      </svg>
+      <figcaption>
+        CPU — зелёная линия · GPU — синяя. Пропуски не соединяются. Нет значения
+        — нет измерения.
+      </figcaption>
+    </figure>
   );
 }

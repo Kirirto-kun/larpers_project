@@ -49,7 +49,7 @@ func (r *Runner) pollAssignment(ctx context.Context, caps client.Capabilities) (
 			case <-pollCtx.Done():
 				return
 			case <-ticker.C:
-				action, _ := r.controlAction.Load().(string)
+				action := r.action()
 				if action == "drain" || action == "stop" {
 					cancel()
 					return

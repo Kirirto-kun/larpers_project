@@ -2,9 +2,11 @@
 
 The coordinator accepts jobs, schedules compatible devices and publishes verified results. The user portal, pool console and Go runner integrate over the versioned HTTP API.
 
+Start with the [краткое руководство пользователя](docs/WEB_PRODUCT.md) for accounts, computer connection and jobs. Deployment and existing private-runtime upgrades are covered in [Web operations](docs/WEB_OPERATIONS.md). Actual test results and supported boundaries are in [Web verification](docs/WEB_VERIFICATION.md).
+
 ## Start the coordinator
 
-Install Docker with Compose and Python 3.12. From the repository root, copy `.env.example` to `.env`. Run one of these commands.
+Install Node.js 22 with npm, Docker with Compose and Python 3.12. For a new installation, copy `.env.example` to `.env` from the repository root. The startup scripts build both web apps before building the API image. For an existing installation, follow [Web operations](docs/WEB_OPERATIONS.md) to retain its private configuration and volumes. Run one of these commands.
 
 ```sh
 ./infra/start.sh
@@ -29,7 +31,7 @@ curl --cacert campus-local-ca.pem https://localhost:8443/api/v1/health
 
 For a browser, import the public CA through the approved trust mechanism on each device. When using an issued campus certificate, configure the gateway with its certificate and key. Set `CAMPUS_HOST`, `CAMPUS_BIND`, `PUBLIC_ORIGIN` and the firewall to the authorized LAN address before testing from other devices. Test TLS, upload, download and reconnect from every participating machine on the intended SSID. If routing is blocked, use a reachable campus-authorized coordinator address. For a runner that supports certificate pinning, distribute the SHA-256 fingerprint through the trusted invitation channel and set `TLS_FINGERPRINT_SHA256`. The gateway's managed leaf certificate can rotate.
 
-When the UI builds are present at `apps/portal/dist` and `apps/console/dist`, the coordinator serves them at `/` and `/admin/`. Interactive API docs are at `/api/v1/docs`. A pool owner can use `python -m campus.admin owner-login` in the API container to obtain a new one-time login or `owner-cli` to issue a revocable CLI credential.
+The production image includes the portal and console builds and serves them at `/` and `/admin/` on the same HTTPS origin. Interactive API docs are at `/api/v1/docs`. A pool owner can use `python -m campus.admin owner-login` in the API container to obtain a new one-time login or `owner-cli` to issue a revocable CLI credential.
 
 ## Run the offline checksum smoke
 
@@ -48,7 +50,7 @@ Add `--ai` to exercise the configured live LLM before execution. Without it, the
 
 Set `LLM_PROVIDER=model-studio`, `deepseek` or `openai-compatible`, the exact HTTPS `LLM_BASE_URL`, `LLM_MODEL`, `LLM_API_KEY` and a supported `LLM_JSON_MODE`. Keep the key in deployment configuration. Preview creation returns immediately. Workers continue to claim and report existing jobs when the planner is unavailable. Project excerpts require explicit file selection and consent. The API inspects uploaded ZIP data and validates plan references before assigning work.
 
-For DeepSeek, the verified configuration is `LLM_PROVIDER=deepseek`, `LLM_BASE_URL=https://api.deepseek.com`, `LLM_MODEL=deepseek-flash`, `LLM_JSON_MODE=json_object`. The adapter disables thinking for this structured planning call and validates the result with Pydantic. The live capability check and complete HTTPS/Docker run passed on 2026-11-14. See [DeepSeek JSON mode](https://api-docs.deepseek.com/guides/json_mode/). Keep the credential only in the ignored root `.env`; startup scripts pass that file explicitly to Compose.
+For DeepSeek, the verified configuration is `LLM_PROVIDER=deepseek`, `LLM_BASE_URL=https://api.deepseek.com`, `LLM_MODEL=deepseek-flash`, `LLM_JSON_MODE=json_object`. The adapter disables thinking for this structured planning call and validates the result with Pydantic. The live capability check and complete HTTPS/Docker run passed on 2026-11-14. See [DeepSeek JSON mode](https://api-docs.deepseek.com/guides/json_mode/). Keep the credential in the established private runtime env file, or ignored root `.env` for a new installation; startup scripts pass the selected file explicitly to Compose.
 
 Set `CATALOG_FILE` to a trusted catalog with immutable OCI profiles, adapter versions and validation policies. The smoke catalog provides a minimal example. Production workload adapters use the JSON request/response protocol and a bounded runtime with read-only access to the required artifacts. The coordinator uses subprocess timeouts and output limits. Configure the heavy adapter command with its own sandbox and resource limits. The smoke validator is trusted Python shipped with the coordinator and reads a bounded result from its own volume. Model Studio output modes vary by selected endpoint and model. [Provider documentation](https://help.aliyun.com/en/model-studio/qwen-structured-output)
 

@@ -3,7 +3,7 @@ export class ApiError extends Error {
     public code: string,
     message: string,
     public requestId?: string,
-    public fields?: Record<string, string>,
+    public fields?: unknown,
   ) {
     super(message);
   }
@@ -18,11 +18,16 @@ export async function api<T>(path: string, init: RequestInit = {}): Promise<T> {
     headers.set("Content-Type", "application/json");
   if (init.method && !["GET", "HEAD"].includes(init.method) && csrf)
     headers.set("X-CSRF-Token", csrf);
-  const res = await fetch("/api/v1" + path, {
-    ...init,
-    headers,
-    credentials: "same-origin",
-  });
+  let res: Response;
+  try {
+    res = await fetch("/api/v1" + path, {
+      ...init,
+      headers,
+      credentials: "same-origin",
+    });
+  } catch {
+    throw new Error("Нет связи с сервером. Проверьте подключение и повторите.");
+  }
   if (!res.ok) {
     if (res.status === 401)
       window.dispatchEvent(new Event("campus:unauthorized"));
@@ -39,28 +44,29 @@ export async function api<T>(path: string, init: RequestInit = {}): Promise<T> {
 export function post<T>(path: string, body: unknown, headers?: HeadersInit) {
   return api<T>(path, { method: "POST", body: JSON.stringify(body), headers });
 }
-const recovery: Record<string, string> = {
-  UNAUTHORIZED: "Sign in again through the portal.",
-  FORBIDDEN: "Ask your pool owner for the required access.",
+const messages: Record<string, string> = {
+  UNAUTHORIZED: "Не удалось войти. Проверьте почту и пароль.",
+  FORBIDDEN: "Недостаточно прав для этого действия.",
+  EMAIL_IN_USE: "Эта почта уже используется. Войдите в аккаунт.",
+  ACCOUNT_EXISTS: "Пароль для аккаунта уже задан. Войдите с ним.",
   PLANNER_UNAVAILABLE:
-    "Your uploads are retained. Retry planning when the AI service is available.",
-  CAPACITY_UNAVAILABLE: "Connect a compatible device or wait for capacity.",
-  UNSUPPORTED_ENVIRONMENT:
-    "Choose an approved environment compatible with the pool.",
-  ARTIFACT_NOT_READY: "Wait for verification and publication, then refresh.",
+    "Планировщик временно недоступен. Файлы сохранены: попробуйте снова.",
+  RATE_LIMITED: "Слишком много запросов. Подождите немного.",
+  STALE_PREVIEW: "План изменился. Проверьте обновлённый план перед запуском.",
+  CAPACITY_UNAVAILABLE:
+    "Пока нет подходящего устройства. Подключите компьютер или подождите.",
   QUOTA_EXCEEDED:
-    "Reduce the selected files or ask the owner to increase the quota.",
+    "Превышен доступный объём. Уменьшите файлы или обратитесь к владельцу.",
 };
 export function errorText(e: unknown) {
-  if (e instanceof ApiError) {
-    const fields = e.fields
-      ? Object.entries(e.fields)
-          .map(([key, value]) => `${key}: ${value}`)
-          .join("; ")
-      : "";
-    return `${e.message} (${e.code}${e.requestId ? "; request " + e.requestId : ""}) ${fields} ${recovery[e.code] || ""}`.trim();
-  }
-  return e instanceof Error ? e.message : "Something went wrong. Please retry.";
+  if (e instanceof ApiError)
+    return (
+      (messages[e.code] || e.message) +
+      (e.requestId ? " · Код обращения: " + e.requestId : "")
+    );
+  return e instanceof Error
+    ? e.message
+    : "Не удалось выполнить действие. Повторите попытку.";
 }
 export function artifactUrl(id: string) {
   return "/api/v1/artifacts/" + encodeURIComponent(id) + "/content";

@@ -36,8 +36,6 @@ services:
       LLM_JSON_MODE: ${LLM_JSON_MODE:-json_object}
     volumes:
       - artifacts:/state
-      - ../apps/portal/dist:/ui/portal:ro
-      - ../apps/console/dist:/ui/console:ro
       - ./catalog:/catalog:ro
     depends_on:
       db:

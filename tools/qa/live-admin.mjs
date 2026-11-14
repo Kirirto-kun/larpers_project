@@ -1,0 +1,48 @@
+import {createRequire} from 'node:module';
+import {fileURLToPath,pathToFileURL} from 'node:url';
+import path from 'node:path';import fs from 'node:fs/promises';
+const root=path.resolve(path.dirname(fileURLToPath(import.meta.url)),'../..');
+const require=createRequire(pathToFileURL(path.join(root,'apps/portal/package.json')));
+const {chromium,expect}=require('@playwright/test');
+const base='https://10.4.146.76:8443';
+const runtime=path.join(process.env.LOCALAPPDATA,'Campus/server-96bfe6d');
+const invite=JSON.parse(await fs.readFile(path.join(runtime,'web-admin-test-login.json'),'utf8'));
+const out=path.join(root,'.git/campus-runner/web-product/live/admin');await fs.mkdir(out,{recursive:true});
+const report={started_at:new Date().toISOString(),checks:[]};
+const browser=await chromium.launch({headless:true});const context=await browser.newContext({ignoreHTTPSErrors:true,viewport:{width:1440,height:1000}});const page=await context.newPage();
+try{
+ const login=await context.request.post(base+'/api/v1/auth/login',{headers:{Origin:base},data:{token:invite.token}});
+ if(login.status()!==200)throw new Error('private test owner invitation login failed HTTP '+login.status());
+ const identity=await login.json();if(identity.role!=='owner')throw new Error('test session was not owner');
+ await page.goto(base+'/admin/',{waitUntil:'domcontentloaded'});
+ await expect(page.getByRole('heading',{name:'Пул под контролем'})).toBeVisible({timeout:15000});
+ const summary=await (await context.request.get(base+'/api/v1/pool/summary')).json();
+ report.summary=summary;
+ if(summary.ready_nodes<1||summary.accepted_units<1)throw new Error('live summary does not show physical contribution');
+ report.checks.push('real owner browser session and live pool statistics');
+ await page.screenshot({path:path.join(out,'overview.png'),fullPage:true});
+ await page.getByRole('link',{name:'Устройства',exact:true}).click();
+ const inventory=await (await context.request.get(base+'/api/v1/nodes')).json();
+ const ready=inventory.find(n=>n.state==='ready'&&n.supports_web_controls);
+ if(!ready)throw new Error('no ready managed device');
+ const gpuCard=page.locator('article').filter({has:page.getByRole('heading',{name:'Windows AMD RTX 5050',exact:true})});
+ await expect(gpuCard).toBeVisible();await expect(gpuCard.getByText('nvidia',{exact:true})).toBeVisible();
+ const card=page.locator('article').filter({has:page.getByRole('heading',{name:ready.name,exact:true})});
+ await expect(card).toBeVisible();
+ await expect(card.getByText('Настройки применены клиентом',{exact:true})).toBeVisible({timeout:15000});
+ const nodeId=ready.id;
+ const before=await (await context.request.get(base+'/api/v1/nodes/'+nodeId)).json();
+ if(before.state!=='ready'||before.actual_state!=='running')throw new Error('physical worker is not ready');
+ const responseWait=page.waitForResponse(r=>r.url()===base+'/api/v1/nodes/'+nodeId+'/control'&&r.request().method()==='POST');
+ await card.getByRole('button',{name:'Продолжить',exact:true}).click();
+ const response=await responseWait;if(response.status()!==200)throw new Error('actual owner UI control failed HTTP '+response.status());
+ const after=await response.json();if(after.settings.revision!==before.settings.revision||after.state!=='ready')throw new Error('idempotent resume changed/fenced the running worker');
+ report.node={id:after.id,state:after.state,applied_revision:after.applied_revision,mode:after.applied_mode,gpu_verified:after.capabilities.gpus.some(g=>g.cuda_verified)};
+ report.checks.push('physical device hardware, ACK state and CSRF-protected idempotent browser control');
+ await page.screenshot({path:path.join(out,'devices.png'),fullPage:true});
+ await page.getByRole('link',{name:'Задачи',exact:true}).click();
+ await expect(page.getByRole('heading',{name:'Вся работа пула'})).toBeVisible();
+ await page.screenshot({path:path.join(out,'jobs.png'),fullPage:true});
+ report.checks.push('administrator sees real pool jobs and results');report.passed=true;
+}catch(e){report.passed=false;report.error=e.message;process.exitCode=1;await page.screenshot({path:path.join(out,'failure.png'),fullPage:true}).catch(()=>{});}
+finally{await fs.writeFile(path.join(out,'report.json'),JSON.stringify(report,null,2));await browser.close();console.log(JSON.stringify(report));}

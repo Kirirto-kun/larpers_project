@@ -41,16 +41,20 @@ type ResultManifest struct {
 	OverheadDurationMS int64             `json:"overhead_duration_ms"`
 }
 type Runner struct {
-	Client        *client.Client
-	Docker        containers.Docker
-	Runtime       Runtime
-	StateDir      string
-	AllowedImages map[string]string
-	MaxInputBytes int64
-	Identity      session.Identity
-	cacheOnce     sync.Once
-	inputCache    *artifacts.Cache
-	controlAction atomic.Value
+	Client          *client.Client
+	Docker          containers.Docker
+	Runtime         Runtime
+	StateDir        string
+	AllowedImages   map[string]string
+	MaxInputBytes   int64
+	Identity        session.Identity
+	ManagedControl  *ManagedControl
+	OnReady         func(context.Context) error
+	Discover        func(context.Context) (client.Capabilities, error)
+	RefreshInterval time.Duration
+	cacheOnce       sync.Once
+	inputCache      *artifacts.Cache
+	controlAction   atomic.Value
 }
 
 func (r *Runner) cache() *artifacts.Cache {
@@ -384,8 +388,19 @@ func (r *Runner) RunAssignment(ctx context.Context, a client.Assignment) (Result
 		return result, e
 	}
 	result = ResultManifest{SchemaVersion: "1", Files: []client.Artifact{}, Quality: "unverified", BenchmarkEligible: false, ComputeDurationMS: computeEnd.Sub(computeStart).Milliseconds()}
+	files := make([]selectedResult, 0, len(guarded.ResultManifest.Files))
+	if r.Client.Managed {
+		files, e = selectManagedOutputs(guarded.ResultManifest.Files, a.Outputs, a.OptionalOutputs)
+		if e != nil {
+			return result, e
+		}
+	} else {
+		for _, file := range guarded.ResultManifest.Files {
+			files = append(files, selectedResult{File: file, SourcePath: file.Path})
+		}
+	}
 	var outputBytes int64
-	for _, entry := range guarded.ResultManifest.Files {
+	for _, entry := range files {
 		if e = packaging.SafePath(entry.Path); e != nil {
 			return result, e
 		}
@@ -393,12 +408,17 @@ func (r *Runner) RunAssignment(ctx context.Context, a client.Assignment) (Result
 		if entry.SizeBytes < 0 || outputBytes > a.ResourceLimits.OutputBytes || len(result.Files) >= 10000 {
 			return result, errors.New("exported results exceed quota")
 		}
-		path := filepath.Join(p.Export, "results", filepath.FromSlash(entry.Path))
+		path := filepath.Join(p.Export, "results", filepath.FromSlash(entry.SourcePath))
 		sum, n, e := artifacts.HashFile(path)
 		if e != nil || sum != entry.Digest || n != entry.SizeBytes {
 			return result, errors.New("exported result checksum mismatch")
 		}
-		artifact, e := artifacts.Upload(runCtx, r.Client, path, a.Fence)
+		var artifact client.Artifact
+		if r.Client.Managed {
+			artifact, e = artifacts.UploadNamed(runCtx, r.Client, path, a.Fence, entry.Path)
+		} else {
+			artifact, e = artifacts.Upload(runCtx, r.Client, path, a.Fence)
+		}
 		if e != nil {
 			return result, e
 		}

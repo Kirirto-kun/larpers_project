@@ -1,10 +1,11 @@
 import { api, post, ApiError } from "./api";
+import type { Artifact } from "./types";
 export function excluded(path: string) {
   return path
     .replaceAll("\\", "/")
     .split("/")
     .some((segment) => {
-      const name = segment.toLowerCase();
+      const n = segment.toLowerCase();
       return (
         [
           ".git",
@@ -16,86 +17,88 @@ export function excluded(path: string) {
           ".pypirc",
           "id_rsa",
           "id_ed25519",
-        ].includes(name) ||
-        name === ".env" ||
-        name.startsWith(".env.") ||
-        /\.(pem|key)$/i.test(name)
+        ].includes(n) ||
+        n === ".env" ||
+        n.startsWith(".env.") ||
+        /\.(pem|key)$/i.test(n)
       );
     });
 }
-export async function upload(file: File, progress: (n: number) => void) {
+async function sha(blob: Blob) {
+  const data = await crypto.subtle.digest("SHA-256", await blob.arrayBuffer());
+  return Array.from(new Uint8Array(data))
+    .map((b) => b.toString(16).padStart(2, "0"))
+    .join("");
+}
+export async function upload(
+  file: File,
+  progress: (n: number) => void,
+  kind: "input" | "project" = "input",
+): Promise<Artifact> {
   const path = file.webkitRelativePath || file.name;
-  const key =
-    "campus-upload:" + path + ":" + file.size + ":" + file.lastModified;
+  const digest = await sha(file);
+  const key = "campus-upload:" + kind + ":" + path + ":" + digest;
   let id = sessionStorage.getItem(key);
   if (!id) {
     const created = await post<{ id: string }>("/uploads", {
       name: path,
       size_bytes: file.size,
+      sha256: digest,
+      media_type: file.type || "application/octet-stream",
+      kind,
     });
     id = created.id;
     sessionStorage.setItem(key, id);
   }
   let status: {
+    state: string;
     part_size_bytes: number;
-    uploaded_parts: number[];
-    part_checksums?: Record<string, string>;
+    parts: { number: number; sha256: string; size_bytes: number }[];
+    artifact: Artifact | null;
   };
   try {
-    status = await api<{
-      part_size_bytes: number;
-      uploaded_parts: number[];
-      part_checksums?: Record<string, string>;
-    }>("/uploads/" + id);
-  } catch (error) {
+    status = await api("/uploads/" + id);
+  } catch (e) {
     if (
-      error instanceof ApiError &&
-      ["404", "NOT_FOUND", "UPLOAD_EXPIRED"].includes(error.code)
+      e instanceof ApiError &&
+      ["404", "NOT_FOUND", "UPLOAD_EXPIRED"].includes(e.code)
     )
       sessionStorage.removeItem(key);
-    throw error;
+    throw e;
   }
-  const partSize = status.part_size_bytes;
-  if (!Number.isSafeInteger(partSize) || partSize <= 0)
-    throw new Error("Invalid upload part size");
-  for (
-    let offset = 0, part = 0;
-    offset < file.size;
-    offset += partSize, part++
-  ) {
-    const blob = file.slice(offset, offset + partSize);
-    {
-      const digest = await crypto.subtle.digest(
-        "SHA-256",
-        await blob.arrayBuffer(),
-      );
-      const hex = Array.from(new Uint8Array(digest))
-        .map((b) => b.toString(16).padStart(2, "0"))
-        .join("");
-      const recorded = status.part_checksums?.[String(part)];
-      if (recorded && recorded !== hex) {
-        sessionStorage.removeItem(key);
-        throw new Error(
-          "Selected file differs from the interrupted upload. Retry to create a new upload.",
-        );
-      }
-      // Without a server checksum, re-send the part idempotently rather than trusting metadata alone.
-      if (!status.uploaded_parts.includes(part) || recorded !== hex)
-        await api("/uploads/" + id + "/parts/" + part, {
-          method: "PUT",
-          headers: {
-            "Content-Type": "application/octet-stream",
-            "X-Content-SHA256": hex,
-          },
-          body: blob,
-        });
+  if (status.state === "expired") {
+    sessionStorage.removeItem(key);
+    throw new Error(
+      "Срок загрузки истёк. Нажмите «Подготовить план», чтобы начать снова.",
+    );
+  }
+  if (status.artifact) {
+    sessionStorage.removeItem(key);
+    return status.artifact;
+  }
+  const size = status.part_size_bytes;
+  if (!Number.isSafeInteger(size) || size <= 0)
+    throw new Error("Сервер вернул неверный размер части файла.");
+  for (let offset = 0, part = 0; offset < file.size; offset += size, part++) {
+    const blob = file.slice(offset, offset + size),
+      hash = await sha(blob),
+      recorded = status.parts.find((p) => p.number === part);
+    if (recorded && recorded.sha256 !== hash) {
+      sessionStorage.removeItem(key);
+      throw new Error("Файл изменился. Повторите загрузку.");
     }
-    progress(Math.min(file.size, offset + partSize));
+    if (!recorded)
+      await api("/uploads/" + id + "/parts/" + part, {
+        method: "PUT",
+        headers: {
+          "Content-Type": "application/octet-stream",
+          "X-Content-SHA256": hash,
+        },
+        body: blob,
+      });
+    progress(Math.min(file.size, offset + size));
   }
-  const result = await post<{ artifact_id: string }>(
-    "/uploads/" + id + "/finalize",
-    {},
-  );
+  const artifact = await post<Artifact>("/uploads/" + id + "/finalize", {});
   sessionStorage.removeItem(key);
-  return result.artifact_id;
+  return artifact;
 }

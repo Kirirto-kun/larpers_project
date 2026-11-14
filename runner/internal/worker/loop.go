@@ -7,6 +7,8 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"math"
+	"strconv"
 	"sync"
 	"time"
 )
@@ -23,8 +25,18 @@ func (r *Runner) Serve(ctx context.Context, capabilities client.Capabilities, gp
 	if e := cleaner.Cleanup(ctx); e != nil {
 		return e
 	}
-	if e := session.Control(r.StateDir, "resume"); e != nil {
-		return e
+	if r.ManagedControl == nil {
+		if e := session.Control(r.StateDir, "resume"); e != nil {
+			return e
+		}
+	} else {
+		action, e := r.participationAction()
+		if e != nil {
+			return e
+		}
+		if action == "stop" || action == "drain" {
+			return nil
+		}
 	}
 	r.controlAction.Store("resume")
 	budget := NewBudget(capabilities.OfferedBudget)
@@ -35,7 +47,22 @@ func (r *Runner) Serve(ctx context.Context, capabilities client.Capabilities, gp
 	var active sync.WaitGroup
 	slots := make(chan struct{}, 2)
 	completed := make(chan error, 2)
-	refresh := time.Now().Add(30 * time.Second)
+	interval := r.RefreshInterval
+	if interval <= 0 {
+		interval = 30 * time.Second
+	}
+	discover := r.Discover
+	if discover == nil {
+		discover = discovery.Discover
+	}
+	refresh := time.Now().Add(interval)
+	// Discovery samples describe the host, not the server session's revision.
+	// Advance for every new body, even after a failed/lost acknowledgement.
+	preflightRevision, _ := strconv.ParseInt(capabilities.PreflightRevision, 10, 64)
+	if preflightRevision < 1 {
+		preflightRevision = 1
+	}
+	capabilityPublicationPending := false
 	defer func() {
 		cancel()
 		active.Wait()
@@ -49,12 +76,17 @@ func (r *Runner) Serve(ctx context.Context, capabilities client.Capabilities, gp
 		}
 	}()
 	go r.monitorOwnerStop(runCtx, cancelCause)
+	if r.OnReady != nil {
+		if e := r.OnReady(runCtx); e != nil {
+			return e
+		}
+	}
 	for {
 		if runCtx.Err() != nil {
 			cancel()
 			return runCtx.Err()
 		}
-		action, e := session.ReadControl(r.StateDir)
+		action, e := r.participationAction()
 		if e != nil {
 			cancel()
 			return e
@@ -67,36 +99,48 @@ func (r *Runner) Serve(ctx context.Context, capabilities client.Capabilities, gp
 			return nil
 		}
 		if time.Now().After(refresh) {
-			updated, e := discovery.Discover(runCtx)
+			updated, e := discover(runCtx)
 			if e == nil {
-				verified := map[string]bool{}
-				for _, g := range capabilities.GPUs {
-					verified[g.ID] = g.CUDAVerified
+				updated, e = r.refreshCapabilities(capabilities, updated, gpu)
+				if e != nil {
+					return e
 				}
-				for i := range updated.GPUs {
-					updated.GPUs[i].CUDAVerified = verified[updated.GPUs[i].ID]
-				}
-				updated.OfferedBudget = discovery.Budget(updated, gpu)
-				updated.ImageDigests = append([]string{}, capabilities.ImageDigests...)
-				updated.AllowOnBattery = capabilities.AllowOnBattery
-				if updated.PowerState == "battery" {
+				if updated.PowerState == "battery" && !updated.AllowOnBattery {
 					cancel()
 					return errors.New("participation paused on battery power")
 				}
-				capabilities = updated
-				budget.Update(updated.OfferedBudget)
+				// Ambient free capacity includes this worker's own running tasks.
+				// Preserve those bounded reservations and reduce future admission.
+				budget.Constrain(updated.OfferedBudget)
+				if preflightRevision == math.MaxInt64 {
+					return errors.New("preflight revision exhausted")
+				}
+				preflightRevision++
+				updated.PreflightRevision = strconv.FormatInt(preflightRevision, 10)
 				wire, err := updated.Contract()
 				if err != nil {
 					return err
 				}
-				if e = r.Client.Do(runCtx, "PUT", "/node-sessions/"+r.Client.SessionID+"/capabilities", wire, nil, ""); e != nil && client.SessionFatal(e) {
-					cancel()
-					return e
+				if e = r.Client.Do(runCtx, "PUT", "/node-sessions/"+r.Client.SessionID+"/capabilities", wire, nil, ""); e != nil {
+					// The coordinator may still schedule using the old larger offer.
+					// Do not consume attempt generations by claiming/releasing until
+					// a fresh capability publication is acknowledged.
+					capabilityPublicationPending = true
+					if client.SessionFatal(e) {
+						cancel()
+						return e
+					}
+				} else {
+					capabilityPublicationPending = false
+					// Commit only acknowledged capabilities. Failed publication keeps
+					// conservative admission and retries a freshly sampled revision.
+					capabilities = updated
+					budget.Update(updated.OfferedBudget)
 				}
 			}
-			refresh = time.Now().Add(30 * time.Second)
+			refresh = time.Now().Add(interval)
 		}
-		if action == "drain" || len(slots) == cap(slots) {
+		if action == "drain" || capabilityPublicationPending || len(slots) == cap(slots) {
 			select {
 			case <-runCtx.Done():
 				cancel()
@@ -117,7 +161,7 @@ func (r *Runner) Serve(ctx context.Context, capabilities client.Capabilities, gp
 			if errors.Is(e, client.ErrWorkerContractIncomplete) {
 				return e
 			}
-			if action, _ := session.ReadControl(r.StateDir); action == "drain" || action == "stop" {
+			if action, _ := r.participationAction(); action == "drain" || action == "stop" {
 				continue
 			}
 			if client.SessionFatal(e) {
@@ -143,7 +187,7 @@ func (r *Runner) Serve(ctx context.Context, capabilities client.Capabilities, gp
 		a.ReceivedAt = time.Now()
 		a.LeaseRemainingMS -= time.Since(sent).Milliseconds()
 		a.TaskRemainingMS -= time.Since(sent).Milliseconds()
-		if action, _ := session.ReadControl(r.StateDir); action == "drain" || action == "stop" {
+		if action, _ := r.participationAction(); action == "drain" || action == "stop" {
 			r.releaseUnstarted(runCtx, a, action)
 			continue
 		}
@@ -156,7 +200,7 @@ func (r *Runner) Serve(ctx context.Context, capabilities client.Capabilities, gp
 			release()
 			return fmt.Errorf("invalid server assignment: %w", e)
 		}
-		if action, _ := session.ReadControl(r.StateDir); action == "drain" || action == "stop" {
+		if action, _ := r.participationAction(); action == "drain" || action == "stop" {
 			release()
 			r.releaseUnstarted(runCtx, a, action)
 			continue

@@ -9,8 +9,8 @@ npm --prefix apps/console run build
 npm --prefix apps/console run test:e2e
 ```
 
-Requires Node >=22.12 and Chromium installed through Playwright. Development URL: http://127.0.0.1:5174/admin/ . The API proxy uses `CAMPUS_API_URL` or http://127.0.0.1:8000. For an explicitly synthetic preview, run `python3 apps/portal/dev/fixture_api.py` separately. No measured results are bundled into the app.
+Requires Node >=22.12 and Chromium installed through Playwright. Development URL: http://127.0.0.1:5174/admin/ . The API proxy uses `CAMPUS_API_URL` or http://127.0.0.1:8000. Start the real coordinator and sign in through the portal. No measured results are bundled into the app.
 
-Member sessions see observations; owner/admin sessions additionally see device control, experiment creation and standalone import. Server authorization must enforce these actions. Unknown measurements are shown separately from zero. Event disconnects reconnect and refresh snapshots.
+Member sessions stop before any administration data request. Owner/admin sessions see pool summary, actual hardware and task counters, device control, experiment creation and standalone import. Server authorization independently enforces these actions. Unknown measurements remain distinct from zero; snapshots refresh every 5 seconds.
 
-Provisional models live in `src/lib/types.ts` pending final integration. Generated foundation types belong in ignored `src/generated/`. Serve dist at `/admin/` with SPA fallback; the control-plane owner handles shared-origin deployment. See `tools/benchmark/README.md` for reproducible reporting and `docs/submission/` for demo materials.
+`src/lib/types.ts` matches `server/campus/dto.py`. Benchmark creation consumes a reviewed preview ID/revision and at least two device IDs. Charts use actual report measurements; export is JSON. Serve dist at `/admin/` with SPA fallback. Playwright fixtures establish UI behavior, not live execution; deployment records physical verification separately.

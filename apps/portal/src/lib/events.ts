@@ -22,8 +22,8 @@ export function subscribe(
     source.onmessage = (message) => {
       try {
         const event: PoolEvent = JSON.parse(message.data);
-        if (event.event_id === last) return;
-        last = event.event_id;
+        if (String(event.event_id) === last) return;
+        last = String(event.event_id);
         refresh();
       } catch {
         refresh();

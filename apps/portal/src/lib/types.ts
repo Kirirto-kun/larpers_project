@@ -1,124 +1,191 @@
-// Provisional UI models. Replace at integration with foundation-generated DTOs.
-export type State = string;
+// HTTP shapes match server/campus/dto.py. No inferred readiness or telemetry.
 export interface PoolEvent {
-  event_id: string;
+  event_id: number | string;
   occurred_at: string;
   entity_type: string;
   entity_id: string;
   type: string;
   payload: Record<string, unknown>;
 }
-export interface Artifact {
+export interface Session {
   id: string;
   name: string;
-  size_bytes: number;
-  ready: boolean;
-  digest?: string;
+  email: string | null;
+  role: "owner" | "admin" | "member";
+  pool_id: string;
+  csrf_token?: string;
 }
-export interface Attempt {
-  attempt_id: string;
-  state: string;
-  node_id: string;
-  occurred_at: string;
-  message?: string;
-  input_digest?: string;
-  output_digest?: string;
+export interface Budget {
+  cpu_millis: number;
+  memory_bytes: number;
+  disk_bytes: number;
+  gpu_slots: number;
+  vram_bytes: number;
 }
-export interface Job {
-  id: string;
-  name: string;
-  state: State;
-  accepted_units: number;
-  failed_units: number;
-  total_units: number;
-  stages: { stage_id: string; state: State }[];
-  artifacts: Artifact[];
-  attempts: Attempt[];
-  metrics?: Record<string, number>;
-  validation_level?: string;
-  errors?: string[];
-  matches?: {
-    source: string;
-    excerpt: string;
-    score: number;
-    item_id: string;
-  }[];
-  index_artifact_id?: string;
-}
-export interface Node {
-  id: string;
-  name: string;
-  state: State;
-  roles: string[];
+export interface Capabilities {
+  os: string;
+  arch: string;
   cpu_logical: number;
   memory_available_bytes: number;
+  disk_available_bytes: number;
+  runtime: { type: string; version: string; healthy: boolean };
   gpus: {
     id: string;
     vendor: string;
     vram_bytes: number;
+    driver: string;
     cuda_verified: boolean;
   }[];
-  offered_budget: {
-    cpu_percent: number;
-    memory_bytes: number;
-    gpu_allowed: boolean;
-  };
-  preflight: { name: string; ok: boolean; message: string }[];
-  current_job_id?: string;
-  last_seen_at: string;
-  cpu_utilization?: number;
-  gpu_utilization?: number;
-  attempts?: Attempt[];
+  power_state: string;
+  offered_budget: Budget;
+  allow_on_battery: boolean;
+}
+export type Mode = "low" | "medium" | "max";
+export type DesiredState = "running" | "paused" | "draining";
+export interface Node {
+  id: string;
+  owner_id: string;
+  name: string;
+  state: string;
+  last_seen_at: string | null;
+  capabilities: Capabilities | null;
+  accepted_units: number;
+  active_attempts: number;
+  settings: { revision: number; mode: Mode; desired_state: DesiredState };
+  applied_revision: number;
+  applied_mode: Mode | null;
+  actual_state: string | null;
+  settings_error: string | null;
+  supports_web_controls: boolean;
+  agent_contact_at: string | null;
+}
+export interface Artifact {
+  id: string;
+  name: string;
+  size_bytes: number;
+  sha256: string;
+  media_type: string;
+}
+export interface Task {
+  id: string;
+  stage_id: string;
+  state: string;
+  generation: number;
+  units: number;
+  error_code: string | null;
+  attempt_id: string | null;
+  node_id: string | null;
+  verification_level: string | null;
+}
+export interface Job {
+  id: string;
+  owner_id: string;
+  state: string;
+  purpose: string;
+  created_at: string;
+  accepted_units: number;
+  failed_units: number;
+  total_units: number;
+  tasks: Task[];
+  artifacts: Artifact[];
+  search_result: {
+    matches: {
+      item_id: string;
+      source: string;
+      excerpt: string;
+      score: number;
+    }[];
+  } | null;
+}
+export interface Stage {
+  stage_id: string;
+  adapter: { id: string; version: string };
+  variants: { accelerator: string; resource_requirements: Budget }[];
+  outputs: { path: string; required: boolean; max_bytes: number }[];
+  task_deadline_ms: number;
+  resume_policy: string;
+  argv: string[];
 }
 export interface Preview {
   id: string;
-  state: State;
+  state: string;
   plan_revision: number;
-  questions: { question_id: string; message: string }[];
-  summary: string;
-  accelerator: string;
-  resume_policy: string;
-  outputs: string[];
-  assumptions: string[];
-  evidence: string[];
-  data_location: string;
-  duration_ms: number | null;
+  plan_digest: string | null;
+  plan: {
+    plan_revision: number;
+    execution_kind: string;
+    stages: Stage[];
+    job_deadline_at: string;
+    assumptions: string[];
+    evidence: { source: string; detail: string }[];
+  } | null;
+  question: { question_id: string; prompt: string } | null;
+  error_code: string | null;
+  error_message: string | null;
 }
-export interface Session {
-  name: string;
-  role: "owner" | "admin" | "member";
-  csrf_token?: string;
+export interface Stats {
+  devices_total: number;
+  devices_online: number;
+  accepted_units: number;
+  contributed_seconds: number | null;
+  jobs_by_state: Record<string, number>;
+  recent_results: Job[];
+  history: { date: string; accepted_units: number; amount: number }[];
 }
 export interface Summary {
+  pool_id: string;
+  nodes: number;
+  ready_nodes: number;
   accepted_units: number;
-  queued_tasks: number;
-  running_tasks: number;
-  recovering_tasks: number;
-  events: PoolEvent[];
+  jobs_by_state: Record<string, number>;
 }
 export interface Benchmark {
   id: string;
-  experiment_id: string;
-  state: string;
-  workload: string;
-  unit: string;
-  input_digest: string;
-  node_ids: string[];
-  concurrency: number;
-  repetitions: number;
-  cold: boolean;
-  git_sha: string;
-  standalone: { node_id: string; rates: number[]; provenance: string }[];
-  pool_rates: number[];
-  single_service_rates: number[];
-  timings_ms: Record<string, number>;
-  utilization: {
+  status: string;
+  config: {
+    preview_id: string;
+    plan_revision: number;
+    node_ids: string[];
+    concurrency: number;
+    repetitions: number;
+    warm: boolean;
+    batch_policy: Record<string, number>;
+  };
+  config_digest: string;
+  manifest_digest: string;
+  standalone_results: {
     node_id: string;
-    cpu_percent: number | null;
-    gpu_percent: number | null;
-    window_ms: number;
-    gaps: number;
+    units: number;
+    duration_ms: number;
+    verification_ms: number;
+    utilization: {
+      sequence: number;
+      phase: string;
+      cpu_percent: number | null;
+      gpu_percent: number | null;
+      memory_bytes: number | null;
+    }[];
   }[];
-  bottleneck: string;
-  flags: string[];
+  service_job_ids: string[];
+  standalone_units_per_second: Record<string, number>;
+  pooled_units_per_second: number | null;
+  efficiency_percent: number | null;
+  speedup: number | null;
+  service_runs: Record<string, unknown>[];
+}
+export interface Release {
+  version: string;
+  downloads: {
+    os: "windows" | "darwin" | "linux";
+    label: string;
+    url: string;
+    sha256?: string;
+  }[];
+  requirements: { docker_manual: boolean };
+}
+export interface Invitation {
+  id: string;
+  token: string;
+  kind: string;
+  expires_at: string;
 }

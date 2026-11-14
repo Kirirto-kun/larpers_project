@@ -1,126 +1,123 @@
-import { TimingChart, UtilizationChart } from "../components/MeasurementCharts";
 import { useState } from "react";
+import { UtilizationChart } from "../components/MeasurementCharts";
 import { useResource } from "../lib/hooks";
 import { post, errorText } from "../lib/api";
 import type { Benchmark, Node } from "../lib/types";
-import { PageHeader, ErrorBox, Empty, Status } from "../components/Common";
-import { ThroughputChart } from "../components/ThroughputChart";
+import {
+  PageHeader,
+  ErrorBox,
+  Empty,
+  Status,
+  Metric,
+} from "../components/Common";
 import { Button } from "../components/ui/button";
-export function Benchmarks({ admin }: { admin: boolean }) {
+export function Benchmarks() {
   const {
     data: reports,
     error,
     refresh,
-  } = useResource<Benchmark[]>("/benchmarks", "/pool/events");
+  } = useResource<Benchmark[]>("/benchmarks");
   const { data: nodes } = useResource<Node[]>("/nodes");
   const [selected, setSelected] = useState("");
-  const [workload, setWorkload] = useState("embeddings");
-  const [digest, setDigest] = useState("");
+  const [previewId, setPreviewId] = useState("");
+  const [revision, setRevision] = useState(1);
   const [ids, setIds] = useState<string[]>([]);
-  const [concurrency, setConcurrency] = useState(2);
+  const [concurrency, setConcurrency] = useState(1);
   const [repetitions, setRepetitions] = useState(3);
-  const [batch, setBatch] = useState(16);
-  const [cold, setCold] = useState(false);
+  const [warm, setWarm] = useState(true);
   const [message, setMessage] = useState("");
   const [busy, setBusy] = useState(false);
   const report = reports?.find((b) => b.id === selected);
   return (
     <>
-      <PageHeader
-        eyebrow="BENCHMARKS"
-        title="Measure the value of working together."
-      >
-        Compare matched workloads and resource budgets. Utilization is not
-        pooling efficiency.
+      <PageHeader eyebrow="ИЗМЕРЕНИЯ" title="Проверяйте пользу общего пула">
+        Сравнение одинаковых задач и бюджетов на отдельных компьютерах и в пуле.
+        Загрузка устройства не равна эффективности пула.
       </PageHeader>
       <ErrorBox message={error || message} />
-      {admin && (
-        <section className="card">
-          <h2>New experiment</h2>
-          <form
-            onSubmit={async (e) => {
-              e.preventDefault();
-              setBusy(true);
-              try {
-                const b = await post<Benchmark>("/benchmarks", {
-                  workload,
-                  input_digest: digest,
-                  node_ids: ids,
-                  concurrency,
-                  repetitions,
-                  batch_policy: { target_units: batch },
-                  cold,
-                });
-                await refresh();
-                setSelected(b.id);
-                setMessage("");
-              } catch (e) {
-                setMessage(errorText(e));
-              } finally {
-                setBusy(false);
-              }
-            }}
-          >
-            <div className="grid">
-              <label>
-                Workload
-                <select
-                  value={workload}
-                  onChange={(e) => setWorkload(e.target.value)}
-                >
-                  <option value="embeddings">Document embeddings</option>
-                  <option value="training">Image classifier training</option>
-                </select>
-              </label>
-              <label>
-                Immutable input digest
-                <input
-                  required
-                  value={digest}
-                  onChange={(e) => setDigest(e.target.value)}
-                  placeholder="sha256:…"
-                />
-              </label>
-              <label>
-                Concurrency
-                <input
-                  type="number"
-                  min="1"
-                  value={concurrency}
-                  onChange={(e) => setConcurrency(+e.target.value)}
-                  required
-                />
-              </label>
-              <label>
-                Repetitions
-                <input
-                  type="number"
-                  min="3"
-                  value={repetitions}
-                  onChange={(e) => setRepetitions(+e.target.value)}
-                  required
-                />
-              </label>
-              <label>
-                Batch target units
-                <input
-                  type="number"
-                  min="1"
-                  value={batch}
-                  onChange={(e) => setBatch(+e.target.value)}
-                  required
-                />
-              </label>
-            </div>
-            <label className="check">
+      <details className="card">
+        <summary>Новое измерение</summary>
+        <p>
+          Сначала подготовьте и проверьте план в рабочем пространстве. Выберите
+          минимум два устройства. Для отдельных запусков нужны соответствующие
+          записи клиента.
+        </p>
+        <form
+          onSubmit={async (e) => {
+            e.preventDefault();
+            setBusy(true);
+            try {
+              const result = await post<Benchmark>("/benchmarks", {
+                preview_id: previewId.trim(),
+                plan_revision: revision,
+                node_ids: ids,
+                concurrency,
+                repetitions,
+                warm,
+                batch_policy: {},
+              });
+              await refresh();
+              setSelected(result.id);
+              setMessage("");
+            } catch (e) {
+              setMessage(errorText(e));
+            } finally {
+              setBusy(false);
+            }
+          }}
+        >
+          <div className="grid">
+            <label>
+              ID проверенного плана
               <input
-                type="checkbox"
-                checked={cold}
-                onChange={(e) => setCold(e.target.checked)}
+                required
+                value={previewId}
+                onChange={(e) => setPreviewId(e.target.value)}
               />
-              Cold start series
             </label>
-            <h3>Compute participants</h3>
+            <label>
+              Версия плана
+              <input
+                type="number"
+                min={1}
+                value={revision}
+                onChange={(e) => setRevision(+e.target.value)}
+                required
+              />
+            </label>
+            <label>
+              Параллельных задач на устройство
+              <input
+                type="number"
+                min={1}
+                max={512}
+                required
+                value={concurrency}
+                onChange={(e) => setConcurrency(+e.target.value)}
+              />
+            </label>
+            <label>
+              Повторений
+              <input
+                type="number"
+                min={3}
+                max={20}
+                required
+                value={repetitions}
+                onChange={(e) => setRepetitions(+e.target.value)}
+              />
+            </label>
+          </div>
+          <label className="check">
+            <input
+              type="checkbox"
+              checked={warm}
+              onChange={(e) => setWarm(e.target.checked)}
+            />
+            Прогретое окружение
+          </label>
+          <fieldset>
+            <legend>Устройства</legend>
             {nodes?.map((n) => (
               <label className="check" key={n.id}>
                 <input
@@ -137,109 +134,175 @@ export function Benchmarks({ admin }: { admin: boolean }) {
                 {n.name}
               </label>
             ))}
-            <Button disabled={busy || !ids.length}>
-              Create new experiment
-            </Button>
-            <p className="muted">
-              Changed inputs or settings require a new experiment. Existing
-              results are never relabelled.
-            </p>
-          </form>
-        </section>
-      )}
+          </fieldset>
+          <Button disabled={busy || ids.length < 2}>Создать измерение</Button>
+        </form>
+      </details>
       <section className="card">
-        <h2>Saved experiments</h2>
-        {reports?.length === 0 && (
-          <Empty>
-            No measurements yet. Run an experiment with real devices.
-          </Empty>
-        )}
+        <h2>Сохранённые измерения</h2>
+        {reports?.length === 0 && <Empty>Измерений пока нет</Empty>}
         {reports?.map((b) => (
           <div className="row" key={b.id}>
-            <button className="button ghost" onClick={() => setSelected(b.id)}>
-              {b.workload} · {b.experiment_id}
-            </button>
-            <Status value={b.state} />
+            <Button variant="ghost" onClick={() => setSelected(b.id)}>
+              Измерение {b.id}
+            </Button>
+            <Status value={b.status} />
           </div>
         ))}
       </section>
       {report && (
         <section className="card">
-          <h2>
-            {report.workload} / {report.experiment_id}
-          </h2>
-          <ThroughputChart report={report} />
+          <h2>Измерение {report.id}</h2>
+          <div className="metrics">
+            <Metric
+              label="Эффективность пула"
+              value={
+                report.efficiency_percent == null
+                  ? "—"
+                  : report.efficiency_percent.toFixed(1) + "%"
+              }
+            />
+            <Metric
+              label="Ускорение"
+              value={
+                report.speedup == null ? "—" : report.speedup.toFixed(2) + "×"
+              }
+            />
+            <Metric
+              label="Пул, ед. / сек."
+              value={report.pooled_units_per_second?.toFixed(2) ?? "—"}
+            />
+            <Metric label="Повторений" value={report.config.repetitions} />
+          </div>
+          {report.efficiency_percent != null &&
+            report.efficiency_percent > 100 && (
+              <p className="notice">
+                Эффективность выше 100%. Проверьте сопоставимость окружения,
+                прогрева и измерений.
+              </p>
+            )}
+          <h3>Производительность отдельных устройств</h3>
+          {Object.entries(report.standalone_units_per_second).map(
+            ([id, rate]) => (
+              <div className="chart-row" key={id}>
+                <span>
+                  {nodes?.find((n) => n.id === id)?.name || id.slice(0, 8)}
+                </span>
+                <meter
+                  min={0}
+                  max={Math.max(
+                    1,
+                    ...Object.values(report.standalone_units_per_second),
+                    report.pooled_units_per_second || 0,
+                  )}
+                  value={rate}
+                />
+                <span>{rate.toFixed(2)} ед./с</span>
+              </div>
+            ),
+          )}
           <dl>
-            <dt>Input digest</dt>
+            <dt>Параллельность</dt>
+            <dd>{report.config.concurrency}</dd>
+            <dt>Окружение</dt>
+            <dd>{report.config.warm ? "Прогретое" : "Холодный старт"}</dd>
+            <dt>Манифест</dt>
             <dd>
-              <code>{report.input_digest}</code>
+              <code>{report.manifest_digest}</code>
             </dd>
-            <dt>Commit</dt>
+            <dt>Конфигурация</dt>
             <dd>
-              <code>{report.git_sha}</code>
+              <code>{report.config_digest}</code>
             </dd>
-            <dt>Concurrency</dt>
-            <dd>{report.concurrency}</dd>
-            <dt>Bottleneck</dt>
-            <dd>{report.bottleneck || "Not identified"}</dd>
           </dl>
-          <TimingChart timings={report.timings_ms} />
-          <UtilizationChart records={report.utilization} />
-          <h3>Standalone measurement provenance</h3>
-          {report.standalone.map((s) => (
-            <p key={s.node_id}>
-              {s.node_id}: {s.provenance}; raw rates: {s.rates.join(", ")}
-            </p>
-          ))}
-          {report.flags.map((f) => (
-            <div className="notice" key={f}>
-              {f}
-            </div>
+          <h3>Исходные измерения и телеметрия</h3>
+          {report.standalone_results.map((r, i) => (
+            <details key={i}>
+              <summary>
+                {r.node_id} · {r.units} ед. / {r.duration_ms} мс
+              </summary>
+              <p>
+                Вычисления: {r.duration_ms} мс · проверка: {r.verification_ms}{" "}
+                мс
+              </p>
+              {r.utilization.length ? (
+                <div>
+                  <UtilizationChart samples={r.utilization} />
+                  <div className="table-wrap">
+                    <table>
+                      <thead>
+                        <tr>
+                          <th>Отсчёт</th>
+                          <th>Фаза</th>
+                          <th>CPU</th>
+                          <th>GPU</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {r.utilization.map((u) => (
+                          <tr key={u.sequence}>
+                            <td>{u.sequence}</td>
+                            <td>{u.phase}</td>
+                            <td>
+                              {u.cpu_percent == null
+                                ? "Не измерено"
+                                : u.cpu_percent + "%"}
+                            </td>
+                            <td>
+                              {u.gpu_percent == null
+                                ? "Не измерено"
+                                : u.gpu_percent + "%"}
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              ) : (
+                <p>Телеметрия не записана.</p>
+              )}
+            </details>
           ))}
           <div className="actions">
             <a
               className="button outline"
-              href={"/api/v1/benchmarks/" + report.id + "/export?format=json"}
+              href={"/api/v1/benchmarks/" + report.id + "/export"}
               download
             >
-              Export JSON
-            </a>
-            <a
-              className="button outline"
-              href={"/api/v1/benchmarks/" + report.id + "/export?format=csv"}
-              download
-            >
-              Export CSV
+              Скачать JSON
             </a>
           </div>
-          {admin && (
-            <label>
-              Import standalone records (JSON)
-              <input
-                type="file"
-                accept="application/json"
-                onChange={async (e) => {
-                  const file = e.target.files?.[0];
-                  if (!file) return;
-                  if (file.size > 10 * 1024 * 1024) {
-                    setMessage(
-                      "Standalone import exceeds 10 MiB. Split records into smaller files.",
-                    );
-                    return;
-                  }
-                  try {
-                    await post(
-                      "/benchmarks/" + report.id + "/standalone-results",
-                      JSON.parse(await file.text()),
-                    );
-                    await refresh();
-                  } catch (e) {
-                    setMessage(errorText(e));
-                  }
-                }}
-              />
-            </label>
-          )}
+          <label>
+            Импорт отдельного измерения (JSON)
+            <input
+              type="file"
+              accept="application/json"
+              disabled={busy}
+              onChange={async (e) => {
+                const file = e.target.files?.[0];
+                if (!file) return;
+                if (file.size > 10 * 1024 * 1024) {
+                  setMessage("Выберите JSON до 10 МБ.");
+                  return;
+                }
+                setBusy(true);
+                try {
+                  const payload = JSON.parse(await file.text());
+                  await post(
+                    "/benchmarks/" + report.id + "/standalone-results",
+                    payload,
+                  );
+                  await refresh();
+                  setMessage("");
+                } catch (e) {
+                  setMessage(errorText(e));
+                } finally {
+                  setBusy(false);
+                }
+              }}
+            />
+          </label>
         </section>
       )}
     </>

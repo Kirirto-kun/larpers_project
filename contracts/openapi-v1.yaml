@@ -1,6 +1,36 @@
 {
   "components": {
     "schemas": {
+      "AccountCreate": {
+        "additionalProperties": false,
+        "properties": {
+          "email": {
+            "maxLength": 254,
+            "minLength": 3,
+            "title": "Email",
+            "type": "string"
+          },
+          "name": {
+            "maxLength": 256,
+            "minLength": 1,
+            "title": "Name",
+            "type": "string"
+          },
+          "password": {
+            "maxLength": 128,
+            "minLength": 12,
+            "title": "Password",
+            "type": "string"
+          }
+        },
+        "required": [
+          "name",
+          "email",
+          "password"
+        ],
+        "title": "AccountCreate",
+        "type": "object"
+      },
       "AdapterRef": {
         "additionalProperties": false,
         "properties": {
@@ -1142,6 +1172,42 @@
         "title": "DeviceRedeem",
         "type": "object"
       },
+      "DeviceSettings": {
+        "additionalProperties": false,
+        "properties": {
+          "desired_state": {
+            "enum": [
+              "running",
+              "paused",
+              "draining"
+            ],
+            "title": "Desired State",
+            "type": "string"
+          },
+          "mode": {
+            "enum": [
+              "low",
+              "medium",
+              "max"
+            ],
+            "title": "Mode",
+            "type": "string"
+          },
+          "revision": {
+            "exclusiveMinimum": 0.0,
+            "maximum": 9.223372036854776e+18,
+            "title": "Revision",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "revision",
+          "mode",
+          "desired_state"
+        ],
+        "title": "DeviceSettings",
+        "type": "object"
+      },
       "Environment": {
         "additionalProperties": false,
         "properties": {
@@ -1421,6 +1487,17 @@
               }
             ],
             "title": "Csrf Token"
+          },
+          "email": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Email"
           },
           "id": {
             "format": "uuid",
@@ -1926,6 +2003,295 @@
         "title": "LogWrite",
         "type": "object"
       },
+      "NativeAssignment": {
+        "additionalProperties": false,
+        "description": "Only selected with X-Campus-Worker-Protocol: 2; v1 remains unchanged.",
+        "properties": {
+          "accelerator": {
+            "enum": [
+              "cpu",
+              "cuda"
+            ],
+            "title": "Accelerator",
+            "type": "string"
+          },
+          "adapter": {
+            "$ref": "#/components/schemas/AdapterRef"
+          },
+          "argv": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Argv",
+            "type": "array"
+          },
+          "attempt_id": {
+            "format": "uuid",
+            "title": "Attempt Id",
+            "type": "string"
+          },
+          "checkpoint_compatibility_digest": {
+            "anyOf": [
+              {
+                "pattern": "^[a-f0-9]{64}$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Checkpoint Compatibility Digest"
+          },
+          "generation": {
+            "exclusiveMinimum": 0.0,
+            "maximum": 9.223372036854776e+18,
+            "title": "Generation",
+            "type": "integer"
+          },
+          "heartbeat_interval_ms": {
+            "exclusiveMinimum": 0.0,
+            "maximum": 9.223372036854776e+18,
+            "title": "Heartbeat Interval Ms",
+            "type": "integer"
+          },
+          "image_digest": {
+            "maxLength": 256,
+            "pattern": "^[a-z0-9][a-z0-9./:_-]*@sha256:[a-f0-9]{64}$",
+            "title": "Image Digest",
+            "type": "string"
+          },
+          "inputs": {
+            "items": {
+              "$ref": "#/components/schemas/Artifact"
+            },
+            "title": "Inputs",
+            "type": "array"
+          },
+          "item_ids": {
+            "items": {
+              "maxLength": 256,
+              "minLength": 1,
+              "type": "string"
+            },
+            "title": "Item Ids",
+            "type": "array"
+          },
+          "job_id": {
+            "format": "uuid",
+            "title": "Job Id",
+            "type": "string"
+          },
+          "lease_expires_at": {
+            "format": "date-time",
+            "title": "Lease Expires At",
+            "type": "string"
+          },
+          "lease_remaining_ms": {
+            "maximum": 9.223372036854776e+18,
+            "minimum": 0.0,
+            "title": "Lease Remaining Ms",
+            "type": "integer"
+          },
+          "lease_token": {
+            "maxLength": 128,
+            "minLength": 32,
+            "title": "Lease Token",
+            "type": "string"
+          },
+          "manifest_digest": {
+            "pattern": "^[a-f0-9]{64}$",
+            "title": "Manifest Digest",
+            "type": "string"
+          },
+          "network_policy": {
+            "const": "none",
+            "title": "Network Policy",
+            "type": "string"
+          },
+          "optional_outputs": {
+            "items": {
+              "maxLength": 512,
+              "minLength": 1,
+              "type": "string"
+            },
+            "title": "Optional Outputs",
+            "type": "array"
+          },
+          "outputs": {
+            "items": {
+              "maxLength": 512,
+              "minLength": 1,
+              "type": "string"
+            },
+            "title": "Outputs",
+            "type": "array"
+          },
+          "parameters": {
+            "additionalProperties": true,
+            "title": "Parameters",
+            "type": "object"
+          },
+          "platform": {
+            "title": "Platform",
+            "type": "string"
+          },
+          "resource_limits": {
+            "$ref": "#/components/schemas/NativeResources"
+          },
+          "resume_checkpoint": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Artifact"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "stage_id": {
+            "pattern": "^[a-zA-Z0-9][a-zA-Z0-9._-]{0,63}$",
+            "title": "Stage Id",
+            "type": "string"
+          },
+          "task_deadline_at": {
+            "format": "date-time",
+            "title": "Task Deadline At",
+            "type": "string"
+          },
+          "task_id": {
+            "format": "uuid",
+            "title": "Task Id",
+            "type": "string"
+          },
+          "task_remaining_ms": {
+            "exclusiveMinimum": 0.0,
+            "maximum": 9.223372036854776e+18,
+            "title": "Task Remaining Ms",
+            "type": "integer"
+          },
+          "validator_policy": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "title": "Validator Policy",
+            "type": "object"
+          },
+          "variant_id": {
+            "pattern": "^[a-zA-Z0-9][a-zA-Z0-9._-]{0,63}$",
+            "title": "Variant Id",
+            "type": "string"
+          },
+          "working_dir": {
+            "maxLength": 512,
+            "minLength": 1,
+            "title": "Working Dir",
+            "type": "string"
+          }
+        },
+        "required": [
+          "generation",
+          "lease_token",
+          "job_id",
+          "stage_id",
+          "task_id",
+          "attempt_id",
+          "variant_id",
+          "lease_expires_at",
+          "lease_remaining_ms",
+          "heartbeat_interval_ms",
+          "task_deadline_at",
+          "manifest_digest",
+          "adapter",
+          "image_digest",
+          "platform",
+          "accelerator",
+          "argv",
+          "working_dir",
+          "inputs",
+          "outputs",
+          "resource_limits",
+          "network_policy",
+          "validator_policy",
+          "item_ids",
+          "parameters",
+          "task_remaining_ms"
+        ],
+        "title": "NativeAssignment",
+        "type": "object"
+      },
+      "NativeResources": {
+        "additionalProperties": false,
+        "properties": {
+          "checkpoint_bytes": {
+            "exclusiveMinimum": 0.0,
+            "maximum": 9.223372036854776e+18,
+            "title": "Checkpoint Bytes",
+            "type": "integer"
+          },
+          "cpu_millis": {
+            "exclusiveMinimum": 0.0,
+            "maximum": 9.223372036854776e+18,
+            "title": "Cpu Millis",
+            "type": "integer"
+          },
+          "gpu_ids": {
+            "items": {
+              "pattern": "^[a-zA-Z0-9][a-zA-Z0-9._-]{0,63}$",
+              "type": "string"
+            },
+            "maxItems": 64,
+            "title": "Gpu Ids",
+            "type": "array"
+          },
+          "memory_bytes": {
+            "minimum": 33554432.0,
+            "title": "Memory Bytes",
+            "type": "integer"
+          },
+          "output_bytes": {
+            "exclusiveMinimum": 0.0,
+            "maximum": 9.223372036854776e+18,
+            "title": "Output Bytes",
+            "type": "integer"
+          },
+          "pids": {
+            "maximum": 4096.0,
+            "minimum": 1.0,
+            "title": "Pids",
+            "type": "integer"
+          },
+          "tmp_bytes": {
+            "exclusiveMinimum": 0.0,
+            "maximum": 9.223372036854776e+18,
+            "title": "Tmp Bytes",
+            "type": "integer"
+          },
+          "vram_bytes": {
+            "default": 0,
+            "maximum": 9.223372036854776e+18,
+            "minimum": 0.0,
+            "title": "Vram Bytes",
+            "type": "integer"
+          },
+          "workspace_bytes": {
+            "exclusiveMinimum": 0.0,
+            "maximum": 9.223372036854776e+18,
+            "title": "Workspace Bytes",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "cpu_millis",
+          "memory_bytes",
+          "pids",
+          "workspace_bytes",
+          "output_bytes",
+          "checkpoint_bytes",
+          "tmp_bytes"
+        ],
+        "title": "NativeResources",
+        "type": "object"
+      },
       "Node": {
         "additionalProperties": false,
         "properties": {
@@ -1939,6 +2305,56 @@
             "maximum": 9.223372036854776e+18,
             "minimum": 0.0,
             "title": "Active Attempts",
+            "type": "integer"
+          },
+          "actual_state": {
+            "anyOf": [
+              {
+                "enum": [
+                  "running",
+                  "paused",
+                  "draining"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Actual State"
+          },
+          "agent_contact_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Agent Contact At"
+          },
+          "applied_mode": {
+            "anyOf": [
+              {
+                "enum": [
+                  "low",
+                  "medium",
+                  "max"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Applied Mode"
+          },
+          "applied_revision": {
+            "maximum": 9.223372036854776e+18,
+            "minimum": 0.0,
+            "title": "Applied Revision",
             "type": "integer"
           },
           "capabilities": {
@@ -1974,6 +2390,25 @@
             "title": "Name",
             "type": "string"
           },
+          "owner_id": {
+            "format": "uuid",
+            "title": "Owner Id",
+            "type": "string"
+          },
+          "settings": {
+            "$ref": "#/components/schemas/DeviceSettings"
+          },
+          "settings_error": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Settings Error"
+          },
           "state": {
             "enum": [
               "preflight",
@@ -1985,14 +2420,22 @@
             ],
             "title": "State",
             "type": "string"
+          },
+          "supports_web_controls": {
+            "title": "Supports Web Controls",
+            "type": "boolean"
           }
         },
         "required": [
           "id",
+          "owner_id",
           "name",
           "state",
           "accepted_units",
-          "active_attempts"
+          "active_attempts",
+          "settings",
+          "applied_revision",
+          "supports_web_controls"
         ],
         "title": "Node",
         "type": "object"
@@ -2100,6 +2543,29 @@
           "artifact_id"
         ],
         "title": "OutputRef",
+        "type": "object"
+      },
+      "PasswordLogin": {
+        "additionalProperties": false,
+        "properties": {
+          "email": {
+            "maxLength": 254,
+            "minLength": 1,
+            "title": "Email",
+            "type": "string"
+          },
+          "password": {
+            "maxLength": 128,
+            "minLength": 1,
+            "title": "Password",
+            "type": "string"
+          }
+        },
+        "required": [
+          "email",
+          "password"
+        ],
+        "title": "PasswordLogin",
         "type": "object"
       },
       "PoolSummary": {
@@ -2738,6 +3204,93 @@
         "title": "SessionCreate",
         "type": "object"
       },
+      "SettingsAck": {
+        "additionalProperties": false,
+        "properties": {
+          "actual_state": {
+            "enum": [
+              "running",
+              "paused",
+              "draining"
+            ],
+            "title": "Actual State",
+            "type": "string"
+          },
+          "error": {
+            "anyOf": [
+              {
+                "maxLength": 512,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Error"
+          },
+          "mode": {
+            "enum": [
+              "low",
+              "medium",
+              "max"
+            ],
+            "title": "Mode",
+            "type": "string"
+          },
+          "revision": {
+            "exclusiveMinimum": 0.0,
+            "maximum": 9.223372036854776e+18,
+            "title": "Revision",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "revision",
+          "actual_state",
+          "mode"
+        ],
+        "title": "SettingsAck",
+        "type": "object"
+      },
+      "SettingsPatch": {
+        "additionalProperties": false,
+        "properties": {
+          "desired_state": {
+            "anyOf": [
+              {
+                "enum": [
+                  "running",
+                  "paused",
+                  "draining"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Desired State"
+          },
+          "mode": {
+            "anyOf": [
+              {
+                "enum": [
+                  "low",
+                  "medium",
+                  "max"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Mode"
+          }
+        },
+        "title": "SettingsPatch",
+        "type": "object"
+      },
       "Stage": {
         "additionalProperties": false,
         "properties": {
@@ -3313,6 +3866,103 @@
         "title": "UploadPart",
         "type": "object"
       },
+      "UsageDay": {
+        "additionalProperties": false,
+        "properties": {
+          "accepted_units": {
+            "maximum": 9.223372036854776e+18,
+            "minimum": 0.0,
+            "title": "Accepted Units",
+            "type": "integer"
+          },
+          "amount": {
+            "maximum": 9.223372036854776e+18,
+            "minimum": 0.0,
+            "title": "Amount",
+            "type": "integer"
+          },
+          "date": {
+            "title": "Date",
+            "type": "string"
+          }
+        },
+        "required": [
+          "date",
+          "accepted_units",
+          "amount"
+        ],
+        "title": "UsageDay",
+        "type": "object"
+      },
+      "UserStats": {
+        "additionalProperties": false,
+        "properties": {
+          "accepted_units": {
+            "maximum": 9.223372036854776e+18,
+            "minimum": 0.0,
+            "title": "Accepted Units",
+            "type": "integer"
+          },
+          "contributed_seconds": {
+            "anyOf": [
+              {
+                "maximum": 9.223372036854776e+18,
+                "minimum": 0.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Contributed Seconds"
+          },
+          "devices_online": {
+            "maximum": 9.223372036854776e+18,
+            "minimum": 0.0,
+            "title": "Devices Online",
+            "type": "integer"
+          },
+          "devices_total": {
+            "maximum": 9.223372036854776e+18,
+            "minimum": 0.0,
+            "title": "Devices Total",
+            "type": "integer"
+          },
+          "history": {
+            "items": {
+              "$ref": "#/components/schemas/UsageDay"
+            },
+            "title": "History",
+            "type": "array"
+          },
+          "jobs_by_state": {
+            "additionalProperties": {
+              "maximum": 9.223372036854776e+18,
+              "minimum": 0.0,
+              "type": "integer"
+            },
+            "title": "Jobs By State",
+            "type": "object"
+          },
+          "recent_results": {
+            "items": {
+              "$ref": "#/components/schemas/Job"
+            },
+            "title": "Recent Results",
+            "type": "array"
+          }
+        },
+        "required": [
+          "devices_total",
+          "devices_online",
+          "accepted_units",
+          "jobs_by_state",
+          "recent_results",
+          "history"
+        ],
+        "title": "UserStats",
+        "type": "object"
+      },
       "Variant": {
         "additionalProperties": false,
         "properties": {
@@ -3390,6 +4040,57 @@
   },
   "openapi": "3.1.0",
   "paths": {
+    "/api/v1/admin/users": {
+      "get": {
+        "operationId": "admin_users",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/Identity"
+                  },
+                  "title": "Response Admin Users",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Validation error"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "API error"
+          }
+        },
+        "security": [
+          {
+            "Bearer": []
+          },
+          {
+            "BrowserSession": []
+          }
+        ],
+        "summary": "Admin Users"
+      }
+    },
     "/api/v1/artifacts/{artifact_id}/content": {
       "get": {
         "operationId": "download_artifact",
@@ -4119,6 +4820,73 @@
         "summary": "Attempt Telemetry"
       }
     },
+    "/api/v1/auth/account": {
+      "post": {
+        "operationId": "activate_account",
+        "parameters": [
+          {
+            "description": "Required for browser cookie authentication.",
+            "in": "header",
+            "name": "X-CSRF-Token",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AccountCreate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Identity"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Validation error"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "API error"
+          }
+        },
+        "security": [
+          {
+            "Bearer": []
+          },
+          {
+            "BrowserSession": []
+          }
+        ],
+        "summary": "Account"
+      }
+    },
     "/api/v1/auth/cli-credentials": {
       "post": {
         "operationId": "create_cli_credential",
@@ -4193,7 +4961,15 @@
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/InviteLogin"
+                "anyOf": [
+                  {
+                    "$ref": "#/components/schemas/InviteLogin"
+                  },
+                  {
+                    "$ref": "#/components/schemas/PasswordLogin"
+                  }
+                ],
+                "title": "Body"
               }
             }
           },
@@ -4330,6 +5106,56 @@
           }
         ],
         "summary": "Me"
+      }
+    },
+    "/api/v1/auth/register": {
+      "post": {
+        "operationId": "register",
+        "parameters": [],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AccountCreate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Identity"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Validation error"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "API error"
+          }
+        },
+        "security": [],
+        "summary": "Register"
       }
     },
     "/api/v1/benchmarks": {
@@ -4622,6 +5448,55 @@
         "summary": "Standalone"
       }
     },
+    "/api/v1/client-release": {
+      "get": {
+        "operationId": "client_release",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Client Release",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Validation error"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "API error"
+          }
+        },
+        "security": [
+          {
+            "Bearer": []
+          },
+          {
+            "BrowserSession": []
+          }
+        ],
+        "summary": "Client Release"
+      }
+    },
     "/api/v1/credentials/{credential_id}": {
       "delete": {
         "operationId": "revoke_credential",
@@ -4733,6 +5608,120 @@
         "summary": "Credits"
       }
     },
+    "/api/v1/device/settings": {
+      "get": {
+        "operationId": "get_device_settings",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DeviceSettings"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Validation error"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "API error"
+          }
+        },
+        "security": [
+          {
+            "Bearer": []
+          },
+          {
+            "BrowserSession": []
+          }
+        ],
+        "summary": "Get Device Settings"
+      }
+    },
+    "/api/v1/device/settings/ack": {
+      "post": {
+        "operationId": "ack_device_settings",
+        "parameters": [
+          {
+            "description": "Required for browser cookie authentication.",
+            "in": "header",
+            "name": "X-CSRF-Token",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SettingsAck"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DeviceSettings"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Validation error"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "API error"
+          }
+        },
+        "security": [
+          {
+            "Bearer": []
+          },
+          {
+            "BrowserSession": []
+          }
+        ],
+        "summary": "Ack Device Settings"
+      }
+    },
     "/api/v1/environments": {
       "get": {
         "operationId": "list_environments",
@@ -4782,6 +5771,124 @@
           }
         ],
         "summary": "Environments"
+      }
+    },
+    "/api/v1/examples": {
+      "get": {
+        "operationId": "list_examples",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "additionalProperties": true,
+                    "type": "object"
+                  },
+                  "title": "Response List Examples",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Validation error"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "API error"
+          }
+        },
+        "security": [
+          {
+            "Bearer": []
+          },
+          {
+            "BrowserSession": []
+          }
+        ],
+        "summary": "Examples"
+      }
+    },
+    "/api/v1/examples/{example_id}/preview": {
+      "post": {
+        "operationId": "example_preview",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "example_id",
+            "required": true,
+            "schema": {
+              "title": "Example Id",
+              "type": "string"
+            }
+          },
+          {
+            "description": "Required for browser cookie authentication.",
+            "in": "header",
+            "name": "X-CSRF-Token",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Preview"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Validation error"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "API error"
+          }
+        },
+        "security": [
+          {
+            "Bearer": []
+          },
+          {
+            "BrowserSession": []
+          }
+        ],
+        "summary": "Example Preview"
       }
     },
     "/api/v1/health": {
@@ -5795,6 +6902,53 @@
         "summary": "Start Search"
       }
     },
+    "/api/v1/me/stats": {
+      "get": {
+        "operationId": "user_stats",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UserStats"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Validation error"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "API error"
+          }
+        },
+        "security": [
+          {
+            "Bearer": []
+          },
+          {
+            "BrowserSession": []
+          }
+        ],
+        "summary": "User Stats"
+      }
+    },
     "/api/v1/node-sessions": {
       "post": {
         "operationId": "join_node",
@@ -6156,6 +7310,74 @@
           }
         ],
         "summary": "Control Node"
+      }
+    },
+    "/api/v1/nodes/{node_id}/settings": {
+      "patch": {
+        "operationId": "set_device_settings",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "node_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Node Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SettingsPatch"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Node"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Validation error"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "API error"
+          }
+        },
+        "security": [
+          {
+            "Bearer": []
+          },
+          {
+            "BrowserSession": []
+          }
+        ],
+        "summary": "Set Device Settings"
       }
     },
     "/api/v1/pool/events": {
@@ -6781,7 +8003,15 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/Assignment"
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/Assignment"
+                    },
+                    {
+                      "$ref": "#/components/schemas/NativeAssignment"
+                    }
+                  ],
+                  "title": "Response Claim Work"
                 }
               }
             },

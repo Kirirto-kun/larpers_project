@@ -1,5 +1,6 @@
 from pathlib import Path
 from typing import Literal
+from uuid import UUID
 
 from pydantic import Field, SecretStr, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -11,6 +12,7 @@ class Settings(BaseSettings):
     database_url: str = "postgresql+psycopg://campus:campus@127.0.0.1:5432/campus"
     storage_dir: Path = Path("campus-data")
     public_origin: str = "https://localhost"
+    registration_pool_id: UUID | None = None
     secure_cookies: bool = True
     tls_fingerprint_sha256: str | None = None
     lease_ms: int = Field(default=60_000, ge=1000)

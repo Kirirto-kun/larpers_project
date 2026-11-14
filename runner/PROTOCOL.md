@@ -1,4 +1,26 @@
-# Published foundation integration
+# Native worker integration
+
+## Current managed client
+
+The managed client opts into rich assignments with
+`X-Campus-Worker-Protocol: 2`. This marker is independent of the existing
+session/API protocol version 1. The server keeps the default legacy wire for
+clients without the marker.
+
+The native representation is documented in
+[`native-assignment-v2.schema.json`](../contracts/schemas/native-assignment-v2.schema.json):
+explicit bounded sandbox quotas, server-relative remaining deadline, artifact
+bindings, required and optional output paths, and unchanged attempt fencing.
+Managed clients acknowledge durable device settings separately from worker
+sessions, allowing a remotely paused supervisor to resume with a fresh session.
+Local exit still ends participation. See [CLI.md](CLI.md) for `--managed`.
+
+The current product supports ordinary catalog-backed Python CPU/CUDA work through
+this native path. Real CPU and RTX 5050 executions, downloaded artifacts and web
+controls are recorded in [the product verification report](../docs/WEB_VERIFICATION.md).
+The foundation notes below describe the earlier integration and legacy wire.
+
+## Published foundation history
 
 Foundation became available after the first local validation pass:
 `codex/control-plane`, commit `5a5bd297dfc0c9fd704e408a929d56643042c4ba`.

@@ -66,6 +66,7 @@ func (a *App) join(ctx context.Context, cfg config, args []string) error {
 	file := f.String("profiles", a.profilesFile(), "approved prepared profiles JSON")
 	gpu := f.Bool("gpu", false, "opt in to verified CUDA workloads")
 	noServe := f.Bool("no-serve", false, "enroll the device without offering resources")
+	managed := f.Bool("managed", false, "allow web pause/resume and bounded contribution profiles")
 	rest, err := parse(f, args)
 	if err != nil {
 		return err
@@ -93,6 +94,7 @@ func (a *App) join(ctx context.Context, cfg config, args []string) error {
 	if err != nil {
 		return err
 	}
+	c.Managed = *managed
 	if err = c.Handshake(ctx); err != nil {
 		return err
 	}
@@ -123,6 +125,9 @@ func (a *App) join(ctx context.Context, cfg config, args []string) error {
 	if *noServe {
 		return nil
 	}
+	if *managed {
+		return a.serveManagedLocked(ctx, cfg, identity, *file, *gpu)
+	}
 	return a.serveLocked(ctx, cfg, identity, *file, *gpu)
 }
 
@@ -130,6 +135,7 @@ func (a *App) serve(ctx context.Context, cfg config, args []string) error {
 	f := a.flags("serve")
 	file := f.String("profiles", a.profilesFile(), "approved prepared profiles JSON")
 	gpu := f.Bool("gpu", false, "opt in to verified CUDA workloads")
+	managed := f.Bool("managed", false, "allow web pause/resume and bounded contribution profiles")
 	rest, err := parse(f, args)
 	if err != nil {
 		return err
@@ -149,6 +155,9 @@ func (a *App) serve(ctx context.Context, cfg config, args []string) error {
 	if identity.Credential == "" || identity.NodeID == "" || identity.InstallationID == "" {
 		return errors.New("this device has not joined; run campus join INVITE first")
 	}
+	if *managed {
+		return a.serveManagedLocked(ctx, cfg, identity, *file, *gpu)
+	}
 	return a.serveLocked(ctx, cfg, identity, *file, *gpu)
 }
 
@@ -167,6 +176,10 @@ func (a *App) serveLocked(ctx context.Context, cfg config, identity session.Iden
 	if err != nil {
 		return err
 	}
+	return a.servePrepared(ctx, cfg, identity, c, caps, allowed, gpu, nil)
+}
+
+func (a *App) servePrepared(ctx context.Context, cfg config, identity session.Identity, c *client.Client, caps client.Capabilities, allowed map[string]string, gpu bool, control *worker.ManagedControl) error {
 	contractCaps, err := caps.Contract()
 	if err != nil {
 		return fmt.Errorf("publish preflight capabilities: %w", err)
@@ -189,7 +202,11 @@ func (a *App) serveLocked(ctx context.Context, cfg config, identity session.Iden
 	if err = c.Do(ctx, "PUT", "/node-sessions/"+response.SessionID+"/capabilities", contractCaps, nil, ""); err != nil {
 		return err
 	}
-	r := &worker.Runner{Client: c, Docker: containers.Docker{InstallationID: identity.InstallationID}, StateDir: cfg.StateDir, AllowedImages: allowed, Identity: identity}
+	r := &worker.Runner{Client: c, Docker: containers.Docker{InstallationID: identity.InstallationID}, StateDir: cfg.StateDir, AllowedImages: allowed, Identity: identity, ManagedControl: control}
+	if control != nil {
+		r.OnReady = control.OnReady
+		r.Discover = a.Discover
+	}
 	fmt.Fprintln(a.Stdout, "Serving; campus leave --drain finishes active work, --stop stops it.")
 	return a.Serve(ctx, r, caps, gpu)
 }

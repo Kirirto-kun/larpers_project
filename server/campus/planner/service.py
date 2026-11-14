@@ -134,13 +134,25 @@ def claim(db):
 
 def context_for(db, app, row, user, request):
     context = inspect(db, app, user, request)
+    current = now(db)
     context.update(
         {
             "prompt": request.prompt,
             "answer": row.answer,
             "plan_revision": row.revision,
-            "current_time": now(db).isoformat(),
+            "current_time": current.isoformat(),
+            "default_job_deadline_at": (current + timedelta(minutes=30)).isoformat(),
             "catalog": app.catalog.planner_context(),
+            "project_binding": {
+                "artifact_id": str(request.project_artifact_id),
+                "mount_path": "/workspace",
+                "archive": True,
+            }
+            if request.project_artifact_id
+            else None,
+            "allowed_evidence_sources": sorted(
+                {*request.selected_files, "request", "catalog", "inputs"}
+            ),
         }
     )
     if row.probe_job_id:
@@ -160,6 +172,7 @@ def context_for(db, app, row, user, request):
             "verification": results[0].report["level"],
             "outputs": evidence,
         }
+        context["allowed_evidence_sources"].append("probe")
     return context
 
 

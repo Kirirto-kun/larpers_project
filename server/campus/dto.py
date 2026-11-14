@@ -2,7 +2,15 @@ from enum import StrEnum
 from typing import Annotated, Any, Literal
 from uuid import UUID
 
-from pydantic import AwareDatetime, BaseModel, ConfigDict, Field, StringConstraints, model_validator
+from pydantic import (
+    AwareDatetime,
+    BaseModel,
+    ConfigDict,
+    Field,
+    StringConstraints,
+    field_validator,
+    model_validator,
+)
 
 SHA256 = Annotated[str, StringConstraints(pattern=r"^[a-f0-9]{64}$")]
 ImageDigest = Annotated[
@@ -322,6 +330,29 @@ class WorkRequest(DTO):
     wait_ms: Annotated[int, Field(ge=0, le=25_000)] = 25_000
 
 
+class NativeResources(DTO):
+    cpu_millis: Positive
+    memory_bytes: Annotated[int, Field(ge=33_554_432)]
+    pids: Annotated[int, Field(ge=1, le=4096)]
+    workspace_bytes: Positive
+    output_bytes: Positive
+    checkpoint_bytes: Positive
+    tmp_bytes: Positive
+    gpu_ids: list[Identifier] = Field(default_factory=list, max_length=64)
+    vram_bytes: Nonnegative = 0
+
+
+class NativeAssignment(Assignment):
+    """Only selected with X-Campus-Worker-Protocol: 2; v1 remains unchanged."""
+
+    task_remaining_ms: Positive
+    inputs: list[Artifact]
+    outputs: list[FilePath]
+    optional_outputs: list[FilePath] = Field(default_factory=list)
+    resource_limits: NativeResources
+    validator_policy: dict[str, str]
+
+
 class LeaseReceipt(DTO):
     attempt_id: UUID
     lease_expires_at: AwareDatetime
@@ -414,6 +445,27 @@ class InviteLogin(DTO):
     token: Annotated[str, StringConstraints(min_length=32, max_length=160)]
 
 
+class AccountCreate(DTO):
+    name: Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=256)]
+    email: Annotated[str, StringConstraints(strip_whitespace=True, min_length=3, max_length=254)]
+    password: Annotated[str, StringConstraints(min_length=12, max_length=128)]
+
+    @field_validator("email")
+    @classmethod
+    def normalized_email(cls, value):
+        import re
+
+        value = value.lower()
+        if not re.fullmatch(r"[^\s@]+@[^\s@]+\.[^\s@]+", value) or len(value.split("@")[0]) > 64:
+            raise ValueError("A valid email address is required")
+        return value
+
+
+class PasswordLogin(DTO):
+    email: Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=254)]
+    password: Annotated[str, StringConstraints(min_length=1, max_length=128)]
+
+
 class DeviceRedeem(InviteLogin):
     installation_id: UUID
     protocol_version: Literal[1]
@@ -432,6 +484,7 @@ class Identity(DTO):
     name: ShortText
     role: Literal["owner", "admin", "member"]
     pool_id: UUID
+    email: str | None = None
     csrf_token: str | None = None
 
 
@@ -446,14 +499,46 @@ class NodeSession(DTO):
     state: NodeState
 
 
+class DeviceSettings(DTO):
+    revision: Positive
+    mode: Literal["low", "medium", "max"]
+    desired_state: Literal["running", "paused", "draining"]
+
+
+class SettingsPatch(DTO):
+    mode: Literal["low", "medium", "max"] | None = None
+    desired_state: Literal["running", "paused", "draining"] | None = None
+
+    @model_validator(mode="after")
+    def nonempty(self):
+        if not self.model_fields_set or any(getattr(self, key) is None for key in self.model_fields_set):
+            raise ValueError("At least one non-null setting is required")
+        return self
+
+
+class SettingsAck(DTO):
+    revision: Positive
+    actual_state: Literal["running", "paused", "draining"]
+    mode: Literal["low", "medium", "max"]
+    error: Annotated[str, StringConstraints(max_length=512)] | None = None
+
+
 class Node(DTO):
     id: UUID
+    owner_id: UUID
     name: ShortText
     state: NodeState
     last_seen_at: AwareDatetime | None = None
     capabilities: Capabilities | None = None
     accepted_units: Nonnegative
     active_attempts: Nonnegative
+    settings: DeviceSettings
+    applied_revision: Nonnegative
+    actual_state: Literal["running", "paused", "draining"] | None = None
+    applied_mode: Literal["low", "medium", "max"] | None = None
+    settings_error: str | None = None
+    agent_contact_at: AwareDatetime | None = None
+    supports_web_controls: bool
 
 
 class NodeControl(DTO):
@@ -508,6 +593,22 @@ class PoolSummary(DTO):
     ready_nodes: Nonnegative
     jobs_by_state: dict[str, Nonnegative]
     accepted_units: Nonnegative
+
+
+class UsageDay(DTO):
+    date: str
+    accepted_units: Nonnegative
+    amount: Nonnegative
+
+
+class UserStats(DTO):
+    devices_total: Nonnegative
+    devices_online: Nonnegative
+    accepted_units: Nonnegative
+    contributed_seconds: Nonnegative | None = None
+    jobs_by_state: dict[str, Nonnegative]
+    recent_results: list[Job]
+    history: list[UsageDay]
 
 
 class Credit(DTO):

@@ -1,7 +1,8 @@
+import hashlib
 import hmac
 from dataclasses import dataclass
 from datetime import timedelta
-from secrets import token_urlsafe
+from secrets import token_bytes, token_urlsafe
 from uuid import UUID
 
 from sqlalchemy import func, select
@@ -14,6 +15,61 @@ from .events import emit
 
 COOKIE = "campus_session"
 CSRF_COOKIE = "campus_csrf"
+
+
+def hash_password(password):
+    salt = token_bytes(16)
+    key = hashlib.scrypt(password.encode(), salt=salt, n=16384, r=8, p=1, dklen=32, maxmem=64 << 20)
+    return f"scrypt$16384$8$1${salt.hex()}${key.hex()}"
+
+
+def verify_password(password, encoded):
+    try:
+        algorithm, n, r, p, salt, expected = (encoded or "").split("$")
+        # Bound all stored parameters before running expensive cryptography.
+        if (
+            (algorithm, n, r, p) != ("scrypt", "16384", "8", "1")
+            or len(salt) != 32
+            or len(expected) != 64
+        ):
+            return False
+        key = hashlib.scrypt(
+            password.encode(), salt=bytes.fromhex(salt), n=16384, r=8, p=1, dklen=32, maxmem=64 << 20
+        )
+        return hmac.compare_digest(key, bytes.fromhex(expected))
+    except (ValueError, TypeError, OverflowError):
+        return False
+
+
+_DUMMY_PASSWORD = hash_password(token_urlsafe(32))
+
+
+def register(db, body, settings):
+    write_lock(db)
+    if settings.registration_pool_id:
+        pool = db.get(m.Pool, settings.registration_pool_id)
+    else:
+        pools = list(db.scalars(select(m.Pool).limit(2)))
+        pool = pools[0] if len(pools) == 1 else None
+    if pool is None:
+        raise Problem("REGISTRATION_UNAVAILABLE", "Account registration is not configured", 503)
+    user = m.User(pool_id=pool.id, role="member", name=body.name)
+    db.add(user)
+    set_account(db, user, body)
+    _, token, csrf = issue_credential(db, user, "browser")
+    return identity(user, csrf), token, csrf
+
+
+def set_account(db, user, body):
+    write_lock(db)
+    if user.password_hash or (user.email is not None and user.email.strip().lower() != body.email):
+        raise Problem("ACCOUNT_EXISTS", "This account already has sign-in credentials", 409)
+    if db.scalar(select(m.User.id).where(m.User.email == body.email, m.User.id != user.id)):
+        raise Problem("EMAIL_IN_USE", "This email address is already registered", 409)
+    user.name, user.email = body.name, body.email
+    user.password_hash = hash_password(body.password)
+    db.flush()
+    return user
 
 
 @dataclass
@@ -133,17 +189,28 @@ def issue_credential(db, user, scope, node_id=None):
 
 def identity(user, csrf=None):
     return dto.Identity(
-        id=user.id, name=user.name, role=user.role, pool_id=user.pool_id, csrf_token=csrf
+        id=user.id,
+        name=user.name,
+        role=user.role,
+        pool_id=user.pool_id,
+        email=user.email,
+        csrf_token=csrf,
     )
 
 
 def login(db, body):
-    invite = use_invite(db, body.token, "member")
-    user = db.get(m.User, invite.existing_user_id) if invite.existing_user_id else None
-    if user is None:
-        user = m.User(pool_id=invite.pool_id, name=invite.name, role="member")
-        db.add(user)
-        db.flush()
+    if isinstance(body, dto.PasswordLogin):
+        user = db.scalar(select(m.User).where(m.User.email == body.email.lower()))
+        valid = verify_password(body.password, (user.password_hash if user else None) or _DUMMY_PASSWORD)
+        if not valid or user is None:
+            raise unauthorized()
+    else:
+        invite = use_invite(db, body.token, "member")
+        user = db.get(m.User, invite.existing_user_id) if invite.existing_user_id else None
+        if user is None:
+            user = m.User(pool_id=invite.pool_id, name=invite.name, role="member")
+            db.add(user)
+            db.flush()
     _, token, csrf = issue_credential(db, user, "browser")
     return identity(user, csrf), token, csrf
 
@@ -217,7 +284,7 @@ def session_for(db, actor, session_id, *, touch=False):
 
 
 def node_state(node, current, offline_seconds):
-    if node.mode in {"quarantined", "paused"}:
+    if node.mode == "quarantined":
         return node.mode
     if (
         not node.current_session_id
@@ -225,6 +292,8 @@ def node_state(node, current, offline_seconds):
         or node.last_seen_at + timedelta(seconds=offline_seconds) <= current
     ):
         return "offline"
+    if node.mode == "paused":
+        return "paused"
     if node.mode == "draining":
         return "draining"
     return "ready" if node.capabilities and node.capabilities["runtime"]["healthy"] else "preflight"

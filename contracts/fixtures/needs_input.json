@@ -190,7 +190,15 @@
         },
         "last_seen_at": "2026-11-14T06:00:00Z",
         "accepted_units": 0,
-        "active_attempts": 0
+        "active_attempts": 0,
+        "owner_id": "00000000-0000-4000-8000-000000000001",
+        "settings": {
+          "revision": 1,
+          "mode": "medium",
+          "desired_state": "running"
+        },
+        "applied_revision": 0,
+        "supports_web_controls": false
       },
       "status": 200
     },
@@ -223,7 +231,15 @@
         },
         "last_seen_at": "2026-11-14T06:00:00Z",
         "accepted_units": 0,
-        "active_attempts": 0
+        "active_attempts": 0,
+        "owner_id": "00000000-0000-4000-8000-000000000001",
+        "settings": {
+          "revision": 1,
+          "mode": "medium",
+          "desired_state": "draining"
+        },
+        "applied_revision": 0,
+        "supports_web_controls": false
       },
       "status": 200
     },
@@ -384,7 +400,15 @@
           },
           "last_seen_at": "2026-11-14T06:00:00Z",
           "accepted_units": 0,
-          "active_attempts": 0
+          "active_attempts": 0,
+          "owner_id": "00000000-0000-4000-8000-000000000001",
+          "settings": {
+            "revision": 1,
+            "mode": "medium",
+            "desired_state": "running"
+          },
+          "applied_revision": 0,
+          "supports_web_controls": false
         }
       ],
       "status": 200

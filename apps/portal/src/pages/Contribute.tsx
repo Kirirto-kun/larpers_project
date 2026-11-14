@@ -1,7 +1,14 @@
 import { useState } from "react";
+import { Monitor, Download, Copy } from "lucide-react";
 import { useResource } from "../lib/hooks";
-import { post, errorText } from "../lib/api";
-import type { Node } from "../lib/types";
+import { api, post, errorText } from "../lib/api";
+import type {
+  Node,
+  Mode,
+  DesiredState,
+  Release,
+  Invitation,
+} from "../lib/types";
 import { Button } from "../components/ui/button";
 import {
   PageHeader,
@@ -9,34 +16,49 @@ import {
   Status,
   bytes,
   Empty,
+  date,
 } from "../components/Common";
-export function Contribute() {
-  const {
-    data: nodes,
-    error,
-    refresh,
-  } = useResource<Node[]>("/nodes", "/pool/events");
-  const [os, setOs] = useState("macos");
-  const [budget, setBudget] = useState(50);
-  const [memoryGiB, setMemoryGiB] = useState(2);
-  const [gpu, setGpu] = useState(false);
-  const [consent, setConsent] = useState(false);
-  const [command, setCommand] = useState("");
-  const [actionError, setError] = useState("");
+const modes: { id: Mode; name: string; percent: number; detail: string }[] = [
+  {
+    id: "low",
+    name: "Лёгкий",
+    percent: 10,
+    detail: "Для работы за компьютером",
+  },
+  {
+    id: "medium",
+    name: "Средний",
+    percent: 50,
+    detail: "Баланс скорости и комфорта",
+  },
+  {
+    id: "max",
+    name: "Максимальный",
+    percent: 90,
+    detail: "Когда компьютер свободен и подключён к питанию",
+  },
+];
+export function DeviceCard({
+  node,
+  refresh,
+  admin = false,
+}: {
+  node: Node;
+  refresh: () => Promise<void>;
+  admin?: boolean;
+}) {
   const [busy, setBusy] = useState(false);
-  async function invite() {
+  const [error, setError] = useState("");
+  const cap = node.capabilities;
+  const pending = node.applied_revision !== node.settings.revision;
+  async function change(body: { mode?: Mode; desired_state?: DesiredState }) {
     setBusy(true);
     try {
-      const r = await post<{ command: string }>("/invitations", {
-        os,
-        offered_budget: {
-          cpu_percent: budget,
-          memory_bytes: memoryGiB * 1073741824,
-          gpu_allowed: gpu,
-        },
-        consent,
+      await api("/nodes/" + node.id + "/settings", {
+        method: "PATCH",
+        body: JSON.stringify(body),
       });
-      setCommand(r.command);
+      await refresh();
       setError("");
     } catch (e) {
       setError(errorText(e));
@@ -44,10 +66,10 @@ export function Contribute() {
       setBusy(false);
     }
   }
-  async function control(id: string, action: string) {
+  async function legacy(action: string) {
     setBusy(true);
     try {
-      await post("/nodes/" + id + "/control", { action });
+      await post("/nodes/" + node.id + "/control", { action });
       await refresh();
       setError("");
     } catch (e) {
@@ -57,183 +79,343 @@ export function Contribute() {
     }
   }
   return (
+    <article className="card device-card">
+      <div className="row">
+        <div className="device-title">
+          <Monitor aria-hidden="true" />
+          <h3>{node.name}</h3>
+        </div>
+        <Status value={node.state} />
+      </div>
+      <p className="muted">
+        {cap
+          ? `${cap.os === "darwin" ? "macOS" : cap.os} · ${cap.cpu_logical} CPU · ${bytes(cap.memory_available_bytes)} доступно`
+          : "Характеристики появятся после подключения"}
+      </p>
+      {cap && (
+        <p className="muted">
+          Выделено: {(cap.offered_budget.cpu_millis / 1000).toFixed(1)} CPU ·{" "}
+          {bytes(cap.offered_budget.memory_bytes)} памяти · GPU:{" "}
+          {cap.offered_budget.gpu_slots > 0
+            ? "разрешён локально"
+            : "не предоставлен"}
+        </p>
+      )}
+      <div className="device-meta">
+        <span>{node.active_attempts} активных задач</span>
+        <span>{node.accepted_units} принято</span>
+      </div>
+      <p className="muted">Последняя связь: {date(node.last_seen_at)}</p>
+      {node.supports_web_controls ? (
+        <>
+          <p
+            className={"notice " + (node.settings_error ? "error" : "")}
+            role="status"
+          >
+            {node.settings_error
+              ? "Не удалось применить: " + node.settings_error
+              : pending
+                ? "Ожидает применения на компьютере"
+                : "Настройки применены клиентом"}
+            {pending && node.state === "offline"
+              ? " — откройте Campus на этом компьютере."
+              : ""}
+          </p>
+          <fieldset disabled={busy}>
+            <legend>Нагрузка CPU и памяти</legend>
+            <div className="mode-options">
+              {modes.map((mode) => (
+                <label
+                  className={
+                    "mode " + (node.settings.mode === mode.id ? "selected" : "")
+                  }
+                  key={mode.id}
+                >
+                  <input
+                    type="radio"
+                    name={"mode-" + node.id}
+                    checked={node.settings.mode === mode.id}
+                    onChange={() => void change({ mode: mode.id })}
+                  />
+                  <strong>{mode.percent}%</strong>
+                  <span>{mode.name}</span>
+                  <small>{mode.detail}</small>
+                </label>
+              ))}
+            </div>
+          </fieldset>
+          <div className="actions">
+            <Button
+              disabled={busy || node.state === "quarantined"}
+              onClick={() => void change({ desired_state: "running" })}
+            >
+              Подключить / продолжить
+            </Button>
+            <Button
+              variant="outline"
+              disabled={busy}
+              onClick={() => void change({ desired_state: "paused" })}
+            >
+              Пауза
+            </Button>
+            <Button
+              variant="outline"
+              disabled={busy}
+              onClick={() => void change({ desired_state: "draining" })}
+            >
+              Завершить текущую работу
+            </Button>
+          </div>
+          <p className="muted">
+            Команда выполнится, когда запущенный клиент свяжется с сервером.
+            Браузер не может открыть приложение на компьютере.
+          </p>
+        </>
+      ) : (
+        <>
+          <div className="notice">
+            Обновите клиент для настройки нагрузки и управления из браузера.
+            Существующее подключение продолжает работать.
+          </div>
+          <div className="actions">
+            <Button
+              variant="outline"
+              disabled={busy}
+              onClick={() => void legacy("drain")}
+            >
+              Завершить текущую работу
+            </Button>
+            <Button
+              variant="outline"
+              disabled={busy}
+              onClick={() => void legacy("stop")}
+            >
+              Остановить
+            </Button>
+          </div>
+        </>
+      )}
+      {admin && (
+        <div className="actions">
+          <Button
+            variant="outline"
+            disabled={busy}
+            onClick={() =>
+              void legacy(
+                node.state === "quarantined" ? "release" : "quarantine",
+              )
+            }
+          >
+            {node.state === "quarantined"
+              ? "Снять блокировку"
+              : "Заблокировать"}
+          </Button>
+        </div>
+      )}
+      <ErrorBox message={error} />
+    </article>
+  );
+}
+export function Contribute() {
+  const { data: nodes, error, refresh } = useResource<Node[]>("/nodes");
+  const {
+    data: release,
+    error: releaseError,
+    refresh: refreshRelease,
+  } = useResource<Release>("/client-release");
+  const [name, setName] = useState("Мой компьютер");
+  const [invitation, setInvitation] = useState<Invitation>();
+  const [busy, setBusy] = useState(false);
+  const [actionError, setError] = useState("");
+  const [copy, setCopy] = useState("");
+  const [macCopy, setMacCopy] = useState("");
+  return (
     <>
-      <PageHeader
-        eyebrow="CONTRIBUTE"
-        title="Give your spare compute a purpose."
-      >
-        You choose the budget. You can drain or stop your device at any time.
+      <PageHeader eyebrow="УСТРОЙСТВА" title="Подключите свободные ресурсы">
+        Участие можно приостановить в любой момент. Вы управляете нагрузкой, а
+        Campus распределяет задачи.
       </PageHeader>
       <div className="grid">
         <section className="card">
-          <h2>Connect a laptop</h2>
-          <label>
-            Operating system
-            <select
-              disabled={busy}
-              value={os}
-              onChange={(e) => {
-                setOs(e.target.value);
-                setCommand("");
-              }}
-            >
-              <option value="macos">macOS</option>
-              <option value="linux">Linux</option>
-              <option value="windows">Windows / WSL2</option>
-            </select>
-          </label>
-          <label>
-            CPU budget · {budget}%
-            <input
-              disabled={busy}
-              type="range"
-              min="10"
-              max="100"
-              step="10"
-              value={budget}
-              onChange={(e) => {
-                setBudget(Number(e.target.value));
-                setCommand("");
-              }}
-            />
-          </label>
-          <label>
-            Memory budget (GiB)
-            <input
-              disabled={busy}
-              type="number"
-              min="1"
-              step="1"
-              value={memoryGiB}
-              onChange={(e) => {
-                setMemoryGiB(+e.target.value);
-                setCommand("");
-              }}
-            />
-          </label>
-          <label className="check">
-            <input
-              disabled={busy}
-              type="checkbox"
-              checked={gpu}
-              onChange={(e) => {
-                setGpu(e.target.checked);
-                setCommand("");
-              }}
-            />
-            Allow verified NVIDIA GPU use
-          </label>
-          <small>
-            GPU availability is checked on your device. A strict GPU/VRAM
-            percentage is not promised.
-          </small>
-          <label className="check">
-            <input
-              disabled={busy}
-              type="checkbox"
-              checked={consent}
-              onChange={(e) => {
-                setConsent(e.target.checked);
-                setCommand("");
-              }}
-            />
-            I own or have permission to contribute this device.
-          </label>
-          <Button
-            disabled={
-              !consent ||
-              busy ||
-              !Number.isSafeInteger(memoryGiB) ||
-              memoryGiB < 1
-            }
-            onClick={invite}
-          >
-            Generate join command
-          </Button>
-          {command && (
-            <>
-              <pre>{command}</pre>
-              <small>
-                Run this command on the device you want to contribute.
-                Invitation expires as specified by the server. Keep it private.
-              </small>
-            </>
-          )}
-          <ErrorBox message={actionError} />
-        </section>
-        <section className="card">
-          <h2>Before you connect</h2>
+          <p className="eyebrow">ПОДКЛЮЧЕНИЕ ЗА ТРИ ШАГА</p>
+          <h2>Добавить компьютер</h2>
           <div className="step">
             <b>1</b>
-            <p>
-              Install Docker and start its runtime. On Windows, enable WSL2.
-            </p>
+            <div>
+              <h3>Скачайте Campus</h3>
+              <p className="muted">
+                Небольшой файл запуска для вашего компьютера.
+              </p>
+              <div className="actions">
+                {release?.downloads.map((d) => (
+                  <a
+                    className="button outline"
+                    href={d.url}
+                    key={d.os}
+                    download
+                  >
+                    <Download aria-hidden="true" size={16} />
+                    {d.label}
+                  </a>
+                ))}
+              </div>
+              {releaseError && (
+                <>
+                  <ErrorBox message={releaseError} />
+                  <Button
+                    variant="outline"
+                    onClick={() => void refreshRelease()}
+                  >
+                    Повторить загрузку ссылок
+                  </Button>
+                </>
+              )}
+            </div>
           </div>
           <div className="step">
             <b>2</b>
-            <p>
-              Use your team's reachable coordinator address. Campus Wi-Fi may
-              block device-to-device connections.
-            </p>
+            <div>
+              <h3>Откройте скачанный файл</h3>
+              <p>
+                Следуйте подсказкам приложения. На Windows и macOS сначала
+                установите и запустите Docker Desktop вручную. На Linux нужен
+                работающий Docker Engine.
+              </p>
+            </div>
           </div>
+          <details>
+            <summary>macOS: если файл не открывается</summary>
+            <p>
+              Откройте приложение «Терминал» и вставьте команду для скачанного
+              файла:
+            </p>
+            <pre>sh ~/Downloads/Connect.command</pre>
+            <Button
+              variant="outline"
+              onClick={async () => {
+                try {
+                  if (!navigator.clipboard) throw new Error();
+                  await navigator.clipboard.writeText(
+                    "sh ~/Downloads/Connect.command",
+                  );
+                  setMacCopy("Скопировано");
+                } catch {
+                  setMacCopy("Выделите команду и скопируйте вручную.");
+                }
+              }}
+            >
+              Скопировать команду macOS
+            </Button>
+            <p role="status">{macCopy}</p>
+          </details>
           <div className="step">
             <b>3</b>
-            <p>
-              The client checks CPU, memory, disk, runtime, and CUDA. Review the
-              results below.
-            </p>
+            <div>
+              <h3>Вставьте приватное приглашение</h3>
+              <p>Создайте его справа и вставьте в открытый клиент.</p>
+            </div>
           </div>
+        </section>
+        <section className="card">
+          <h2>Приглашение для вашего компьютера</h2>
+          <p className="muted">
+            Одноразовое приглашение действует 30 минут. Передавайте его только
+            своему устройству.
+          </p>
+          <form
+            onSubmit={async (e) => {
+              e.preventDefault();
+              setBusy(true);
+              setCopy("");
+              try {
+                setInvitation(
+                  await post<Invitation>("/invitations", {
+                    kind: "device",
+                    name: name.trim(),
+                    ttl_seconds: 1800,
+                  }),
+                );
+                setError("");
+              } catch (e) {
+                setError(errorText(e));
+              } finally {
+                setBusy(false);
+              }
+            }}
+          >
+            <label>
+              Название компьютера
+              <input
+                value={name}
+                maxLength={256}
+                onChange={(e) => setName(e.target.value)}
+                required
+              />
+            </label>
+            <Button disabled={busy || !name.trim()}>
+              {busy ? "Создаём…" : "Создать приглашение"}
+            </Button>
+          </form>
+          {invitation && (
+            <div className="invite-result">
+              <label>
+                Приватное приглашение
+                <input
+                  readOnly
+                  value={invitation.token}
+                  onFocus={(e) => e.target.select()}
+                />
+              </label>
+              <Button
+                variant="outline"
+                onClick={async () => {
+                  try {
+                    if (!navigator.clipboard) throw new Error();
+                    await navigator.clipboard.writeText(invitation.token);
+                    setCopy("Скопировано");
+                  } catch {
+                    setCopy("Выделите приглашение выше и скопируйте вручную.");
+                  }
+                }}
+              >
+                <Copy aria-hidden="true" size={16} />
+                Скопировать
+              </Button>
+              <p role="status">{copy}</p>
+              <small>Действует до {date(invitation.expires_at)}</small>
+            </div>
+          )}
+          <ErrorBox message={actionError} />
           <div className="notice">
-            Contribute only to a trusted pool using non-sensitive data. The
-            device administrator can access workload data.
+            GPU включается только с вашего разрешения в клиенте. Режим нагрузки
+            не меняет это разрешение и не разрешает работу от батареи.
           </div>
           <p className="muted">
-            Drain finishes current work without taking new tasks. Stop requests
-            interruption of current work.
+            10 / 50 / 90% — доля локально доступных CPU и памяти, ограниченная
+            возможностями Docker и настройками владельца.
           </p>
         </section>
       </div>
-      <section className="card">
-        <h2>Devices and preflight</h2>
+      <section>
+        <div className="row">
+          <h2>Подключённые устройства</h2>
+          <Button variant="ghost" onClick={() => void refresh()}>
+            Обновить
+          </Button>
+        </div>
         <ErrorBox message={error} />
+        {!nodes && !error && <p role="status">Загружаем устройства…</p>}
         {nodes?.length === 0 && (
           <Empty>
-            No devices connected yet. Generate a command to get started.
+            <Monitor aria-hidden="true" />
+            <h3>Пока нет подключённых устройств</h3>
+            <p>
+              Скачайте Campus и добавьте первый компьютер по инструкции выше.
+            </p>
           </Empty>
         )}
         {nodes?.map((node) => (
-          <article className="card" key={node.id}>
-            <div className="row">
-              <h3>{node.name}</h3>
-              <Status value={node.state} />
-            </div>
-            <p>
-              {node.cpu_logical} logical CPUs ·{" "}
-              {bytes(node.memory_available_bytes)} available ·{" "}
-              {node.gpus.length} GPU(s)
-            </p>
-            <p className="muted">
-              Offered CPU: {node.offered_budget.cpu_percent}% · GPU:{" "}
-              {node.offered_budget.gpu_allowed ? "opted in" : "not offered"}
-            </p>
-            {node.preflight.map((check) => (
-              <p key={check.name}>
-                {check.ok ? "✓" : "!"} {check.name}: {check.message}
-              </p>
-            ))}
-            <div className="actions">
-              {["drain", "stop", "resume"].map((action) => (
-                <Button
-                  key={action}
-                  disabled={busy}
-                  variant="outline"
-                  onClick={() => void control(node.id, action)}
-                >
-                  {action[0].toUpperCase() + action.slice(1)}
-                </Button>
-              ))}
-            </div>
-          </article>
+          <DeviceCard key={node.id} node={node} refresh={refresh} />
         ))}
       </section>
     </>

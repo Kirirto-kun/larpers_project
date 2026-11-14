@@ -97,7 +97,7 @@ try {
         if (-not (Test-Verified $runner $pin.sha256 $pin.size_bytes)) { throw 'Cached native client verification failed' }
         $arguments = @()
         if ($ca) { $arguments += @('--ca-file', $ca) }
-        $arguments += @('install', '--catalog-url', '@CATALOG_URL@', '--catalog-sha256', '@CATALOG_SHA256@')
+        $arguments += @('install', '--catalog-url', '@CATALOG_URL@', '--catalog-sha256', '@CATALOG_SHA256@', '--managed')
         $arguments += @('--gpu=' + $setup.GPU.ToString().ToLowerInvariant())
         # The Go client launches native Windows PowerShell for its CIM checks.
         [Environment]::SetEnvironmentVariable('PSModulePath', $campusNativePS5Modules, 'Process')

@@ -12,6 +12,7 @@ class Adapter(BaseModel):
     ref: dto.AdapterRef
     image_ids: list[dto.Identifier]
     policies: list[dto.Identifier]
+    interactive: bool = True
     checkpoints: bool = False
     checkpoint_files: list[dto.FilePath] = Field(default_factory=list)
     parallel: bool = False
@@ -64,9 +65,11 @@ class Catalog:
         return adapter
 
     def planner_context(self):
+        adapters = [a for a in self.adapters.values() if a.interactive]
+        image_ids = {image for adapter in adapters for image in adapter.image_ids}
         return json.loads(
             CatalogData(
-                environments=list(self.environments.values()),
-                adapters=[a.model_copy(update={"command": []}) for a in self.adapters.values()],
+                environments=[e for e in self.environments.values() if e.id in image_ids],
+                adapters=[a.model_copy(update={"command": []}) for a in adapters],
             ).model_dump_json()
         )

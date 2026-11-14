@@ -1,0 +1,136 @@
+{
+  "environments": [
+    {
+      "id": "diagnostic-cpu-arm64",
+      "name": "Bounded Mac CPU diagnostic",
+      "variant_id": "cpu-arm64",
+      "image_digest": "campus/python-ml-cpu-v1-arm64@sha256:3d7435b47960fcc183cd61a2350b5b3ca2e58fd5abfcf832b4563dad4eda55fb",
+      "platform": "linux/arm64",
+      "accelerator": "cpu",
+      "resource_requirements": {
+        "cpu_millis": 1000,
+        "memory_bytes": 268435456,
+        "disk_bytes": 35651584,
+        "gpu_slots": 0,
+        "vram_bytes": 0
+      }
+    },
+    {
+      "id": "diagnostic-cuda-amd64",
+      "name": "Bounded RTX 5050 CUDA diagnostic",
+      "variant_id": "cuda-amd64",
+      "image_digest": "campus/python-ml-cuda-v1-amd64@sha256:d416742141559c0428ce0e41b5c94044dfd523522c61b0da09189e8f8dc48bb6",
+      "platform": "linux/amd64",
+      "accelerator": "cuda",
+      "resource_requirements": {
+        "cpu_millis": 1000,
+        "memory_bytes": 1073741824,
+        "disk_bytes": 35651584,
+        "gpu_slots": 1,
+        "vram_bytes": 1073741824
+      }
+    },
+    {
+      "id": "python-cpu-amd64",
+      "name": "CPU x86-64",
+      "variant_id": "python-cpu-amd64",
+      "image_digest": "campus/python-ml-cpu-v1-amd64@sha256:c4c7fad9136b8817b9d599dc73c1398dc4ccaa93f03dbb9641d2f22f38310bdf",
+      "platform": "linux/amd64",
+      "accelerator": "cpu",
+      "resource_requirements": {
+        "cpu_millis": 4000,
+        "memory_bytes": 4294967296,
+        "disk_bytes": 536870912,
+        "gpu_slots": 0,
+        "vram_bytes": 0
+      }
+    },
+    {
+      "id": "python-cpu-arm64",
+      "name": "CPU Apple Silicon / ARM64",
+      "variant_id": "python-cpu-arm64",
+      "image_digest": "campus/python-ml-cpu-v1-arm64@sha256:3d7435b47960fcc183cd61a2350b5b3ca2e58fd5abfcf832b4563dad4eda55fb",
+      "platform": "linux/arm64",
+      "accelerator": "cpu",
+      "resource_requirements": {
+        "cpu_millis": 4000,
+        "memory_bytes": 4294967296,
+        "disk_bytes": 536870912,
+        "gpu_slots": 0,
+        "vram_bytes": 0
+      }
+    },
+    {
+      "id": "python-cuda-amd64",
+      "name": "NVIDIA CUDA x86-64",
+      "variant_id": "python-cuda-amd64",
+      "image_digest": "campus/python-ml-cuda-v1-amd64@sha256:d416742141559c0428ce0e41b5c94044dfd523522c61b0da09189e8f8dc48bb6",
+      "platform": "linux/amd64",
+      "accelerator": "cuda",
+      "resource_requirements": {
+        "cpu_millis": 4000,
+        "memory_bytes": 4294967296,
+        "disk_bytes": 536870912,
+        "gpu_slots": 1,
+        "vram_bytes": 4294967296
+      }
+    }
+  ],
+  "adapters": [
+    {
+      "ref": {
+        "id": "campus.diagnostic",
+        "version": "1"
+      },
+      "image_ids": [
+        "diagnostic-cpu-arm64"
+      ],
+      "policies": [
+        "structural"
+      ],
+      "checkpoints": false,
+      "parallel": false,
+      "interactive": false
+    },
+    {
+      "ref": {
+        "id": "campus.diagnostic.cuda",
+        "version": "1"
+      },
+      "image_ids": [
+        "diagnostic-cuda-amd64"
+      ],
+      "policies": [
+        "structural"
+      ],
+      "checkpoints": false,
+      "parallel": false,
+      "interactive": false
+    },
+    {
+      "ref": {
+        "id": "campus.python",
+        "version": "1"
+      },
+      "image_ids": [
+        "python-cpu-amd64",
+        "python-cpu-arm64",
+        "python-cuda-amd64"
+      ],
+      "policies": [
+        "structural"
+      ],
+      "checkpoints": false,
+      "parallel": false,
+      "recipe": {
+        "id": "python-script",
+        "name": "Python on CPU or NVIDIA CUDA",
+        "description": "Run a user-selected Python script offline in the pinned environment. Plain files mount under /inputs; one validated project ZIP mounts at /workspace. Use literal argv, explicit resource limits and output files relative to /workspace. CPU images include numpy and PyTorch CPU; CUDA image includes PyTorch CUDA. No network or package installation during computation. Structural output verification; application-specific quality remains explicit.",
+        "adapter": {
+          "id": "campus.python",
+          "version": "1"
+        }
+      }
+    }
+  ]
+}

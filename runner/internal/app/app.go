@@ -41,6 +41,7 @@ Commands:
   version                               Print the runner version
 
 Device invitations do not grant member scope. Set CAMPUS_TOKEN for run/logs/fetch/cancel.
+Add --managed to install/connect/join/serve to allow web pause/resume and contribution modes.
 Use campus COMMAND --help for command options. HTTPS certificate verification is required;
 HTTP is supported only for loopback development coordinators.
 `
@@ -48,19 +49,20 @@ HTTP is supported only for loopback development coordinators.
 // App's dependencies permit alternate inventory/runtime integrations while the
 // default command uses the real host discovery, Docker probes and worker loop.
 type App struct {
-	Stdout, Stderr io.Writer
-	Stdin          io.Reader
-	Getenv         func(string) string
-	Cwd            func() (string, error)
-	Discover       func(context.Context) (client.Capabilities, error)
-	Probe          func(context.Context, string, string, bool) error
-	VerifyImage    func(context.Context, string, string) error
-	ResolveImage   func(context.Context, string) (string, error)
-	Serve          func(context.Context, *worker.Runner, client.Capabilities, bool) error
-	LocalDocker    func(context.Context) (string, error)
-	PinDocker      func(string) (func(), error)
-	LoadImage      func(context.Context, string) error
-	StartDocker    func(context.Context) error
+	Stdout, Stderr      io.Writer
+	Stdin               io.Reader
+	Getenv              func(string) string
+	Cwd                 func() (string, error)
+	Discover            func(context.Context) (client.Capabilities, error)
+	Probe               func(context.Context, string, string, bool) error
+	VerifyImage         func(context.Context, string, string) error
+	ResolveImage        func(context.Context, string) (string, error)
+	Serve               func(context.Context, *worker.Runner, client.Capabilities, bool) error
+	LocalDocker         func(context.Context) (string, error)
+	PinDocker           func(string) (func(), error)
+	LoadImage           func(context.Context, string) error
+	StartDocker         func(context.Context) error
+	ManagedPollInterval time.Duration
 }
 
 type config struct{ StateDir, Endpoint, CAFile string }
@@ -72,6 +74,9 @@ type statusError struct {
 func (e *statusError) Error() string  { return e.err.Error() }
 func usageError(message string) error { return &statusError{2, errors.New(message)} }
 func (a *App) defaults() {
+	if a.ManagedPollInterval <= 0 {
+		a.ManagedPollInterval = 5 * time.Second
+	}
 	if a.Stdin == nil {
 		a.Stdin = os.Stdin
 	}

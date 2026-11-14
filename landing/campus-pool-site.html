@@ -230,7 +230,7 @@ function Logo({ size }){
 function Nav(){
   const [p, setP] = useState(0);
   useEffect(() => { const on = () => setP(scrollY / Math.max(1, document.documentElement.scrollHeight - innerHeight)); on(); addEventListener('scroll', on, { passive: true }); return () => removeEventListener('scroll', on); }, []);
-  const links = [['Platform','#roles'],['Parts','#layers'],['Numbers','#numbers'],['Pricing','#pricing'],['Questions','#faq']];
+  const links = [['Platform','#roles'],['How it works','#layers'],['Reliability','#numbers'],['Pricing','#pricing'],['Questions','#faq']];
   return html`<header className="fixed inset-x-0 top-0 z-50 border-b border-white/[.06] bg-obsidian/60 backdrop-blur-xl" style=${{ paddingTop: 'env(safe-area-inset-top,0px)' }}>
     <div className="gutter mx-auto grid h-16 max-w-[1240px] grid-cols-[1fr_auto] items-center gap-6 md:grid-cols-[1fr_auto_1fr]">
       <a href="#top" aria-label="larpool home"><${Logo}/></a>
@@ -248,27 +248,23 @@ function Hero({ slot }){
     <div className="grid-bg pointer-events-none absolute inset-0"></div>
     <div className="gutter relative mx-auto grid min-h-[min(88svh,820px)] max-w-[1240px] items-center gap-6 md:grid-cols-[1.05fr_.95fr]">
       <div className="relative z-10 flex flex-col gap-7">
-        <${motion.div} initial=${{ opacity: 0, x: -12 }} animate=${{ opacity: 1, x: 0 }} transition=${{ duration: .6, ease: EASE }}>
-          <span className="inline-flex items-center gap-2 rounded-full border border-mint/30 bg-mint/[.06] px-3 py-1.5 font-mono text-[11.5px] uppercase tracking-[.12em] text-mint"><span className="blink h-1.5 w-1.5 rounded-full bg-mint"></span>Track D · Campus Edge Fabric</span><//>
         <h1 className="text-[clamp(3rem,7vw,6rem)] font-semibold leading-[.98] tracking-[-0.05em] text-white">
           ${lines.map((ln, li) => html`<span key=${li} className="block">${ln.map((w, wi) => html`<span key=${wi} className="inline-block overflow-hidden pb-[.06em] align-bottom"><${motion.span} className=${'inline-block ' + (li ? 'text-mint' : '')}
             initial=${{ y: '110%', rotate: 4 }} animate=${{ y: '0%', rotate: 0 }} transition=${{ duration: .9, delay: .15 + (li*2 + wi)*.08, ease: EASE }}>${w}<//>${wi < ln.length - 1 ? '\u00a0' : ''}</span>`)}</span>`)}
         </h1>
-        <${motion.p} className="max-w-[44ch] text-[17px] leading-relaxed text-white/60" initial=${{ opacity: 0, y: 14 }} animate=${{ opacity: 1, y: 0 }} transition=${{ duration: .8, delay: .55, ease: EASE }}>Describe a compute task or bring your code. Your team's idle laptops run it and hand back the result.<//>
+        <${motion.p} className="max-w-[44ch] text-[17px] leading-relaxed text-white/60" initial=${{ opacity: 0, y: 14 }} animate=${{ opacity: 1, y: 0 }} transition=${{ duration: .8, delay: .55, ease: EASE }}>Describe a compute task or bring your code. Your team’s available laptops run it and return the results.<//>
         <${motion.div} className="flex flex-wrap gap-3" initial=${{ opacity: 0, y: 14 }} animate=${{ opacity: 1, y: 0 }} transition=${{ duration: .8, delay: .7, ease: EASE }}><${Btn} href="#roles">Run a task<//><${Btn} href="#join" kind="ghost">Contribute compute<//><//>
       </div>
       <div ref=${slot} className="order-first mx-auto aspect-square w-full max-w-[320px] md:order-none md:max-w-[600px]" aria-hidden="true"></div>
     </div>
     <div className="gutter relative mx-auto flex max-w-[1240px] items-center justify-between gap-4 pb-8">
-      <span className="flex items-center gap-3 font-mono text-[11.5px] uppercase tracking-[.14em] text-white/45"><span className="relative block h-7 w-4 rounded-full border border-white/25"><span className="scrolldot absolute left-1/2 top-1.5 h-1.5 w-1 -translate-x-1/2 rounded-full bg-mint"></span></span>Scroll to send it to work</span>
-      <span className="hidden font-mono text-[11.5px] uppercase tracking-[.14em] text-white/45 sm:block">Move your cursor over the core · click for a pulse</span>
     </div>
   </section>`;
 }
 
 /* ---------------- Marquee ---------------- */
 function Marquee(){
-  const items = ['FastAPI', 'PostgreSQL leases', 'DeepSeek planner', 'Go runner', 'Docker sandbox', 'CUDA', 'Outbound HTTPS', 'Fenced completion', 'Checkpoints', 'React + Vite', 'EN / ZH search', 'Fashion-MNIST'];
+  const items = ['Shared compute', 'AI task planning', 'CPU & GPU workloads', 'Isolated execution', 'Automatic retries', 'Checkpoints', 'Validated results', 'Resource controls'];
   const row = items.concat(items);
   return html`<div className="relative overflow-hidden border-y border-white/[.06] bg-obsidian py-5" aria-hidden="true">
     <div className="marquee flex w-max gap-10 whitespace-nowrap">${row.map((t, i) => html`<span key=${i} className="flex items-center gap-10 text-[15px] text-white/45"><span>${t}</span><span className="text-mint">✦</span></span>`)}</div>
@@ -314,7 +310,7 @@ function Roles({ slot }){
   return html`<section id="roles" className="ambient relative border-t border-white/[.06] py-28 md:py-36">
     <div className="gutter mx-auto max-w-[1240px]">
       <div className="mx-auto mb-12 flex max-w-[720px] flex-col items-center gap-5 text-center">
-        <${Eyebrow}>01 · The pool<//>
+        <${Eyebrow}>Platform<//>
         <${Words} text="One request." accent="Six roles." className="text-[clamp(2.4rem,5vw,4.4rem)] font-semibold leading-[1.0] tracking-[-0.045em] text-white"/>
       </div>
       <div ref=${box} className="relative grid items-center gap-4 lg:grid-cols-[1fr_440px_1fr] lg:gap-10">
@@ -344,7 +340,6 @@ function Roles({ slot }){
       <div className="mt-12 flex flex-wrap justify-center gap-x-8 gap-y-2 font-mono text-[11.5px] uppercase tracking-[.14em] text-white/40">
         <span className="flex items-center gap-2"><span className="h-2 w-2 rounded-full bg-mint"></span>Work going out</span>
         <span className="flex items-center gap-2"><span className="h-2 w-2 rounded-full bg-[#E8EEEA]"></span>Results coming back</span>
-        <span>Point at a role's name</span>
       </div>
     </div></section>`;
 }
@@ -375,7 +370,7 @@ function Layers(){
   }, []);
   return html`<section id="layers" ref=${ref} className="relative overflow-hidden bg-cream py-28 text-obsidian md:py-36">
     <div className="gutter mx-auto max-w-[1240px]">
-      <div className="mb-14 flex flex-col gap-5"><${Eyebrow} light>02 · The parts<//>
+      <div className="mb-14 flex flex-col gap-5"><${Eyebrow} light>How it works<//>
         <${Words} text="Six parts." accent="One coordinator." light=${true} className="text-[clamp(2.4rem,5vw,4.4rem)] font-semibold leading-[1.0] tracking-[-0.045em]"/></div>
       <div className="grid items-center gap-12 lg:grid-cols-2">
         <div ref=${stage} className="relative h-[440px] md:h-[540px]" style=${{ perspective: '1600px', '--lx': 0, '--ly': 0 }}>
@@ -388,7 +383,6 @@ function Layers(){
                 <span className=${'pointer-events-none absolute right-3 top-3 font-mono text-[11px] ' + (on ? 'text-obsidian' : 'text-white/50')}>${l[0]}</span>
                 ${on && html`<span className="pointer-events-none absolute inset-3 rounded border border-obsidian/25"></span>`}</div>`; })}
           </div>
-          <span className="pointer-events-none absolute bottom-2 left-1/2 -translate-x-1/2 font-mono text-[11.5px] uppercase tracking-[.14em] text-black/40">Point at a part's name to lift its layer</span>
         </div>
         <div className="grid gap-x-8 sm:grid-cols-2">
           ${LAYERS.map((l, i) => html`<${motion.button} key=${l[0]} type="button" aria-pressed=${cur === i} onMouseEnter=${() => setSel(i)} onFocus=${() => setSel(i)} onClick=${() => setSel(i)}
@@ -438,9 +432,9 @@ function RunSim(){
 function Metrics(){
   return html`<section id="numbers" className="border-t border-black/10 bg-cream py-28 text-obsidian md:py-36">
     <div className="gutter mx-auto max-w-[1240px]">
-      <div className="mb-14 flex flex-col gap-5"><${Eyebrow} light>03 · By design<//>
-        <${Words} text="Built from rules." accent="Measured, not promised." light=${true} className="text-[clamp(2.4rem,5vw,4.4rem)] font-semibold leading-[1.0] tracking-[-0.045em]"/>
-        <${Reveal} delay=${.2}><p className="max-w-[52ch] text-black/55">Starting values from the design, tuned after we measure campus Wi-Fi.</p><//></div>
+      <div className="mb-14 flex flex-col gap-5"><${Eyebrow} light>Reliability<//>
+        <${Words} text="Designed for reliability." accent="Built for shared compute." light=${true} className="text-[clamp(2.4rem,5vw,4.4rem)] font-semibold leading-[1.0] tracking-[-0.045em]"/>
+        <${Reveal} delay=${.2}><p className="max-w-[52ch] text-black/55">Task leases, device health checks and automatic retries keep work moving as devices connect and disconnect.</p><//></div>
       <div className="grid grid-cols-2 border-t border-black/10 lg:grid-cols-4">
         ${[[60, 's', 'Lease on every task'], [10, 's', 'Between heartbeats'], [25, 's', 'Longest wait for new work'], [0, 'ports', 'Opened on worker laptops']].map(([n, s, l], i) => html`<${Reveal} key=${l} delay=${i*.08} className=${'flex flex-col gap-3 py-8 ' + (i % 2 ? 'pl-6 border-l border-black/10 ' : '') + (i === 2 ? 'lg:pl-6 lg:border-l lg:border-black/10' : '')}>
           <div className="text-[clamp(3rem,6vw,5.2rem)] font-semibold leading-none tracking-[-0.05em]"><${Count} to=${n} suffix=${s}/></div><p className="text-[14px] text-black/55">${l}</p><//>`)}
@@ -448,9 +442,9 @@ function Metrics(){
       <div className="mt-16 grid items-start gap-8 lg:grid-cols-[1.25fr_.75fr]">
         <${Reveal} y=${40}><${RunSim}/><//>
         <${Reveal} delay=${.12} y=${40} className="flex flex-col gap-4 rounded-2xl border border-black/10 bg-white/60 p-6">
-          <span className="self-start rounded-full border border-mintink/50 px-3 py-1 font-mono text-[11px] uppercase tracking-wider text-mintink">Where we are</span>
-          <h3 className="text-[24px] font-semibold leading-tight tracking-tight">Server verified. Physical pool next.</h3>
-          ${[['AI plan → Docker → validator', 'verified'], ['Leases, cancel, restore', 'tests pass'], ['Portal and console', '19 browser tests'], ['Go runner on laptops', 'pending'], ['Two-device measurements', 'pending']].map(([a, b], i) => html`<${motion.div} key=${a} initial=${{ opacity: 0, x: 16 }} whileInView=${{ opacity: 1, x: 0 }} viewport=${{ once: true }} transition=${{ delay: .2 + i*.08, duration: .5, ease: EASE }} className="flex justify-between gap-4 border-t border-black/10 pt-3 text-[14px]"><span>${a}</span><span className=${'flex items-center gap-1.5 text-right ' + (b === 'pending' ? 'text-[#B0661C]' : 'text-mintink')}><span className=${'h-1.5 w-1.5 rounded-full ' + (b === 'pending' ? 'bg-[#E0912F] blink' : 'bg-mintink')}></span>${b}</span><//>`)}
+          <span className="self-start rounded-full border border-mintink/50 px-3 py-1 font-mono text-[11px] uppercase tracking-wider text-mintink">Built-in controls</span>
+          <h3 className="text-[24px] font-semibold leading-tight tracking-tight">Keep control of your compute.</h3>
+          ${[['Task planning', 'Review before running'], ['Resource limits', 'Set per device'], ['Job progress', 'Track in the console'], ['Interrupted tasks', 'Automatic retry'], ['Results', 'Validated on completion']].map(([a, b], i) => html`<${motion.div} key=${a} initial=${{ opacity: 0, x: 16 }} whileInView=${{ opacity: 1, x: 0 }} viewport=${{ once: true }} transition=${{ delay: .2 + i*.08, duration: .5, ease: EASE }} className="flex justify-between gap-4 border-t border-black/10 pt-3 text-[14px]"><span>${a}</span><span className=${'flex items-center gap-1.5 text-right ' + (b === 'pending' ? 'text-[#B0661C]' : 'text-mintink')}><span className=${'h-1.5 w-1.5 rounded-full ' + (b === 'pending' ? 'bg-[#E0912F] blink' : 'bg-mintink')}></span>${b}</span><//>`)}
         <//>
       </div>
     </div></section>`;
@@ -466,9 +460,9 @@ function Pricing(){
   ];
   return html`<section id="pricing" className="border-t border-black/10 bg-cream py-28 text-obsidian md:py-36">
     <div className="gutter mx-auto max-w-[1240px]">
-      <div className="mb-12 flex flex-col gap-5"><${Eyebrow} light>04 · Pricing<//>
+      <div className="mb-12 flex flex-col gap-5"><${Eyebrow} light>Pricing<//>
         <${Words} text="Priced per pool." accent="Not per GPU hour." light=${true} className="text-[clamp(2.4rem,5vw,4.4rem)] font-semibold leading-[1.0] tracking-[-0.045em]"/>
-        <${Reveal} delay=${.2}><p className="max-w-[52ch] text-black/55">You bring the laptops. The subscription is a hypothesis for our pilot; credits are not cash.</p><//>
+        <${Reveal} delay=${.2}><p className="max-w-[52ch] text-black/55">Bring your own devices. Explore a pilot for your team, lab or campus. Contributor credits are not redeemable for cash.</p><//>
         <div className="relative inline-flex self-start rounded-full border border-black/10 bg-white/60 p-1" role="group" aria-label="Billing period">
           ${[['Per semester', false], ['Per year', true]].map(([l, y]) => html`<button key=${l} type="button" aria-pressed=${year === y} onClick=${() => setYear(y)} className=${'relative z-10 rounded-full px-4 py-2 text-[14px] transition-colors duration-200 ' + (year === y ? 'text-white' : 'text-black/60')}>
             ${year === y && html`<${motion.span} layoutId="bill" layout=${true} className="absolute inset-0 -z-10 rounded-full bg-obsidian" transition=${{ type: 'spring', stiffness: 400, damping: 30 }}/>`}${l}</button>`)}
@@ -476,7 +470,7 @@ function Pricing(){
       <div className="grid gap-5 lg:grid-cols-3">
         ${plans.map((p, i) => html`<${motion.div} key=${p.n} initial=${{ opacity: 0, y: 50 }} whileInView=${{ opacity: 1, y: 0 }} viewport=${{ once: true, amount: .2 }} whileHover=${{ y: -6 }} transition=${{ duration: .6, delay: i*.1, ease: EASE }}
           className=${'relative flex flex-col gap-5 rounded-2xl p-7 ' + (p.main ? 'bg-obsidian text-white ring-2 ring-mint shadow-[0_0_70px_-20px_rgba(77,232,176,.6)]' : 'border border-black/10 bg-white/60')}>
-          ${p.main && html`<span className="absolute -top-3 left-7 rounded-full bg-mint px-3 py-1 text-[12px] font-semibold text-obsidian">Most labs</span>`}
+          ${p.main && html`<span className="absolute -top-3 left-7 rounded-full bg-mint px-3 py-1 text-[12px] font-semibold text-obsidian">Lab pilot</span>`}
           <span className=${'font-mono text-[12px] uppercase tracking-[.12em] ' + (p.main ? 'text-white/50' : 'text-black/50')}>${p.n}</span>
           <div className="text-[clamp(2.4rem,4vw,3.2rem)] font-semibold leading-none tracking-[-0.05em]">${p.p}<span className=${'ml-2 text-[15px] font-normal tracking-normal ' + (p.main ? 'text-white/50' : 'text-black/45')}>${p.s}</span></div>
           <p className=${'text-[14.5px] ' + (p.main ? 'text-white/60' : 'text-black/55')}>${p.d}</p>
@@ -489,7 +483,7 @@ function Pricing(){
 
 /* ---------------- FAQ (light) ---------------- */
 const QA = [
-  ['What can I run today?', 'Document search: upload JSONL or TXT (English and Chinese) and get an index with excerpts and sources. Training: pick the image recipe or upload train.py and get model.pt with its metrics. Fashion-MNIST ships with the repo for offline demos.'],
+  ['What can I run today?', 'Document search: upload JSONL or TXT (English and Chinese) and get an index with excerpts and sources. Training: pick the image recipe or upload train.py and get model.pt with its metrics. A sample image dataset is included to help you get started.'],
   ['Will my script run faster across many laptops?', 'Only when a registered adapter knows how to split it, like document embeddings. An ordinary script runs on one compatible laptop.'],
   ['What if a laptop leaves mid-job?', 'Its 60 second lease runs out and only its unfinished task goes back in the queue. A late result from that laptop is rejected, so nothing counts twice.'],
   ['What if the GPU laptop is gone?', 'The job waits for capacity, then resumes from the last complete checkpoint. GPU work is never quietly moved to a CPU.'],
@@ -499,7 +493,7 @@ function Faq(){
   const [open, setOpen] = useState(0);
   return html`<section id="faq" className="border-t border-black/10 bg-cream py-28 text-obsidian md:py-36">
     <div className="gutter mx-auto grid max-w-[1240px] gap-12 lg:grid-cols-[.85fr_1.15fr]">
-      <div className="flex flex-col gap-5"><${Eyebrow} light>05 · Questions<//>
+      <div className="flex flex-col gap-5"><${Eyebrow} light>FAQ<//>
         <${Words} text="Questions," accent="answered." light=${true} className="text-[clamp(2.4rem,5vw,4.4rem)] font-semibold leading-[1.0] tracking-[-0.045em]"/>
         <${Reveal} delay=${.2}><div><${Btn} href="#join" kind="dark">See a live job<//></div><//></div>
       <div className="border-t border-black/10">${QA.map(([q, a], i) => html`<${motion.div} key=${q} className="border-b border-black/10" initial=${{ opacity: 0, y: 16 }} whileInView=${{ opacity: 1, y: 0 }} viewport=${{ once: true }} transition=${{ duration: .5, delay: i*.06, ease: EASE }}>
@@ -523,7 +517,7 @@ function Join(){
   return html`<section id="join" className="ambient relative overflow-hidden py-28 md:py-40">
     <div className="grid-bg pointer-events-none absolute inset-0"></div>
     <div className="gutter relative z-10 mx-auto flex max-w-[1240px] flex-col items-start gap-6">
-      <${Eyebrow}>06 · Contribute<//>
+      <${Eyebrow}>Contribute compute<//>
       <${Words} text="Lend a laptop." accent="On your terms." className="text-[clamp(2.6rem,6vw,5rem)] font-semibold leading-[1.0] tracking-[-0.05em] text-white"/>
       <ol className="relative mt-6 grid w-full gap-4 md:grid-cols-2 lg:grid-cols-4">
         <div className="pointer-events-none absolute left-0 right-0 top-[38px] hidden h-px bg-gradient-to-r from-mint/0 via-mint/40 to-mint/0 lg:block"></div>
@@ -531,7 +525,7 @@ function Join(){
           className="relative flex flex-col gap-3 rounded-2xl border border-white/10 bg-obsidian/70 p-5 backdrop-blur-md transition-colors duration-200 hover:border-mint/50">
           <span className="grid h-9 w-9 place-items-center rounded-full border border-mint/40 bg-mint/10 font-mono text-[12px] text-mint">0${i + 1}</span><h3 className="text-[17px] font-medium text-white">${t}</h3><p className="text-[14px] text-white/55">${d}</p><//>`)}
       </ol>
-      <${Reveal} delay=${.3} className="mt-6 flex flex-wrap gap-3"><${Btn} href="#top">Back to the core<//><${Btn} href="#roles" kind="ghost">See the roles again<//><//>
+      <${Reveal} delay=${.3} className="mt-6 flex flex-wrap gap-3"><${Btn} href="#top">Back to top<//><${Btn} href="#roles" kind="ghost">Explore the platform<//><//>
     </div></section>`;
 }
 function Footer(){
@@ -540,13 +534,13 @@ function Footer(){
       <div className="flex flex-wrap items-start justify-between gap-8">
         <div className="flex flex-col gap-3"><${Logo} size="lg"/><span className="max-w-[34ch] text-[14px] text-white/50">Your team's laptops, working as one private computer.</span></div>
         <div className="flex gap-12 text-[14px]">
-          <div className="flex flex-col gap-2"><span className="text-white/40">Product</span><a className="text-white/75 hover:text-mint" href="#roles">Platform</a><a className="text-white/75 hover:text-mint" href="#layers">Parts</a><a className="text-white/75 hover:text-mint" href="#pricing">Pricing</a></div>
-          <div className="flex flex-col gap-2"><span className="text-white/40">Project</span><span className="text-white/75">Track D</span><span className="text-white/75">Campus Edge Fabric</span></div>
+          <div className="flex flex-col gap-2"><span className="text-white/40">Product</span><a className="text-white/75 hover:text-mint" href="#roles">Platform</a><a className="text-white/75 hover:text-mint" href="#layers">How it works</a><a className="text-white/75 hover:text-mint" href="#pricing">Pricing</a></div>
+          <div className="flex flex-col gap-2"><span className="text-white/40">Resources</span><a className="text-white/75 hover:text-mint" href="#faq">FAQ</a><a className="text-white/75 hover:text-mint" href="#join">Contribute compute</a></div>
         </div>
       </div>
       <div className="flex flex-wrap items-center justify-between gap-3 border-t border-white/10 pt-5 text-[13px] text-white/50">
-        <span className="flex items-center gap-2"><span className="blink h-2 w-2 rounded-full bg-amber shadow-[0_0_10px_#F0A35E]"></span>Server verified · physical pool integration in progress</span>
-        <span className="font-mono text-[12px]">FastAPI · PostgreSQL · DeepSeek · Go · Docker · React</span>
+        <span>larpool · Shared compute for teams</span>
+        <a className="hover:text-mint" href="#top">Back to top ↑</a>
       </div>
     </div>
     <${motion.div} className="pointer-events-none select-none whitespace-nowrap text-center text-[17vw] font-semibold leading-[.8] tracking-[-0.06em] text-white/[.05]" aria-hidden="true"

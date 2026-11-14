@@ -56,7 +56,7 @@ button:disabled {
   text-decoration: none;
 }
 .brand svg {
-  color: #00ff88;
+  color: #4de8b0;
 }
 .sidebar nav {
   display: grid;
@@ -183,7 +183,7 @@ p {
   font-size: 14px;
 }
 .primary {
-  background: #00ff88;
+  background: #4de8b0;
   color: white;
 }
 .outline {
@@ -387,12 +387,12 @@ td {
 }
 .progress > div {
   height: 100%;
-  background: #00a65a;
+  background: #12996a;
 }
 .bar {
   height: 14px;
   min-width: 2px;
-  background: #00a65a;
+  background: #12996a;
   border-radius: 3px;
 }
 .chart-row {
@@ -535,12 +535,12 @@ summary {
   --ink: #17201c;
   --muted: #65716a;
   --line: #dfe4df;
-  --accent: #00854a;
+  --accent: #12996a;
   color: var(--ink);
   -webkit-font-smoothing: antialiased;
 }
 :focus-visible {
-  outline: 2px solid #00854a;
+  outline: 2px solid #12996a;
   outline-offset: 3px;
 }
 .sidebar {
@@ -592,7 +592,7 @@ summary {
   left: -18px;
   width: 2px;
   height: 18px;
-  background: #00ff88;
+  background: #4de8b0;
 }
 .sidebar footer {
   padding: 20px 12px 0;
@@ -849,8 +849,8 @@ textarea:hover {
 input:focus,
 select:focus,
 textarea:focus {
-  border-color: #00854a;
-  box-shadow: 0 0 0 3px #00854a10;
+  border-color: #12996a;
+  box-shadow: 0 0 0 3px #12996a10;
   outline: none;
 }
 input[type="checkbox"] {
@@ -1023,11 +1023,39 @@ summary {
 }
 
 /* Prevent Tailwind's outline utility from adding a second control border. */
-.button.outline { outline-style: none; }
-.button.outline:focus-visible { outline: 2px solid #00854a; outline-offset: 3px; }
-.table-wrap table { min-width: 720px; }
-.table-wrap .item-button { min-width: 150px; }
-.card > .actions + label { margin-top: 24px; }
-.card > dl { margin-bottom: 24px; }
-.card > h3 { margin-top: 24px; }
-.control-actions + section { margin-top: 24px; }
+.button.outline {
+  outline-style: none;
+}
+.button.outline:focus-visible {
+  outline: 2px solid #12996a;
+  outline-offset: 3px;
+}
+.table-wrap table {
+  min-width: 720px;
+}
+.table-wrap .item-button {
+  min-width: 150px;
+}
+.card > .actions + label {
+  margin-top: 24px;
+}
+.card > dl {
+  margin-bottom: 24px;
+}
+.card > h3 {
+  margin-top: 24px;
+}
+.control-actions + section {
+  margin-top: 24px;
+}
+
+.brand {
+  font-size: 22px;
+  font-weight: 500;
+  letter-spacing: -0.035em;
+  gap: 10px;
+}
+.brand svg {
+  width: 28px;
+  height: 28px;
+}

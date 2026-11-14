@@ -1,7 +1,6 @@
 import { useEffect, useState } from "react";
 import { Link, NavLink, Route, Routes } from "react-router-dom";
 import {
-  Orbit,
   ArrowUpRight,
   LayoutDashboard,
   Monitor,
@@ -10,6 +9,7 @@ import {
 } from "lucide-react";
 import { api, setCsrf, errorText } from "./lib/api";
 import type { Session } from "./lib/types";
+import { Logo } from "./components/Logo";
 import { ErrorBox } from "./components/Common";
 import { Overview } from "./pages/Overview";
 import { Nodes } from "./pages/Nodes";
@@ -38,7 +38,7 @@ export function App() {
   if (!session)
     return (
       <main className="login card">
-        <h1>Pool console</h1>
+        <h1>larpool</h1>
         <p>
           Sign in through the <a href="/">user portal</a> to access your pool.
         </p>
@@ -50,8 +50,7 @@ export function App() {
     <div className="shell">
       <aside className="sidebar">
         <Link className="brand" to="/">
-          <Orbit strokeWidth={1.4} />
-          Campus Pool
+          <Logo />
         </Link>
         <nav aria-label="Pool navigation">
           <NavLink end to="/">
@@ -80,7 +79,7 @@ export function App() {
       <div className="main">
         <div className="topbar">
           <span>
-            <b>Campus Pool</b>
+            <b>larpool</b>
           </span>
           <span className="pill">
             {session.name} · {session.role}

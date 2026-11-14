@@ -1,4 +1,5 @@
-import { Monitor } from "lucide-react";
+import { Link } from "react-router-dom";
+import { Monitor, ArrowUpRight } from "lucide-react";
 import type { Node, PoolEvent } from "../lib/types";
 import { Status, Empty } from "./Common";
 export function Topology({
@@ -9,20 +10,29 @@ export function Topology({
   events: PoolEvent[];
 }) {
   return (
-    <section className="card">
-      <h2>Devices</h2>
+    <section className="overview-section">
+      <div className="section-heading">
+        <h2>
+          Devices <span>{nodes.length}</span>
+        </h2>
+        <Link to="/nodes">
+          View devices <ArrowUpRight size={13} />
+        </Link>
+      </div>
 
       <div className="topology">
         {nodes.length === 0 && <Empty>No devices registered.</Empty>}
         {nodes.map((n) => (
           <div className="node-tile" key={n.id}>
-            <Monitor size={28} />
-            <h3>{n.name}</h3>
-            <Status value={n.state} />
-            <p>{n.roles.join(" · ")}</p>
-            <small>
+            <Monitor size={20} aria-hidden="true" />
+            <div className="device-identity">
+              <h3>{n.name}</h3>
+              <small>{n.roles.join(" · ")}</small>
+            </div>
+            <small className="device-resources">
               {n.cpu_logical} CPU threads · {n.gpus.length} GPUs
             </small>
+            <Status value={n.state} />
           </div>
         ))}
       </div>

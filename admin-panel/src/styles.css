@@ -1059,3 +1059,196 @@ summary {
   width: 28px;
   height: 28px;
 }
+
+/* Overview uses a single surface with flat sections. */
+.overview-page {
+  background: #fff;
+  border: 1px solid #dfe4df;
+  border-radius: 8px;
+  padding: 30px 32px 8px;
+}
+.overview-page .overview-intro {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 30px;
+}
+.overview-page h1 {
+  margin: 0;
+  font-size: 24px;
+}
+.connection-note {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  font-size: 11px;
+  color: #7c725b;
+}
+.connection-note::before {
+  content: "";
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: #b69b61;
+  flex-shrink: 0;
+}
+.overview-page > .metrics {
+  gap: 0;
+  margin: 0 0 32px;
+}
+.overview-page > .metrics .metric {
+  background: none;
+  border: 0;
+  border-radius: 0;
+  padding: 0 24px;
+  border-left: 1px solid #e6eae5;
+}
+.overview-page > .metrics .metric:first-child {
+  border-left: 0;
+  padding-left: 0;
+}
+.overview-page > .metrics .metric p {
+  margin-bottom: 12px;
+}
+.overview-page > .metrics .metric strong {
+  font-size: 30px;
+}
+.overview-section {
+  padding: 26px 0;
+  border-top: 1px solid #e6eae5;
+}
+.section-heading {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 14px;
+}
+.section-heading h2 {
+  margin: 0;
+}
+.section-heading h2 span {
+  margin-left: 6px;
+  color: #859087;
+  font-weight: 400;
+  font-size: 12px;
+}
+.section-heading a {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: #5b6f61;
+  font-size: 12px;
+  text-decoration: none;
+}
+.section-heading a:hover {
+  color: #12996a;
+}
+.overview-section .topology {
+  display: block;
+}
+.overview-section .node-tile {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  background: none;
+  border: 0;
+  border-bottom: 1px solid #eef0ec;
+  border-radius: 0;
+  padding: 18px 0;
+  min-width: 0;
+}
+.overview-section .node-tile:last-child {
+  border-bottom: 0;
+}
+.overview-section .node-tile > svg {
+  margin: 0;
+  color: #7a8b7e;
+  flex-shrink: 0;
+}
+.device-identity {
+  flex: 1;
+  min-width: 0;
+}
+.device-identity h3 {
+  margin: 0 0 3px;
+  overflow-wrap: anywhere;
+}
+.device-resources {
+  margin-right: 20px;
+}
+.overview-section details {
+  margin: 16px 0 0;
+}
+.overview-section summary {
+  font-weight: 400;
+  color: #718075;
+  font-size: 11px;
+}
+.cost-summary {
+  display: flex;
+  gap: 64px;
+  margin: 22px 0;
+}
+.cost-summary > div {
+  display: grid;
+  gap: 10px;
+}
+.cost-summary dt {
+  font-size: 12px;
+}
+.cost-summary dd {
+  font-size: 16px;
+}
+.costs-section .row {
+  font-size: 12px;
+}
+.costs-section .row b {
+  font-weight: 500;
+}
+.costs-section .row p {
+  font-size: 11px;
+}
+@media (max-width: 950px) {
+  .overview-page > .metrics {
+    row-gap: 24px;
+  }
+  .overview-page > .metrics .metric:nth-child(3) {
+    border-left: 0;
+    padding-left: 0;
+  }
+}
+@media (max-width: 640px) {
+  .overview-page {
+    padding: 22px 18px 0;
+  }
+  .overview-page .overview-intro {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 12px;
+  }
+  .overview-page > .metrics .metric {
+    padding: 0 12px;
+  }
+  .overview-page > .metrics .metric strong {
+    font-size: 26px;
+  }
+  .overview-section .node-tile {
+    flex-wrap: wrap;
+    gap: 10px;
+  }
+  .device-identity {
+    flex-basis: calc(100% - 34px);
+  }
+  .device-resources {
+    margin-left: 30px;
+    margin-right: auto;
+  }
+  .cost-summary {
+    flex-direction: column;
+    gap: 24px;
+  }
+  .section-heading a {
+    font-size: 11px;
+  }
+}

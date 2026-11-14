@@ -14,14 +14,16 @@ export function Overview() {
     "/pool/events",
   );
   return (
-    <>
+    <div className="overview-page">
       <section className="overview-intro">
         <PageHeader eyebrow="" title="Overview" />
+        {!connected && (
+          <span className="connection-note" role="status">
+            Live updates disconnected. Reconnecting…
+          </span>
+        )}
       </section>
       <ErrorBox message={error || nodeError} />
-      {!connected && (
-        <div className="notice">Live updates disconnected. Reconnecting…</div>
-      )}
       <div className="metrics">
         <Metric
           label="Ready devices"
@@ -37,6 +39,6 @@ export function Overview() {
       </div>
       {nodes && <Topology nodes={nodes} events={summary?.events || []} />}
       <CostBreakdown />
-    </>
+    </div>
   );
 }

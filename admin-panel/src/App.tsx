@@ -81,9 +81,6 @@ export function App() {
           <span>
             <b>larpool</b>
           </span>
-          <span className="pill">
-            {session.name} · {session.role}
-          </span>
         </div>
         <main className="content">
           <Routes>

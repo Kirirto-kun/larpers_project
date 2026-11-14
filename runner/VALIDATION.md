@@ -46,6 +46,15 @@ invocation envelopes, formal StandaloneRecord provenance/config matching and
 UI-generated DTO integration also remain unresolved with the other owners.
 Native Mac, actual GPU and physical multi-device acceptance are still deferred.
 
+The updated Mac kit is `bootstrap/test-kit/macos-arm64-foundation/`, built from
+clean implementation commit `eac3ae0`. All five payload hashes, full gzip CRC/tar
+stream (22 entries) and `bash -n check.sh` pass. Payload208175556 bytes; image bytes
+are unchanged from the verified ARM runtime. SHA-256 of `SHA256SUMS`:
+`04134046d412f71b642229c89b7b45c57bc9abd15afd2230d695ba4559a33d9f`.
+The new final Windows binary's actual `campus doctor` also exits0 with healthy
+Docker29.2.1, verified canonical CPU reference and no GPU. The initial kit and
+measurements below remain historical evidence, not the current handoff.
+
 ## Initial local pass (before foundation)
 
 Date: 2026-11-14. Branch: `codex/runner-cli`, based on `f1914dd`.

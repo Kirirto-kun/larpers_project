@@ -1,5 +1,24 @@
 # Second notebook: offline Apple Silicon readiness
 
+## Current prepared kit
+
+Use `bootstrap/test-kit/macos-arm64-foundation/` for the deferred Mac check.
+It contains the clean native binary built from implementation commit
+`eac3ae08284158f4c7ac76e83544af8e4ca0f094`, after published-contract reconciliation.
+The earlier `macos-arm64-ready/` folder is retained as a historical first-pass kit.
+
+Current trusted SHA-256 of `SHA256SUMS`:
+
+```text
+04134046d412f71b642229c89b7b45c57bc9abd15afd2230d695ba4559a33d9f
+```
+
+Payload size:208175556 bytes (about198.53 MiB). All payload hashes, full gzip/tar
+archive validation and shell syntax passed on the first notebook. Doctor also
+supports a verified locally loaded image without RepoDigest; joining/serving
+still requires a verified canonical reference and compatible real control plane.
+This kit is local CPU readiness only. Native Mac execution is still deferred.
+
 Prepare the kit locally now. Run it on the second notebook only after the
 first notebook's local tests have finished and its owner is ready. This checks
 a Mac's native CPU runtime; it does not establish a pool run or benchmark.
@@ -121,7 +140,7 @@ deadline, a real tiny CPU Torch calculation, and the generated checker's argv
 flow using a fake external Docker boundary where this host cannot execute a
 Mac binary or the ARM image natively.
 
-## Prepared handoff on 2026-11-14
+## Historical first-pass handoff on 2026-11-14
 
 The first notebook has generated `bootstrap/test-kit/macos-arm64-ready/`.
 Copy that entire folder later; its payload is about 198.45 MiB. All payload hashes,

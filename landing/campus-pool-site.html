@@ -1,0 +1,537 @@
+<title>Campus Pool Site</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Geist:wght@300;400;500;600;700&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap">
+<script src="https://cdn.tailwindcss.com/3.4.17"></script>
+<script>
+  tailwind.config = {
+    theme: { extend: {
+      colors: { obsidian: '#0B0F0E', moss: '#102A22', cream: '#F3F4F1', mint: '#00FF88', mintink: '#00A65A', amber: '#F0A35E' },
+      fontFamily: { sans: ['Geist', 'Inter', 'system-ui', 'sans-serif'], mono: ['"JetBrains Mono"', 'ui-monospace', 'monospace'] }
+    } }
+  };
+</script>
+<style>
+/* Layout: one long scroll. A single persistent 3D sphere starts in the hero, leans toward the cursor, then travels
+   down with the scroll and docks as the core of "One request. Six roles." Dark obsidian top with pointer light,
+   a tech marquee, then cream sections (scroll-driven layer stack, numbers + live run, pricing, questions),
+   dark contribute band and footer. Single committed look; every color is set explicitly. */
+:root{ --obsidian:#0B0F0E; --moss:#102A22; --cream:#F3F4F1; --mint:#00FF88; --mintink:#00A65A; --fg:#E8EEEA; --mx:70%; --my:40%; color-scheme:dark; }
+html{background:var(--obsidian);scroll-behavior:smooth}
+body{background:var(--obsidian);color:var(--fg);font-family:Geist,Inter,system-ui,sans-serif;-webkit-font-smoothing:antialiased;overflow-x:clip}
+body::before{content:"";position:fixed;inset:0 0 auto;height:env(safe-area-inset-top,0px);z-index:70;background:var(--obsidian)}
+.gutter{padding-left:max(20px,env(safe-area-inset-left,0px));padding-right:max(20px,env(safe-area-inset-right,0px))}
+.ambient{background:
+  radial-gradient(560px circle at var(--mx) var(--my), rgba(0,255,136,.10), transparent 60%),
+  radial-gradient(900px 600px at 78% 30%, rgba(16,42,34,.95), transparent 70%),
+  radial-gradient(700px 500px at 10% 90%, rgba(16,42,34,.7), transparent 70%),
+  var(--obsidian)}
+.grid-bg{background-image:linear-gradient(rgba(255,255,255,.035) 1px,transparent 1px),linear-gradient(90deg,rgba(255,255,255,.035) 1px,transparent 1px);background-size:64px 64px;-webkit-mask-image:radial-gradient(ellipse 70% 60% at 50% 40%,#000 30%,transparent 80%);mask-image:radial-gradient(ellipse 70% 60% at 50% 40%,#000 30%,transparent 80%)}
+#sphere{position:fixed;inset:0;width:100%;height:100%;z-index:5;pointer-events:none}
+@keyframes comet{from{stroke-dashoffset:0}to{stroke-dashoffset:-1000}}
+.comet{stroke-dasharray:70 930;animation:comet 3.2s linear infinite}
+@keyframes blink{50%{opacity:.3}}
+.blink{animation:blink 1.6s ease-in-out infinite}
+@keyframes marquee{to{transform:translateX(-50%)}}
+.marquee{animation:marquee 38s linear infinite}
+@keyframes bar{0%,100%{transform:scaleY(.3)}50%{transform:scaleY(1)}}
+.eq span{display:block;width:3px;background:#00FF88;border-radius:2px;transform-origin:bottom;animation:bar 1.1s ease-in-out infinite}
+@keyframes scrolldot{0%{transform:translateY(0);opacity:1}80%{transform:translateY(14px);opacity:0}100%{opacity:0}}
+.scrolldot{animation:scrolldot 1.8s ease-in-out infinite}
+:focus-visible{outline:2px solid var(--mint);outline-offset:3px}
+@media (prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important;scroll-behavior:auto!important}}
+</style>
+
+<div id="root"></div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.3.1/umd/react.production.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.3.1/umd/react-dom.production.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script src="https://unpkg.com/framer-motion@10.16.4/dist/framer-motion.js"></script>
+<script src="https://unpkg.com/htm@3.1.1/dist/htm.umd.js"></script>
+<script>
+(function(){
+const { useState, useEffect, useRef, useLayoutEffect } = React;
+const html = htm.bind(React.createElement);
+const REDUCE = window.matchMedia && matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+const FM = window.Motion || {};
+const MOTION_PROPS = ['initial','animate','exit','whileInView','whileHover','whileTap','transition','viewport','layout','variants'];
+const motion = FM.motion || new Proxy({}, { get: (_, tag) => React.forwardRef((p, ref) => { const q = Object.assign({}, p); MOTION_PROPS.forEach(k => delete q[k]); q.ref = ref; return React.createElement(tag, q); }) });
+const AnimatePresence = FM.AnimatePresence || (({ children }) => children);
+const EASE = [0.2, 0.8, 0.2, 1];
+
+/* shared pointer state */
+const PTR = { x: innerWidth*.7, y: innerHeight*.45, vx: 0, vy: 0, down: 0 };
+addEventListener('pointermove', e => {
+  PTR.vx = e.clientX - PTR.x; PTR.vy = e.clientY - PTR.y; PTR.x = e.clientX; PTR.y = e.clientY;
+  document.documentElement.style.setProperty('--mx', e.clientX + 'px'); document.documentElement.style.setProperty('--my', e.clientY + 'px');
+}, { passive: true });
+addEventListener('pointerdown', () => { PTR.down = performance.now(); }, { passive: true });
+
+function useInView(ref, amount){
+  const [v, setV] = useState(false);
+  useEffect(() => { if (!ref.current || !('IntersectionObserver' in window)) { setV(true); return; }
+    const io = new IntersectionObserver(([e]) => { if (e.isIntersecting) { setV(true); io.disconnect(); } }, { threshold: amount || 0.3 });
+    io.observe(ref.current); return () => io.disconnect(); }, []);
+  return v;
+}
+/* 0..1 progress of an element passing through the viewport */
+function useProgress(ref){
+  const [p, setP] = useState(0);
+  useEffect(() => { const on = () => { const el = ref.current; if (!el) return; const r = el.getBoundingClientRect(); setP(Math.max(0, Math.min(1, (innerHeight - r.top) / (innerHeight + r.height)))); };
+    on(); addEventListener('scroll', on, { passive: true }); addEventListener('resize', on); return () => { removeEventListener('scroll', on); removeEventListener('resize', on); }; }, []);
+  return p;
+}
+
+const Reveal = ({ children, className, delay, y }) => html`<${motion.div} className=${className} initial=${{ opacity: 0.2, y: y == null ? 28 : y }} whileInView=${{ opacity: 1, y: 0 }} viewport=${{ once: true, amount: 0.2 }} transition=${{ duration: 0.7, delay: delay || 0, ease: EASE }}>${children}<//>`;
+
+/* headline that rises word by word */
+function Words({ text, className, accent, delay, light, as }){
+  const words = text.split(' '), acc = (accent || '').split(' ').filter(Boolean), Tag = as || 'h2';
+  const all = words.map(w => [w, false]).concat(acc.map(w => [w, true]));
+  return html`<${Tag} className=${className}>${all.map(([w, a], i) => html`<span key=${i} className="inline-block overflow-hidden pb-[.08em] align-bottom"><${motion.span} className=${'inline-block ' + (a ? (light ? 'text-mintink' : 'text-mint') : '')}
+      initial=${{ y: '105%' }} whileInView=${{ y: '0%' }} viewport=${{ once: true, amount: 0.6 }} transition=${{ duration: 0.75, delay: (delay || 0) + i*0.05, ease: EASE }}>${w}<//>${i < all.length - 1 ? '\u00a0' : ''}</span>`)}<//>`;
+}
+
+/* magnetic button */
+const Arrow = () => html`<span className="inline-block transition-transform duration-200 ease-out group-hover:translate-x-0.5 group-hover:-translate-y-0.5">↗</span>`;
+function Btn({ href, children, kind }){
+  const ref = useRef(null); const [o, setO] = useState({ x: 0, y: 0 });
+  const move = e => { if (REDUCE) return; const r = ref.current.getBoundingClientRect(); setO({ x: (e.clientX - r.left - r.width/2)*.25, y: (e.clientY - r.top - r.height/2)*.35 }); };
+  const base = 'group inline-flex items-center gap-3 rounded-full px-5 py-3 text-[15px] font-medium transition-colors duration-200 ease-out';
+  const look = kind === 'ghost' ? 'border border-white/15 text-white/90 hover:border-mint hover:text-mint bg-white/[.02]'
+    : kind === 'dark' ? 'bg-obsidian text-white hover:bg-black' : kind === 'line' ? 'border border-black/15 text-obsidian hover:border-obsidian'
+    : 'bg-mint text-obsidian hover:bg-[#5BFFB0] shadow-[0_0_30px_-8px_rgba(0,255,136,.7)]';
+  return html`<${motion.a} ref=${ref} href=${href} onMouseMove=${move} onMouseLeave=${() => setO({ x: 0, y: 0 })} className=${base + ' ' + look}
+    animate=${{ x: o.x, y: o.y }} whileTap=${{ scale: 0.96 }} transition=${{ type: 'spring', stiffness: 300, damping: 18, mass: .4 }}>${children} <${Arrow}/><//>`;
+}
+const Eyebrow = ({ children, light }) => html`<span className=${'inline-flex items-center gap-3 font-mono text-[12px] uppercase tracking-[.14em] ' + (light ? 'text-black/50' : 'text-white/50')}><span className=${'h-px w-8 ' + (light ? 'bg-mintink' : 'bg-mint')}></span>${children}</span>`;
+
+/* ---------------- The one sphere: hero -> travels -> docks in the roles core ---------------- */
+const VS = `
+uniform float uTime; uniform vec3 uHit; uniform float uHitS; uniform float uPulse; uniform float uDpr; uniform float uVel; uniform float uShock;
+attribute float aRand; varying float vGlow; varying float vDepth;
+void main(){
+  vec3 p = position;
+  float d = distance(normalize(p), normalize(uHit));
+  float ripple = sin(d*18.0 - uTime*6.0) * exp(-d*2.8) * uHitS * (0.06 + uVel*0.10);
+  float bulge = exp(-d*d*14.0) * uHitS * (0.16 + uVel*0.14);
+  float shock = uShock > 0.0 ? exp(-pow(d - (1.0-uShock)*2.4, 2.0)*30.0) * uShock * 0.22 : 0.0;
+  float breathe = sin(uTime*0.8 + aRand*6.2831) * 0.012;
+  p *= 1.0 + ripple + bulge + shock + breathe + uPulse*0.05;
+  vGlow = exp(-d*d*8.0)*uHitS*(1.0 + uVel) + shock*3.0 + uPulse*0.3;
+  vec4 mv = modelViewMatrix * vec4(p, 1.0);
+  vDepth = clamp((-mv.z - (cameraPosition.z - 1.0)) / 2.0, 0.0, 1.0);
+  gl_PointSize = (1.6 + vGlow*4.5 + aRand*0.7) * uDpr * (cameraPosition.z / -mv.z) * max(0.6, modelMatrix[0][0]*0.9);
+  gl_Position = projectionMatrix * mv;
+}`;
+const FS = `
+varying float vGlow; varying float vDepth;
+void main(){
+  vec2 c = gl_PointCoord - 0.5; float r = length(c); if (r > 0.5) discard;
+  float soft = smoothstep(0.5, 0.0, r);
+  vec3 col = mix(vec3(0.55,0.95,0.78), vec3(0.0,1.0,0.533), clamp(vGlow,0.0,1.0));
+  col = mix(col, vec3(1.0), clamp(vGlow-0.8,0.0,1.0));
+  float a = soft * mix(0.95, 0.15, vDepth) * (0.5 + vGlow*0.9);
+  gl_FragColor = vec4(col, a);
+}`;
+
+function TravelSphere({ heroSlot, coreSlot }){
+  const cv = useRef(null);
+  useEffect(() => {
+    const T = window.THREE, canvas = cv.current; if (!T || !canvas) return;
+    let renderer; try { renderer = new T.WebGLRenderer({ canvas, antialias: true, alpha: true }); } catch (e) { return; }
+    const dpr = Math.min(2, devicePixelRatio || 1); renderer.setPixelRatio(dpr);
+    const FOV = 35, CZ = 6, scene = new T.Scene(), cam = new T.PerspectiveCamera(FOV, 1, 0.1, 60); cam.position.z = CZ;
+    const root = new T.Group(), spin = new T.Group(); root.add(spin); scene.add(root);
+    const N = innerWidth < 700 ? 1800 : 3200, pos = new Float32Array(N*3), rnd = new Float32Array(N);
+    for (let i = 0; i < N; i++){ const y = 1 - (i/(N-1))*2, r = Math.sqrt(1-y*y), th = i*2.399963; pos[i*3] = Math.cos(th)*r; pos[i*3+1] = y; pos[i*3+2] = Math.sin(th)*r; rnd[i] = Math.random(); }
+    const geo = new T.BufferGeometry(); geo.setAttribute('position', new T.BufferAttribute(pos, 3)); geo.setAttribute('aRand', new T.BufferAttribute(rnd, 1));
+    const uni = { uTime:{value:0}, uHit:{value:new T.Vector3(0,0,1)}, uHitS:{value:0}, uPulse:{value:0}, uDpr:{value:dpr}, uVel:{value:0}, uShock:{value:0} };
+    spin.add(new T.Points(geo, new T.ShaderMaterial({ uniforms: uni, vertexShader: VS, fragmentShader: FS, transparent: true, depthWrite: false, blending: T.AdditiveBlending })));
+    const gc = document.createElement('canvas'); gc.width = gc.height = 128; const g2 = gc.getContext('2d'); const grd = g2.createRadialGradient(64,64,0,64,64,64);
+    grd.addColorStop(0,'rgba(0,255,136,.36)'); grd.addColorStop(.45,'rgba(16,90,60,.16)'); grd.addColorStop(1,'rgba(0,0,0,0)'); g2.fillStyle = grd; g2.fillRect(0,0,128,128);
+    const glowMat = new T.SpriteMaterial({ map: new T.CanvasTexture(gc), blending: T.AdditiveBlending, depthWrite: false, transparent: true });
+    const spr = new T.Sprite(glowMat); spr.scale.setScalar(3.6); root.add(spr);
+    const rings = new T.Group(); root.add(rings);
+    [[1.42,.36,.32,.25,.45],[1.2,1.14,-.5,.9,.22],[.3,1.3,.15,-.2,.38]].forEach(([rx,ry,rz,rxr,op]) => {
+      const pts = new T.EllipseCurve(0,0,rx,ry,0,Math.PI*2).getPoints(200).map(v => new T.Vector3(v.x, v.y, 0));
+      const ln = new T.Line(new T.BufferGeometry().setFromPoints(pts), new T.LineBasicMaterial({ color: 0x00ff88, transparent: true, opacity: op }));
+      ln.rotation.z = rz; ln.rotation.x = rxr; ln.userData.op = op; rings.add(ln); });
+    const ray = new T.Raycaster(), ndc = new T.Vector2(), sph = new T.Sphere(new T.Vector3(), 1), hit = new T.Vector3();
+    const resize = () => { renderer.setSize(innerWidth, innerHeight, false); cam.aspect = innerWidth/innerHeight; cam.updateProjectionMatrix(); };
+    resize(); addEventListener('resize', resize);
+    const st = { x: 0, y: 0, s: 1, lx: 0, ly: 0 }; let spinA = 0, last = performance.now(), raf, hidden = false;
+    const ease = t => t < .5 ? 4*t*t*t : 1 - Math.pow(-2*t + 2, 3)/2;
+    const loop = now => {
+      raf = requestAnimationFrame(loop);
+      const dt = Math.min(.05, (now - last)/1000); last = now;
+      const hs = heroSlot.current, cs = coreSlot.current; if (!hs || !cs) return;
+      const h = hs.getBoundingClientRect(), c = cs.getBoundingClientRect();
+      const D = (c.top + scrollY + c.height/2) - innerHeight/2;            // scroll distance until the core is centred
+      const p = Math.max(0, Math.min(1, scrollY / Math.max(1, D))), e = ease(p);
+      const hx = h.left + h.width/2, hy = h.top + scrollY + h.height/2;   // hero spot, held on screen while travelling
+      const cx = c.left + c.width/2, cy = c.top + c.height/2;
+      let tx = hx + (cx - hx)*e, ty = hy + (cy - hy)*e, ts = (h.width + (c.width - h.width)*e) * .36;
+      if (p >= 1){ tx = cx; ty = cy; ts = c.width*.36; }
+      // lean toward the pointer (strong in the hero, gentle once docked)
+      const lean = .12 - .08*e; st.lx += ((PTR.x - tx)*lean - st.lx)*.08; st.ly += ((PTR.y - ty)*lean - st.ly)*.08;
+      // mid-flight swing so the trip reads as a journey
+      const swing = Math.sin(e*Math.PI) * Math.min(innerWidth*.12, 160);
+      tx += st.lx - swing; ty += st.ly;
+      st.x += (tx - st.x)*.18; st.y += (ty - st.y)*.18; st.s += (ts - st.s)*.18;
+      const off = st.y + st.s < -40 || st.y - st.s > innerHeight + 40;
+      if (off){ if (!hidden){ renderer.clear(); hidden = true; } return; } hidden = false;
+      const wpp = (2*Math.tan(FOV*Math.PI/360)*CZ) / innerHeight;
+      root.position.set((st.x - innerWidth/2)*wpp, -(st.y - innerHeight/2)*wpp, 0);
+      const R = st.s*wpp; root.scale.setScalar(R); sph.center.copy(root.position); sph.radius = R;
+      // spin + pointer-driven tilt, with inertia
+      if (!REDUCE) spinA += dt*(.1 + Math.min(1.5, Math.hypot(PTR.vx, PTR.vy)*.01));
+      const mx = PTR.x/innerWidth - .5, my = PTR.y/innerHeight - .5;
+      spin.rotation.y += ((spinA + mx*1.4) - spin.rotation.y)*.1; spin.rotation.x += ((my*.8 + e*.6) - spin.rotation.x)*.1;
+      rings.rotation.y = spin.rotation.y*.35; rings.rotation.x = spin.rotation.x*.6 + e*.4; rings.rotation.z = REDUCE ? 0 : now*.00008;
+      rings.children.forEach(l => { l.material.opacity = l.userData.op*(1 - e*.35); });
+      // cursor hit, speed and click shockwave
+      ndc.set((PTR.x/innerWidth)*2 - 1, -(PTR.y/innerHeight)*2 + 1); ray.setFromCamera(ndc, cam);
+      let target = 0;
+      if (ray.ray.intersectSphere(sph, hit)){ uni.uHit.value.lerp(spin.worldToLocal(hit.clone()).normalize(), .4); target = 1; }
+      else { const dpx = Math.hypot(PTR.x - st.x, PTR.y - st.y); if (dpx < st.s*1.8){ target = 1 - (dpx - st.s)/(st.s*.8); target = Math.max(0, Math.min(1, target)); } }
+      uni.uHitS.value += (target - uni.uHitS.value)*.14;
+      const vel = Math.min(1, Math.hypot(PTR.vx, PTR.vy)/40); uni.uVel.value += (vel - uni.uVel.value)*.1; PTR.vx *= .85; PTR.vy *= .85;
+      const since = (now - PTR.down)/900; uni.uShock.value = since >= 0 && since < 1 ? 1 - since : 0;
+      uni.uPulse.value *= .94; uni.uTime.value = REDUCE ? 0 : now/1000;
+      renderer.render(scene, cam);
+    };
+    raf = requestAnimationFrame(loop);
+    window.__pulseSphere = v => { uni.uPulse.value = Math.max(uni.uPulse.value, v || 1); };
+    window.__aimSphere = (lat, lon) => { if (lat == null){ return; } const la = lat*Math.PI/180, lo = lon*Math.PI/180; uni.uHit.value.set(Math.cos(la)*Math.cos(lo), Math.sin(la), Math.cos(la)*Math.sin(lo)); uni.uHitS.value = 1; };
+    return () => { cancelAnimationFrame(raf); removeEventListener('resize', resize); renderer.dispose(); };
+  }, []);
+  return html`<canvas id="sphere" ref=${cv} aria-hidden="true"></canvas>`;
+}
+
+/* ---------------- Nav + progress ---------------- */
+function Nav(){
+  const [p, setP] = useState(0);
+  useEffect(() => { const on = () => setP(scrollY / Math.max(1, document.documentElement.scrollHeight - innerHeight)); on(); addEventListener('scroll', on, { passive: true }); return () => removeEventListener('scroll', on); }, []);
+  const links = [['Platform','#roles'],['Parts','#layers'],['Numbers','#numbers'],['Pricing','#pricing'],['Questions','#faq']];
+  return html`<header className="fixed inset-x-0 top-0 z-50 border-b border-white/[.06] bg-obsidian/60 backdrop-blur-xl" style=${{ paddingTop: 'env(safe-area-inset-top,0px)' }}>
+    <div className="gutter mx-auto grid h-16 max-w-[1240px] grid-cols-[1fr_auto] items-center gap-6 md:grid-cols-[1fr_auto_1fr]">
+      <a href="#top" className="flex items-center gap-2.5 text-[17px] font-semibold tracking-tight text-white">
+        <svg viewBox="0 0 24 24" className="h-6 w-6" fill="none" stroke="#00FF88" strokeWidth="1.4"><circle cx="12" cy="12" r="9"/><ellipse cx="12" cy="12" rx="9" ry="3.4"/><circle cx="12" cy="12" r="2.2" fill="#00FF88"/></svg>
+        Campus Pool</a>
+      <nav className="hidden gap-8 md:flex" aria-label="Sections">${links.map(([t, h]) => html`<a key=${t} href=${h} className="group relative text-[14px] text-white/65 transition-colors duration-200 ease-out hover:text-white">${t}<span className="absolute -bottom-1 left-0 h-px w-0 bg-mint transition-all duration-300 ease-out group-hover:w-full"></span></a>`)}</nav>
+      <div className="flex justify-end"><${Btn} href="#join">Lend a laptop<//></div>
+    </div>
+    <div className="h-px origin-left bg-mint shadow-[0_0_10px_#00FF88]" style=${{ transform: 'scaleX(' + p + ')' }}></div>
+  </header>`;
+}
+
+/* ---------------- Hero ---------------- */
+function Hero({ slot }){
+  const lines = [['Laptops', 'that'], ['work', 'as', 'one.']];
+  return html`<section id="top" className="ambient relative overflow-hidden pt-28 md:pt-32">
+    <div className="grid-bg pointer-events-none absolute inset-0"></div>
+    <div className="gutter relative mx-auto grid min-h-[min(88svh,820px)] max-w-[1240px] items-center gap-6 md:grid-cols-[1.05fr_.95fr]">
+      <div className="relative z-10 flex flex-col gap-7">
+        <${motion.div} initial=${{ opacity: 0, x: -12 }} animate=${{ opacity: 1, x: 0 }} transition=${{ duration: .6, ease: EASE }}>
+          <span className="inline-flex items-center gap-2 rounded-full border border-mint/30 bg-mint/[.06] px-3 py-1.5 font-mono text-[11.5px] uppercase tracking-[.12em] text-mint"><span className="blink h-1.5 w-1.5 rounded-full bg-mint"></span>Track D · Campus Edge Fabric</span><//>
+        <h1 className="text-[clamp(3rem,7vw,6rem)] font-semibold leading-[.98] tracking-[-0.05em] text-white">
+          ${lines.map((ln, li) => html`<span key=${li} className="block">${ln.map((w, wi) => html`<span key=${wi} className="inline-block overflow-hidden pb-[.06em] align-bottom"><${motion.span} className=${'inline-block ' + (li ? 'text-mint' : '')}
+            initial=${{ y: '110%', rotate: 4 }} animate=${{ y: '0%', rotate: 0 }} transition=${{ duration: .9, delay: .15 + (li*2 + wi)*.08, ease: EASE }}>${w}<//>${wi < ln.length - 1 ? '\u00a0' : ''}</span>`)}</span>`)}
+        </h1>
+        <${motion.p} className="max-w-[44ch] text-[17px] leading-relaxed text-white/60" initial=${{ opacity: 0, y: 14 }} animate=${{ opacity: 1, y: 0 }} transition=${{ duration: .8, delay: .55, ease: EASE }}>Describe a compute task or bring your code. Your team's idle laptops run it and hand back the result.<//>
+        <${motion.div} className="flex flex-wrap gap-3" initial=${{ opacity: 0, y: 14 }} animate=${{ opacity: 1, y: 0 }} transition=${{ duration: .8, delay: .7, ease: EASE }}><${Btn} href="#roles">Run a task<//><${Btn} href="#join" kind="ghost">Contribute compute<//><//>
+      </div>
+      <div ref=${slot} className="order-first mx-auto aspect-square w-full max-w-[320px] md:order-none md:max-w-[600px]" aria-hidden="true"></div>
+    </div>
+    <div className="gutter relative mx-auto flex max-w-[1240px] items-center justify-between gap-4 pb-8">
+      <span className="flex items-center gap-3 font-mono text-[11.5px] uppercase tracking-[.14em] text-white/45"><span className="relative block h-7 w-4 rounded-full border border-white/25"><span className="scrolldot absolute left-1/2 top-1.5 h-1.5 w-1 -translate-x-1/2 rounded-full bg-mint"></span></span>Scroll to send it to work</span>
+      <span className="hidden font-mono text-[11.5px] uppercase tracking-[.14em] text-white/45 sm:block">Move your cursor over the core · click for a pulse</span>
+    </div>
+  </section>`;
+}
+
+/* ---------------- Marquee ---------------- */
+function Marquee(){
+  const items = ['FastAPI', 'PostgreSQL leases', 'DeepSeek planner', 'Go runner', 'Docker sandbox', 'CUDA', 'Outbound HTTPS', 'Fenced completion', 'Checkpoints', 'React + Vite', 'EN / ZH search', 'Fashion-MNIST'];
+  const row = items.concat(items);
+  return html`<div className="relative overflow-hidden border-y border-white/[.06] bg-obsidian py-5" aria-hidden="true">
+    <div className="marquee flex w-max gap-10 whitespace-nowrap">${row.map((t, i) => html`<span key=${i} className="flex items-center gap-10 text-[15px] text-white/45"><span>${t}</span><span className="text-mint">✦</span></span>`)}</div>
+    <div className="pointer-events-none absolute inset-y-0 left-0 w-24 bg-gradient-to-r from-obsidian to-transparent"></div><div className="pointer-events-none absolute inset-y-0 right-0 w-24 bg-gradient-to-l from-obsidian to-transparent"></div>
+  </div>`;
+}
+
+/* ---------------- Six roles around the docked core ---------------- */
+const ROLES = [
+  { t: 'AI planner', s: 'DeepSeek · schema-checked', lat: 40, lon: -30 },
+  { t: 'Job queue', s: 'PostgreSQL · leases', lat: 0, lon: -60 },
+  { t: 'Validator', s: 'Accepts each result once', lat: -40, lon: -30 },
+  { t: 'GPU worker', s: 'CUDA · opt-in', lat: 40, lon: 150, worker: true },
+  { t: 'CPU worker', s: 'Docker · Go runner', lat: 0, lon: 120, worker: true },
+  { t: 'CPU worker', s: 'Drain or Stop anytime', lat: -40, lon: 150, worker: true }
+];
+function Roles({ slot }){
+  const box = useRef(null), cards = useRef([]);
+  const [paths, setPaths] = useState([]); const [hot, setHot] = useState(-1); const [sz, setSz] = useState({ w: 0, h: 0, cx: 0, cy: 0, r: 0 });
+  const seen = useInView(box, 0.25);
+  useLayoutEffect(() => {
+    const calc = () => { const b = box.current, c = slot.current; if (!b || !c || innerWidth < 1024) { setPaths([]); return; }
+      const B = b.getBoundingClientRect(), C = c.getBoundingClientRect(), cx = C.left + C.width/2 - B.left, cy = C.top + C.height/2 - B.top, R = C.width*0.37;
+      setSz({ w: B.width, h: B.height, cx, cy, r: R });
+      setPaths(cards.current.map((el, i) => { if (!el) return null; const r = el.getBoundingClientRect(), left = i < 3, k = i % 3 - 1;
+        const x = left ? r.right - B.left : r.left - B.left, y = r.top + r.height/2 - B.top;
+        const ang = (left ? Math.PI : 0) + (left ? -k : k)*0.55, sx = cx + Math.cos(ang)*R, sy = cy + Math.sin(ang)*R;
+        return { d: `M${sx.toFixed(1)} ${sy.toFixed(1)} C ${(sx + (left ? -1 : 1)*R*.55).toFixed(1)} ${sy.toFixed(1)}, ${(x + (left ? 1 : -1)*90).toFixed(1)} ${y.toFixed(1)}, ${x.toFixed(1)} ${y.toFixed(1)}`, x, y, sx, sy }; })); };
+    calc(); addEventListener('resize', calc); const t = setTimeout(calc, 500); return () => { removeEventListener('resize', calc); clearTimeout(t); };
+  }, []);
+  const enter = (i, r) => { setHot(i); window.__aimSphere && window.__aimSphere(r.lat, r.lon); window.__pulseSphere && window.__pulseSphere(.9); };
+  const card = (r, i) => html`<${motion.div} key=${i} ref=${el => cards.current[i] = el}
+      initial=${{ opacity: 0, x: i < 3 ? -40 : 40 }} whileInView=${{ opacity: 1, x: 0 }} viewport=${{ once: true, amount: .5 }} transition=${{ duration: .7, delay: .15 + (i % 3)*.1, ease: EASE }}
+      onMouseEnter=${() => enter(i, r)} onMouseLeave=${() => setHot(-1)} whileHover=${{ y: -4, scale: 1.02 }}
+      className=${'relative z-10 flex items-center gap-4 rounded-2xl border bg-obsidian/70 px-5 py-4 backdrop-blur-md transition-colors duration-200 ' + (hot === i ? 'border-mint/70 shadow-[0_0_40px_-12px_rgba(0,255,136,.6)]' : 'border-white/10')}>
+      <span className=${'grid h-10 w-10 shrink-0 place-items-center rounded-xl border font-mono text-[12px] ' + (hot === i ? 'border-mint bg-mint text-obsidian' : 'border-white/15 text-mint')}>0${i + 1}</span>
+      <div className="min-w-0 flex-1"><h3 className="text-[16px] font-medium text-white">${r.t}</h3><p className="truncate font-mono text-[11.5px] uppercase tracking-wider text-white/45">${r.s}</p></div>
+      ${r.worker ? html`<span className="eq flex h-5 items-end gap-[3px]">${[0, .2, .4].map(d => html`<span key=${d} style=${{ height: '100%', animationDelay: d + 's' }}></span>`)}</span>` : html`<span className="blink h-2 w-2 rounded-full bg-mint"></span>`}
+    <//>`;
+  return html`<section id="roles" className="ambient relative border-t border-white/[.06] py-28 md:py-36">
+    <div className="gutter mx-auto max-w-[1240px]">
+      <div className="mx-auto mb-12 flex max-w-[720px] flex-col items-center gap-5 text-center">
+        <${Eyebrow}>01 · The pool<//>
+        <${Words} text="One request." accent="Six roles." className="text-[clamp(2.4rem,5vw,4.4rem)] font-semibold leading-[1.0] tracking-[-0.045em] text-white"/>
+      </div>
+      <div ref=${box} className="relative grid items-center gap-4 lg:grid-cols-[1fr_440px_1fr] lg:gap-10">
+        <svg className="pointer-events-none absolute inset-0 hidden h-full w-full overflow-visible lg:block" aria-hidden="true">
+          <defs>
+            <filter id="glow" x="-50%" y="-50%" width="200%" height="200%"><feGaussianBlur stdDeviation="4" result="b"/><feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge></filter>
+            <radialGradient id="halo"><stop offset="0" stopColor="#00FF88" stopOpacity=".18"/><stop offset="1" stopColor="#00FF88" stopOpacity="0"/></radialGradient>
+          </defs>
+          ${sz.r > 0 && html`<g>
+            <circle cx=${sz.cx} cy=${sz.cy} r=${sz.r*1.5} fill="url(#halo)"/>
+            ${[0, 1, 2].map(k => html`<circle key=${k} cx=${sz.cx} cy=${sz.cy} r=${sz.r} fill="none" stroke="#00FF88" strokeWidth="1" opacity="0">
+              ${!REDUCE && html`<animate attributeName="r" from=${sz.r} to=${sz.r*1.45} dur="3s" begin=${k + 's'} repeatCount="indefinite"/><animate attributeName="opacity" values=".45;0" dur="3s" begin=${k + 's'} repeatCount="indefinite"/>`}</circle>`)}
+          </g>`}
+          ${paths.map((p, i) => p && html`<g key=${i} opacity=${hot === -1 || hot === i ? 1 : .25} style=${{ transition: 'opacity .3s' }}>
+            <${motion.path} id=${'wire' + i} d=${p.d} fill="none" stroke="rgba(0,255,136,.28)" strokeWidth="1.2" initial=${{ pathLength: 0 }} animate=${{ pathLength: seen ? 1 : 0 }} transition=${{ duration: 1.2, delay: .3 + i*.12, ease: EASE }}/>
+            ${seen && html`<path d=${p.d} fill="none" stroke="#00FF88" strokeWidth=${hot === i ? 3 : 2} strokeLinecap="round" className="comet" pathLength="1000" filter="url(#glow)" style=${{ animationDelay: (i*.45) + 's', animationDuration: hot === i ? '1.4s' : '3.2s' }}/>`}
+            ${seen && !REDUCE && html`<circle r=${hot === i ? 4.5 : 3.2} fill="#00FF88" filter="url(#glow)"><animateMotion dur=${hot === i ? '1.2s' : '2.6s'} begin=${(i*.37) + 's'} repeatCount="indefinite"><mpath href=${'#wire' + i}/></animateMotion></circle>
+              <circle r="2.6" fill="#E8EEEA"><animateMotion dur=${hot === i ? '1.2s' : '2.6s'} begin=${(1.3 + i*.37) + 's'} repeatCount="indefinite" keyPoints="1;0" keyTimes="0;1" calcMode="linear"><mpath href=${'#wire' + i}/></animateMotion></circle>`}
+            <circle cx=${p.x} cy=${p.y} r="4" fill="#0B0F0E" stroke="#00FF88" strokeWidth="1.5"/>
+            <circle cx=${p.sx} cy=${p.sy} r="3" fill="#00FF88" filter="url(#glow)"/>
+          </g>`)}
+        </svg>
+        <div className="flex flex-col gap-4">${ROLES.slice(0, 3).map((r, i) => card(r, i))}</div>
+        <div ref=${slot} className="relative order-first mx-auto aspect-square w-full max-w-[300px] lg:order-none lg:max-w-none" aria-hidden="true"></div>
+        <div className="flex flex-col gap-4">${ROLES.slice(3).map((r, i) => card(r, i + 3))}</div>
+      </div>
+      <div className="mt-12 flex flex-wrap justify-center gap-x-8 gap-y-2 font-mono text-[11.5px] uppercase tracking-[.14em] text-white/40">
+        <span className="flex items-center gap-2"><span className="h-2 w-2 rounded-full bg-mint"></span>Work going out</span>
+        <span className="flex items-center gap-2"><span className="h-2 w-2 rounded-full bg-[#E8EEEA]"></span>Results coming back</span>
+        <span>Hover a role</span>
+      </div>
+    </div></section>`;
+}
+
+/* ---------------- Layer stack, fanned by scroll (light) ---------------- */
+const LAYERS = [
+  ['Portal', 'Run a task or lend a laptop. Plan preview, live progress, downloads.'],
+  ['Console', 'Devices, attempts, retries and matched benchmarks.'],
+  ['Coordinator', 'FastAPI over trusted HTTPS. The one place that decides.'],
+  ['Queue + files', 'PostgreSQL leases and SHA-256 checked files.'],
+  ['Go runner', 'Polls for work, runs it in Docker or CUDA.'],
+  ['Validator', 'A well-formed but wrong result does not count.']
+];
+function Layers(){
+  const ref = useRef(null); const p = useProgress(ref);
+  const [act, setAct] = useState(-1);
+  const autoAct = Math.min(LAYERS.length - 1, Math.max(0, Math.floor((p - .25) / .5 * LAYERS.length)));
+  const cur = act >= 0 ? act : autoAct;
+  const gap = 10 + Math.max(0, Math.min(1, (p - .1) / .4)) * 48, rot = -42 + (p - .5)*16;
+  return html`<section id="layers" ref=${ref} className="relative overflow-hidden bg-cream py-28 text-obsidian md:py-36">
+    <div className="gutter mx-auto max-w-[1240px]">
+      <div className="mb-14 flex flex-col gap-5"><${Eyebrow} light>02 · The parts<//>
+        <${Words} text="Six parts." accent="One coordinator." light=${true} className="text-[clamp(2.4rem,5vw,4.4rem)] font-semibold leading-[1.0] tracking-[-0.045em]"/></div>
+      <div className="grid items-center gap-12 lg:grid-cols-2">
+        <div className="relative h-[440px] md:h-[540px]" style=${{ perspective: '1600px' }} aria-hidden="true">
+          <div className="absolute left-1/2 top-1/2 h-[220px] w-[220px] -translate-x-1/2 -translate-y-1/2 md:h-[290px] md:w-[290px]" style=${{ transformStyle: 'preserve-3d' }}>
+            ${LAYERS.map((l, i) => { const on = cur === i, z = (LAYERS.length - 1 - i)*gap - gap*2.5 + (on ? 40 : 0);
+              return html`<div key=${l[0]} className="absolute inset-0 rounded-lg border" style=${{ transform: 'rotateX(58deg) rotateZ(' + rot.toFixed(1) + 'deg) translateZ(' + z.toFixed(1) + 'px)', transition: 'transform .5s cubic-bezier(.2,.8,.2,1), background .35s, box-shadow .35s', background: on ? '#00FF88' : '#0B0F0E', borderColor: on ? '#00FF88' : 'rgba(255,255,255,.08)', boxShadow: on ? '0 50px 90px -30px rgba(0,166,90,.7)' : '0 30px 60px -30px rgba(11,15,14,.5)' }}>
+                <span className=${'absolute bottom-3 left-3 font-mono text-[11px] ' + (on ? 'text-obsidian' : 'text-white/50')}>0${i + 1}</span>
+                <span className=${'absolute right-3 top-3 font-mono text-[11px] ' + (on ? 'text-obsidian' : 'text-white/50')}>${l[0]}</span>
+                ${on && html`<span className="absolute inset-3 rounded border border-obsidian/20"></span>`}</div>`; })}
+          </div>
+        </div>
+        <div className="grid gap-x-8 sm:grid-cols-2" onMouseLeave=${() => setAct(-1)}>
+          ${LAYERS.map((l, i) => html`<${motion.button} key=${l[0]} type="button" aria-pressed=${cur === i} onMouseEnter=${() => setAct(i)} onFocus=${() => setAct(i)} onClick=${() => setAct(i)}
+            initial=${{ opacity: 0, y: 20 }} whileInView=${{ opacity: 1, y: 0 }} viewport=${{ once: true, amount: .5 }} transition=${{ duration: .6, delay: i*.06, ease: EASE }}
+            className="group relative border-b border-black/10 py-5 text-left">
+            <h3 className="text-[17px] font-medium"><span className="mr-2 text-mintink">0${i + 1}</span>${l[0]}</h3>
+            <p className="mt-1 text-[14px] text-black/55">${l[1]}</p>
+            <span className=${'absolute -bottom-px left-0 h-0.5 bg-mintink transition-all duration-500 ease-out ' + (cur === i ? 'w-full' : 'w-0')}></span>
+          <//>`)}
+        </div>
+      </div>
+    </div></section>`;
+}
+
+/* ---------------- Numbers + live run (light) ---------------- */
+function Count({ to, suffix }){
+  const ref = useRef(null); const seen = useInView(ref, 0.6); const [v, setV] = useState(to);
+  useEffect(() => { if (!seen || REDUCE) return; let raf, s = performance.now(); const tick = n => { const p = Math.min(1, (n - s)/1500), e = 1 - Math.pow(1 - p, 3); setV(Math.round(to*e)); if (p < 1) raf = requestAnimationFrame(tick); }; setV(0); raf = requestAnimationFrame(tick); return () => cancelAnimationFrame(raf); }, [seen]);
+  return html`<span ref=${ref} className="tabular-nums">${v}<span className="ml-1 align-top text-[.38em] font-medium text-mintink">${suffix}</span></span>`;
+}
+const RUN = [
+  { k: 'Plan', d: 'ready', s: 0, t: .5 },
+  { k: 'Split', d: '24 tasks', s: .5, t: .4 },
+  { k: 'GPU node', d: '9 tasks', s: .9, t: 2.6 },
+  { k: 'CPU node 1', d: '4 + 1 retried', s: .9, t: 2.3, lost: true },
+  { k: 'CPU node 2', d: '6 tasks', s: .9, t: 2.5 },
+  { k: 'CPU node 3', d: '5 tasks', s: .9, t: 2.2 },
+  { k: 'Validator', d: '24 / 24', s: 3.5, t: .6 }
+];
+function RunSim(){
+  const [t, setT] = useState(REDUCE ? 9 : 0);
+  useEffect(() => { if (REDUCE) return; const id = setInterval(() => setT(x => x >= 7.5 ? 0 : x + .06), 60); return () => clearInterval(id); }, []);
+  const done = t >= 4.1;
+  return html`<div className="rounded-2xl bg-obsidian p-6 text-white shadow-[0_40px_80px_-40px_rgba(11,15,14,.6)]">
+    <div className="mb-4 flex flex-wrap items-center justify-between gap-3 border-b border-white/10 pb-4">
+      <div><div className="font-mono text-[12px] uppercase tracking-[.12em] text-white/45">Document search · simulation</div><div className="mt-1 text-[15px]">Index EN/ZH lab notes</div></div>
+      <${motion.span} key=${done ? 'd' : 'r'} initial=${{ scale: .8, opacity: 0 }} animate=${{ scale: 1, opacity: 1 }} className=${'rounded-full border px-3 py-1 font-mono text-[11px] uppercase tracking-wider ' + (done ? 'border-mint/60 bg-mint/10 text-mint' : 'border-white/20 text-white/70')}>${done ? '✓ Run settled' : 'Running · ' + Math.min(t, 4.1).toFixed(1) + ' s'}<//>
+    </div>
+    <div className="flex flex-col">${RUN.map(r => { const p = Math.max(0, Math.min(1, (t - r.s)/r.t)); const lostNow = r.lost && t > r.s + r.t*.35 && t < r.s + r.t*.55;
+      return html`<div key=${r.k} className="grid grid-cols-[86px_1fr_auto] items-center gap-3 border-b border-dashed border-white/10 py-2.5 last:border-0 sm:grid-cols-[100px_1fr_120px]">
+        <span className="text-[14px]">${r.k}</span>
+        <div className="h-1.5 overflow-hidden rounded-full bg-white/10"><div className=${'h-full rounded-full ' + (lostNow ? 'bg-amber' : 'bg-mint shadow-[0_0_10px_#00FF88]')} style=${{ width: (p*100).toFixed(1) + '%', transition: 'width 120ms linear' }}></div></div>
+        <span className=${'text-right font-mono text-[11.5px] ' + (lostNow ? 'text-amber' : p >= 1 ? 'text-mint' : 'text-white/45')}>${lostNow ? 'lost · retry' : p >= 1 ? r.d : p > 0 ? Math.round(p*100) + '%' : 'waiting'}</span></div>`; })}
+    </div>
+  </div>`;
+}
+function Metrics(){
+  return html`<section id="numbers" className="border-t border-black/10 bg-cream py-28 text-obsidian md:py-36">
+    <div className="gutter mx-auto max-w-[1240px]">
+      <div className="mb-14 flex flex-col gap-5"><${Eyebrow} light>03 · By design<//>
+        <${Words} text="Built from rules." accent="Measured, not promised." light=${true} className="text-[clamp(2.4rem,5vw,4.4rem)] font-semibold leading-[1.0] tracking-[-0.045em]"/>
+        <${Reveal} delay=${.2}><p className="max-w-[52ch] text-black/55">Starting values from the design, tuned after we measure campus Wi-Fi.</p><//></div>
+      <div className="grid grid-cols-2 border-t border-black/10 lg:grid-cols-4">
+        ${[[60, 's', 'Lease on every task'], [10, 's', 'Between heartbeats'], [25, 's', 'Longest wait for new work'], [0, 'ports', 'Opened on worker laptops']].map(([n, s, l], i) => html`<${Reveal} key=${l} delay=${i*.08} className=${'flex flex-col gap-3 py-8 ' + (i % 2 ? 'pl-6 border-l border-black/10 ' : '') + (i === 2 ? 'lg:pl-6 lg:border-l lg:border-black/10' : '')}>
+          <div className="text-[clamp(3rem,6vw,5.2rem)] font-semibold leading-none tracking-[-0.05em]"><${Count} to=${n} suffix=${s}/></div><p className="text-[14px] text-black/55">${l}</p><//>`)}
+      </div>
+      <div className="mt-16 grid items-start gap-8 lg:grid-cols-[1.25fr_.75fr]">
+        <${Reveal} y=${40}><${RunSim}/><//>
+        <${Reveal} delay=${.12} y=${40} className="flex flex-col gap-4 rounded-2xl border border-black/10 bg-white/60 p-6">
+          <span className="self-start rounded-full border border-mintink/50 px-3 py-1 font-mono text-[11px] uppercase tracking-wider text-mintink">Where we are</span>
+          <h3 className="text-[24px] font-semibold leading-tight tracking-tight">Server verified. Physical pool next.</h3>
+          ${[['AI plan → Docker → validator', 'verified'], ['Leases, cancel, restore', 'tests pass'], ['Portal and console', '19 browser tests'], ['Go runner on laptops', 'pending'], ['Two-device measurements', 'pending']].map(([a, b], i) => html`<${motion.div} key=${a} initial=${{ opacity: 0, x: 16 }} whileInView=${{ opacity: 1, x: 0 }} viewport=${{ once: true }} transition=${{ delay: .2 + i*.08, duration: .5, ease: EASE }} className="flex justify-between gap-4 border-t border-black/10 pt-3 text-[14px]"><span>${a}</span><span className=${'flex items-center gap-1.5 text-right ' + (b === 'pending' ? 'text-[#B0661C]' : 'text-mintink')}><span className=${'h-1.5 w-1.5 rounded-full ' + (b === 'pending' ? 'bg-[#E0912F] blink' : 'bg-mintink')}></span>${b}</span><//>`)}
+        <//>
+      </div>
+    </div></section>`;
+}
+
+/* ---------------- Pricing (light) ---------------- */
+function Pricing(){
+  const [year, setYear] = useState(false);
+  const plans = [
+    { n: 'Student team', p: 'Free', s: '', d: 'A project team sharing a few laptops.', f: ['Up to 5 laptops', 'Web and CLI', 'Checked results'], cta: 'Start a pool' },
+    { n: 'Lab', p: 'Pilot', s: year ? '/ year' : '/ semester', d: 'A lab or course running jobs every week.', f: ['Unlimited laptops', 'Live console and reports', 'Credits for contributors'], cta: 'Join the pilot', main: true },
+    { n: 'Campus', p: 'Custom', s: '', d: 'A university IT team serving many labs.', f: ['Many pools, one licence', 'Coordinator on campus', 'Setup and support'], cta: 'Talk to us' }
+  ];
+  return html`<section id="pricing" className="border-t border-black/10 bg-cream py-28 text-obsidian md:py-36">
+    <div className="gutter mx-auto max-w-[1240px]">
+      <div className="mb-12 flex flex-col gap-5"><${Eyebrow} light>04 · Pricing<//>
+        <${Words} text="Priced per pool." accent="Not per GPU hour." light=${true} className="text-[clamp(2.4rem,5vw,4.4rem)] font-semibold leading-[1.0] tracking-[-0.045em]"/>
+        <${Reveal} delay=${.2}><p className="max-w-[52ch] text-black/55">You bring the laptops. The subscription is a hypothesis for our pilot; credits are not cash.</p><//>
+        <div className="relative inline-flex self-start rounded-full border border-black/10 bg-white/60 p-1" role="group" aria-label="Billing period">
+          ${[['Per semester', false], ['Per year', true]].map(([l, y]) => html`<button key=${l} type="button" aria-pressed=${year === y} onClick=${() => setYear(y)} className=${'relative z-10 rounded-full px-4 py-2 text-[14px] transition-colors duration-200 ' + (year === y ? 'text-white' : 'text-black/60')}>
+            ${year === y && html`<${motion.span} layoutId="bill" layout=${true} className="absolute inset-0 -z-10 rounded-full bg-obsidian" transition=${{ type: 'spring', stiffness: 400, damping: 30 }}/>`}${l}</button>`)}
+        </div></div>
+      <div className="grid gap-5 lg:grid-cols-3">
+        ${plans.map((p, i) => html`<${motion.div} key=${p.n} initial=${{ opacity: 0, y: 50 }} whileInView=${{ opacity: 1, y: 0 }} viewport=${{ once: true, amount: .2 }} whileHover=${{ y: -6 }} transition=${{ duration: .6, delay: i*.1, ease: EASE }}
+          className=${'relative flex flex-col gap-5 rounded-2xl p-7 ' + (p.main ? 'bg-obsidian text-white ring-2 ring-mint shadow-[0_0_70px_-20px_rgba(0,255,136,.6)]' : 'border border-black/10 bg-white/60')}>
+          ${p.main && html`<span className="absolute -top-3 left-7 rounded-full bg-mint px-3 py-1 text-[12px] font-semibold text-obsidian">Most labs</span>`}
+          <span className=${'font-mono text-[12px] uppercase tracking-[.12em] ' + (p.main ? 'text-white/50' : 'text-black/50')}>${p.n}</span>
+          <div className="text-[clamp(2.4rem,4vw,3.2rem)] font-semibold leading-none tracking-[-0.05em]">${p.p}<span className=${'ml-2 text-[15px] font-normal tracking-normal ' + (p.main ? 'text-white/50' : 'text-black/45')}>${p.s}</span></div>
+          <p className=${'text-[14.5px] ' + (p.main ? 'text-white/60' : 'text-black/55')}>${p.d}</p>
+          <ul className=${'flex flex-col gap-2.5 border-t pt-5 text-[14.5px] ' + (p.main ? 'border-white/10 text-white/70' : 'border-black/10 text-black/65')}>${p.f.map(f => html`<li key=${f} className="flex gap-2.5"><span className=${p.main ? 'text-mint' : 'text-mintink'}>✓</span>${f}</li>`)}</ul>
+          <div className="mt-auto pt-2"><${Btn} href="#join" kind=${p.main ? '' : 'line'}>${p.cta}<//></div>
+        <//>`)}
+      </div>
+    </div></section>`;
+}
+
+/* ---------------- FAQ (light) ---------------- */
+const QA = [
+  ['What can I run today?', 'Document search: upload JSONL or TXT (English and Chinese) and get an index with excerpts and sources. Training: pick the image recipe or upload train.py and get model.pt with its metrics. Fashion-MNIST ships with the repo for offline demos.'],
+  ['Will my script run faster across many laptops?', 'Only when a registered adapter knows how to split it, like document embeddings. An ordinary script runs on one compatible laptop.'],
+  ['What if a laptop leaves mid-job?', 'Its 60 second lease runs out and only its unfinished task goes back in the queue. A late result from that laptop is rejected, so nothing counts twice.'],
+  ['What if the GPU laptop is gone?', 'The job waits for capacity, then resumes from the last complete checkpoint. GPU work is never quietly moved to a CPU.'],
+  ['What leaves campus?', 'Only the request and the text you approve, sent to the AI planner. Files, outputs and checkpoints stay on your laptops.']
+];
+function Faq(){
+  const [open, setOpen] = useState(0);
+  return html`<section id="faq" className="border-t border-black/10 bg-cream py-28 text-obsidian md:py-36">
+    <div className="gutter mx-auto grid max-w-[1240px] gap-12 lg:grid-cols-[.85fr_1.15fr]">
+      <div className="flex flex-col gap-5"><${Eyebrow} light>05 · Questions<//>
+        <${Words} text="Questions," accent="answered." light=${true} className="text-[clamp(2.4rem,5vw,4.4rem)] font-semibold leading-[1.0] tracking-[-0.045em]"/>
+        <${Reveal} delay=${.2}><div><${Btn} href="#join" kind="dark">See a live job<//></div><//></div>
+      <div className="border-t border-black/10">${QA.map(([q, a], i) => html`<${motion.div} key=${q} className="border-b border-black/10" initial=${{ opacity: 0, y: 16 }} whileInView=${{ opacity: 1, y: 0 }} viewport=${{ once: true }} transition=${{ duration: .5, delay: i*.06, ease: EASE }}>
+        <button type="button" id=${'q' + i} aria-expanded=${open === i} aria-controls=${'a' + i} onClick=${() => setOpen(open === i ? -1 : i)} className="group grid w-full grid-cols-[40px_1fr_28px] gap-2 py-5 text-left text-[17px] font-medium tracking-tight transition-colors duration-200 hover:text-mintink">
+          <span className="pt-1 font-mono text-[12px] text-mintink">0${i + 1}</span><span>${q}</span>
+          <${motion.span} className=${'grid h-7 w-7 place-items-center rounded-full border font-mono text-[14px] ' + (open === i ? 'border-mintink bg-mintink text-white' : 'border-black/15 text-mintink')} animate=${{ rotate: open === i ? 45 : 0 }} transition=${{ duration: .25 }}>+<//></button>
+        <${AnimatePresence} initial=${false}>${open === i && html`<${motion.div} key="a" id=${'a' + i} role="region" aria-labelledby=${'q' + i} initial=${{ height: 0, opacity: 0 }} animate=${{ height: 'auto', opacity: 1 }} exit=${{ height: 0, opacity: 0 }} transition=${{ duration: .35, ease: EASE }} className="overflow-hidden">
+          <p className="pb-5 pl-[48px] pr-8 text-[15px] text-black/60">${a}</p><//>`}<//>
+      <//>`)}</div>
+    </div></section>`;
+}
+
+/* ---------------- Contribute + footer (dark) ---------------- */
+const STEPS = [
+  ['Open Contribute', 'Sign in with your invite and choose Contribute compute.'],
+  ['Set a budget', 'CPU and memory to lend. GPU is a separate opt-in.'],
+  ['Run the command', 'A short-lived command from the portal, then a preflight check.'],
+  ['Drain or Stop', 'Leave whenever you want. Your device key has no admin rights.']
+];
+function Join(){
+  return html`<section id="join" className="ambient relative overflow-hidden py-28 md:py-40">
+    <div className="grid-bg pointer-events-none absolute inset-0"></div>
+    <div className="gutter relative z-10 mx-auto flex max-w-[1240px] flex-col items-start gap-6">
+      <${Eyebrow}>06 · Contribute<//>
+      <${Words} text="Lend a laptop." accent="On your terms." className="text-[clamp(2.6rem,6vw,5rem)] font-semibold leading-[1.0] tracking-[-0.05em] text-white"/>
+      <ol className="relative mt-6 grid w-full gap-4 md:grid-cols-2 lg:grid-cols-4">
+        <div className="pointer-events-none absolute left-0 right-0 top-[38px] hidden h-px bg-gradient-to-r from-mint/0 via-mint/40 to-mint/0 lg:block"></div>
+        ${STEPS.map(([t, d], i) => html`<${motion.li} key=${t} initial=${{ opacity: 0, y: 40 }} whileInView=${{ opacity: 1, y: 0 }} viewport=${{ once: true, amount: .4 }} whileHover=${{ y: -6 }} transition=${{ duration: .6, delay: i*.1, ease: EASE }}
+          className="relative flex flex-col gap-3 rounded-2xl border border-white/10 bg-obsidian/70 p-5 backdrop-blur-md transition-colors duration-200 hover:border-mint/50">
+          <span className="grid h-9 w-9 place-items-center rounded-full border border-mint/40 bg-mint/10 font-mono text-[12px] text-mint">0${i + 1}</span><h3 className="text-[17px] font-medium text-white">${t}</h3><p className="text-[14px] text-white/55">${d}</p><//>`)}
+      </ol>
+      <${Reveal} delay=${.3} className="mt-6 flex flex-wrap gap-3"><${Btn} href="#top">Back to the core<//><${Btn} href="#roles" kind="ghost">See the roles again<//><//>
+    </div></section>`;
+}
+function Footer(){
+  return html`<footer className="relative overflow-hidden border-t border-white/[.06] bg-obsidian pt-14" style=${{ paddingBottom: 'max(24px, env(safe-area-inset-bottom,0px))' }}>
+    <div className="gutter relative z-10 mx-auto flex max-w-[1240px] flex-col gap-10">
+      <div className="flex flex-wrap items-start justify-between gap-8">
+        <div className="flex flex-col gap-3"><span className="text-[17px] font-semibold text-white">Campus Pool</span><span className="max-w-[34ch] text-[14px] text-white/50">Your team's laptops, working as one private computer.</span></div>
+        <div className="flex gap-12 text-[14px]">
+          <div className="flex flex-col gap-2"><span className="text-white/40">Product</span><a className="text-white/75 hover:text-mint" href="#roles">Platform</a><a className="text-white/75 hover:text-mint" href="#layers">Parts</a><a className="text-white/75 hover:text-mint" href="#pricing">Pricing</a></div>
+          <div className="flex flex-col gap-2"><span className="text-white/40">Project</span><span className="text-white/75">Track D</span><span className="text-white/75">Campus Edge Fabric</span></div>
+        </div>
+      </div>
+      <div className="flex flex-wrap items-center justify-between gap-3 border-t border-white/10 pt-5 text-[13px] text-white/50">
+        <span className="flex items-center gap-2"><span className="blink h-2 w-2 rounded-full bg-amber shadow-[0_0_10px_#F0A35E]"></span>Server verified · physical pool integration in progress</span>
+        <span className="font-mono text-[12px]">FastAPI · PostgreSQL · DeepSeek · Go · Docker · React</span>
+      </div>
+    </div>
+    <${motion.div} className="pointer-events-none select-none whitespace-nowrap text-center text-[17vw] font-semibold leading-[.8] tracking-[-0.06em] text-white/[.05]" aria-hidden="true"
+      initial=${{ y: 80, opacity: 0 }} whileInView=${{ y: 0, opacity: 1 }} viewport=${{ once: true }} transition=${{ duration: 1.1, ease: EASE }}>Campus Pool<//>
+  </footer>`;
+}
+
+function App(){
+  const heroSlot = useRef(null), coreSlot = useRef(null);
+  return html`<${React.Fragment}><${Nav}/><${TravelSphere} heroSlot=${heroSlot} coreSlot=${coreSlot}/>
+    <main><${Hero} slot=${heroSlot}/><${Marquee}/><${Roles} slot=${coreSlot}/><${Layers}/><${Metrics}/><${Pricing}/><${Faq}/><${Join}/></main><${Footer}/><//>`;
+}
+ReactDOM.createRoot(document.getElementById('root')).render(html`<${App}/>`);
+})();
+</script>

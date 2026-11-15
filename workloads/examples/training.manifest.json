@@ -1,0 +1,21 @@
+{
+  "schema_version": "1",
+  "kind": "training",
+  "environment_digest": "REPLACE_WITH_PREPARED_PROFILE_SHA256",
+  "dataset": {
+    "root": "/inputs/labeled-images",
+    "train": "train.jsonl",
+    "validation": "validation.jsonl",
+    "classes": ["cat", "dog"]
+  },
+  "trainer": {
+    "seed": 42,
+    "epochs": 5,
+    "batch_size": 8,
+    "learning_rate": 0.01,
+    "image_size": 32,
+    "checkpoint_every": 10,
+    "scheduler_step": 4,
+    "scheduler_gamma": 0.8
+  }
+}

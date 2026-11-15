@@ -1,0 +1,69 @@
+{
+  "$defs": {
+    "SearchMatch": {
+      "additionalProperties": false,
+      "properties": {
+        "excerpt": {
+          "maxLength": 4096,
+          "title": "Excerpt",
+          "type": "string"
+        },
+        "item_id": {
+          "maxLength": 256,
+          "minLength": 1,
+          "title": "Item Id",
+          "type": "string"
+        },
+        "score": {
+          "title": "Score",
+          "type": "number"
+        },
+        "source": {
+          "maxLength": 512,
+          "minLength": 1,
+          "title": "Source",
+          "type": "string"
+        }
+      },
+      "required": [
+        "item_id",
+        "source",
+        "excerpt",
+        "score"
+      ],
+      "title": "SearchMatch",
+      "type": "object"
+    },
+    "SearchResult": {
+      "additionalProperties": false,
+      "properties": {
+        "index_digest": {
+          "pattern": "^[a-f0-9]{64}$",
+          "title": "Index Digest",
+          "type": "string"
+        },
+        "matches": {
+          "items": {
+            "$ref": "#/$defs/SearchMatch"
+          },
+          "title": "Matches",
+          "type": "array"
+        },
+        "model_digest": {
+          "pattern": "^[a-f0-9]{64}$",
+          "title": "Model Digest",
+          "type": "string"
+        }
+      },
+      "required": [
+        "matches",
+        "model_digest",
+        "index_digest"
+      ],
+      "title": "SearchResult",
+      "type": "object"
+    }
+  },
+  "$ref": "#/$defs/SearchResult",
+  "$schema": "https://json-schema.org/draft/2020-12/schema"
+}

@@ -1,0 +1,125 @@
+$ErrorActionPreference = 'Stop'
+$campusOriginalModulePath = [Environment]::GetEnvironmentVariable('PSModulePath', 'Process')
+$campusOriginalPath = [Environment]::GetEnvironmentVariable('PATH', 'Process')
+try {
+    # Resolve modules for this host before any command can autoload a module.
+    $campusHostModules = [IO.Path]::Combine($PSHOME, 'Modules')
+    $campusNativePS5Modules = [IO.Path]::Combine([Environment]::GetFolderPath('Windows'), 'System32\WindowsPowerShell\v1.0\Modules')
+    [Environment]::SetEnvironmentVariable('PSModulePath', $campusHostModules, 'Process')
+    function Assert-NoLinks([string]$Path) {
+        $candidate = [IO.Path]::GetFullPath($Path)
+        while ($candidate) {
+            if (Test-Path -LiteralPath $candidate) {
+                $item = Get-Item -LiteralPath $candidate -Force
+                if ($item.Attributes -band [IO.FileAttributes]::ReparsePoint) { throw 'Private cache must not contain links or reparse points' }
+            }
+            $parent = [IO.Path]::GetDirectoryName($candidate)
+            if ($parent -eq $candidate) { break }
+            $candidate = $parent
+        }
+    }
+    function Protect-Directory([string]$Path) {
+        Assert-NoLinks $Path
+        [IO.Directory]::CreateDirectory($Path) | Out-Null
+        Assert-NoLinks $Path
+        $identity = [Security.Principal.WindowsIdentity]::GetCurrent().User
+        $acl = New-Object Security.AccessControl.DirectorySecurity
+        $acl.SetOwner($identity)
+        $acl.SetAccessRuleProtection($true, $false)
+        $rule = New-Object Security.AccessControl.FileSystemAccessRule($identity, 'FullControl', 'ContainerInherit,ObjectInherit', 'None', 'Allow')
+        $acl.AddAccessRule($rule)
+        # Apply only modified owner/DACL sections; Set-Acl may request audit
+        # privileges when a previous native client protected the cache DACL.
+        if ($PSVersionTable.PSEdition -eq 'Desktop') {
+            [IO.Directory]::SetAccessControl($Path, $acl)
+        } else {
+            [IO.FileSystemAclExtensions]::SetAccessControl([IO.DirectoryInfo]::new($Path), $acl)
+        }
+    }
+    function Test-Verified([string]$Path, [string]$Sha, [long]$Size) {
+        if (-not (Test-Path -LiteralPath $Path)) { return $false }
+        $item = Get-Item -LiteralPath $Path -Force
+        if ($item.PSIsContainer -or ($item.Attributes -band [IO.FileAttributes]::ReparsePoint)) { throw 'Cache payload must be a regular file' }
+        return ($item.Length -eq $Size -and (Get-FileHash -LiteralPath $Path -Algorithm SHA256).Hash -eq $Sha)
+    }
+@WINDOWS_SETUP_HELPERS@
+    $architecture = [Environment]::GetEnvironmentVariable('PROCESSOR_ARCHITEW6432', 'Process')
+    if (-not $architecture) { $architecture = [Environment]::GetEnvironmentVariable('PROCESSOR_ARCHITECTURE', 'Process') }
+    switch ($architecture.ToUpperInvariant()) {
+        'AMD64' { $arch = 'amd64' }
+        'ARM64' { $arch = 'arm64' }
+        default { throw 'Unsupported native Windows architecture' }
+    }
+    $pins = [Text.Encoding]::UTF8.GetString([Convert]::FromBase64String('@WINDOWS_TARGETS_BASE64@')) | ConvertFrom-Json
+    $pin = $pins.$arch
+    if (-not $pin) { throw 'This release has no client for your native Windows platform' }
+    $local = [Environment]::GetEnvironmentVariable('LOCALAPPDATA', 'Process')
+    if (-not $local -or -not [IO.Path]::IsPathRooted($local)) { throw 'A private local cache directory is unavailable' }
+    $cache = Join-Path $local 'Campus\starter'
+    Protect-Directory $cache
+    $work = Join-Path $cache ('.download-' + [Guid]::NewGuid().ToString('N'))
+    Protect-Directory $work
+    try {
+        $setup = Initialize-CampusWindows -StateDir $cache -Architecture $arch
+        if ($setup.RestartRequired) {
+            Write-Host 'Setup requires a Windows restart. Restart when convenient and open this same Campus file again. No invitation was used.'
+            exit 3010
+        }
+        [Environment]::SetEnvironmentVariable('PATH', $setup.DockerBin + ';' + $campusOriginalPath, 'Process')
+        $ca = $null
+        $caBase64 = '@CA_BASE64@'
+        $caSha = '@CA_SHA256@'
+        if ($caBase64) {
+            $payload = [Convert]::FromBase64String($caBase64)
+            $ca = Join-Path $cache ('ca-' + $caSha + '.pem')
+            if (-not (Test-Verified $ca $caSha $payload.Length)) {
+                $temporaryCA = Join-Path $work 'ca.pem'
+                [IO.File]::WriteAllBytes($temporaryCA, $payload)
+                if (-not (Test-Verified $temporaryCA $caSha $payload.Length)) { throw 'Embedded public CA checksum mismatch' }
+                if (Test-Path -LiteralPath $ca) { Remove-Item -LiteralPath $ca -Force }
+                [IO.File]::Move($temporaryCA, $ca)
+            }
+        }
+        $runner = Join-Path $cache ('runner-' + $pin.sha256 + '.exe')
+        if (-not (Test-Verified $runner $pin.sha256 $pin.size_bytes)) {
+            Write-Host 'Downloading the native Campus client...'
+            $temporary = Join-Path $work 'runner.exe'
+            $curlArguments = @('--fail', '--silent', '--show-error', '--proto', '=https', '--proto-redir', '=https', '--tlsv1.2', '--noproxy', '@DOWNLOAD_HOST@', '--max-redirs', '0', '--connect-timeout', '15', '--max-time', '300', '--max-filesize', [string]$pin.size_bytes)
+            if ($ca) { $curlArguments += @('--cacert', $ca, '--ssl-revoke-best-effort') }
+            $curlArguments += @('--output', $temporary, '--write-out', '%{http_code}', '--', $pin.url)
+            $status = & curl.exe @curlArguments
+            if ($LASTEXITCODE -eq 130 -or $LASTEXITCODE -eq -1073741510 -or $LASTEXITCODE -eq 3221225786) { exit 130 }
+            if ($LASTEXITCODE -ne 0 -or $status -ne '200') { throw 'Native client download failed or returned an unexpected HTTP status' }
+            if (-not (Test-Verified $temporary $pin.sha256 $pin.size_bytes)) { throw 'Native client checksum or size mismatch; obtain a fresh trusted starter' }
+            if (Test-Path -LiteralPath $runner) { Remove-Item -LiteralPath $runner -Force }
+            [IO.File]::Move($temporary, $runner)
+        }
+        if (-not (Test-Verified $runner $pin.sha256 $pin.size_bytes)) { throw 'Cached native client verification failed' }
+        $arguments = @()
+        if ($ca) { $arguments += @('--ca-file', $ca) }
+        $arguments += @('install', '--catalog-url', '@CATALOG_URL@', '--catalog-sha256', '@CATALOG_SHA256@', '--managed')
+        $arguments += @('--gpu=' + $setup.GPU.ToString().ToLowerInvariant())
+        # The Go client launches native Windows PowerShell for its CIM checks.
+        [Environment]::SetEnvironmentVariable('PSModulePath', $campusNativePS5Modules, 'Process')
+        & $runner @arguments
+        $result = $LASTEXITCODE
+        if ($result -eq -1073741510 -or $result -eq 3221225786) { $result = 130 }
+    } finally {
+        [Environment]::SetEnvironmentVariable('PSModulePath', $campusHostModules, 'Process')
+        foreach ($name in @('runner.exe', 'ca.pem')) {
+            $temporary = Join-Path $work $name
+            if (Test-Path -LiteralPath $temporary) { Remove-Item -LiteralPath $temporary -Force }
+        }
+        [IO.Directory]::Delete($work)
+    }
+    exit $result
+} catch [System.Management.Automation.PipelineStoppedException] {
+    exit 130
+} catch {
+    [Console]::Error.WriteLine('Campus: ' + $_.Exception.Message)
+    exit 1
+}
+finally {
+    [Environment]::SetEnvironmentVariable('PATH', $campusOriginalPath, 'Process')
+    [Environment]::SetEnvironmentVariable('PSModulePath', $campusOriginalModulePath, 'Process')
+}

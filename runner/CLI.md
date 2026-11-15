@@ -1,0 +1,665 @@
+# Campus CLI
+
+For developer builds, use Go 1.25.6 or newer. Prepared-package recipients need
+neither Go nor host Python:
+
+```powershell
+go -C runner build -o ../campus.exe ./cmd/campus
+go -C runner test ./...
+```
+
+The binary needs no host Python. Executing work needs a healthy Linux Docker
+runtime and locally cached, approved Campus images containing the protected
+guard, registered adapters and offline dependencies. Windows additionally needs
+a working Docker Desktop/WSL2 installation. The CLI does not install drivers,
+enable privileged services, download models, or run network package installation.
+
+## Public starter and automatic preparation
+
+The [redistributable public starter](../bootstrap/public/README.md) contains no
+invitation or device identity. Share `Connect.cmd` for Windows or
+`Connect.command` for macOS/Linux through a trusted channel. On Mac, run
+`sh ./Connect.command` in Terminal. The starter selects the native OS/architecture,
+downloads the pinned client into a private per-hash cache, verifies its exact
+size and SHA-256, and starts:
+
+```text
+campus install --catalog-url TRUSTED_CATALOG_URL --catalog-sha256 TRUSTED_CATALOG_SHA256
+campus install --catalog-url TRUSTED_CATALOG_URL --catalog-sha256 TRUSTED_CATALOG_SHA256 --gpu=false
+campus install --catalog-url TRUSTED_CATALOG_URL --catalog-sha256 TRUSTED_CATALOG_SHA256 --gpu
+campus install --catalog-url TRUSTED_CATALOG_URL --catalog-sha256 TRUSTED_CATALOG_SHA256 --check-only
+campus install --stop
+campus install --drain
+```
+
+`install` verifies the pinned public catalog, selects the exact target, checks
+the local Docker runtime and CPU/NVIDIA inventory, then downloads only the
+approved environment for that target. The running client must itself match the
+catalog's pinned runner bytes; an arbitrary developer build is refused.
+CPU is the default. A normal interactive
+run with a usable NVIDIA device and an available CUDA image asks separately for
+permission to download CUDA and use the GPU, defaulting to No. `--gpu=false`
+selects CPU without asking; `--gpu` supplies explicit consent and fails if the
+driver or target CUDA runtime is unavailable. Apple Silicon uses native ARM64
+CPU containers; no Metal support is offered.
+
+Environment objects are cached by SHA-256 under the OS user cache's
+`Campus/downloads` directory; `--cache-dir DIR` overrides it. Reuse rechecks the
+exact size/hash. Interrupted large downloads retain a private partial file and
+resume with checked HTTP Range/Content-Range; no partial file is loaded. The
+small catalog is fetched and pinned on each install invocation. Previously
+verified environment objects need no repeat download. Preparation produces a
+verified local bundle and delegates preflight/enrollment to `connect` below.
+The invitation is requested separately only after preflight; an existing saved
+identity reconnects without a new invitation. `--check-only` may download/load
+approved images and start Docker, but does not enroll or serve. Stop/Drain need
+neither catalog arguments nor a server connection.
+
+Native CGO-disabled clients are built for Windows, macOS and Linux, each on
+amd64 and arm64. That build coverage is separate from physical runtime coverage:
+Windows amd64 and Apple M2 CPU have run; native Linux installer tests passed
+under WSL. Docker Desktop is a prerequisite on Windows/macOS, with its required
+virtualization/WSL setup completed by the owner. Windows ARM Docker Desktop is
+currently Early Access; the ARM binary does not guarantee a usable runtime.
+Unsupported systems, including ordinary phones, are not supported targets.
+The starter does not install Docker, drivers or privileged prerequisites.
+
+See [the live handoff](../bootstrap/LIVE_SERVER.md) for the LAN release and its
+verification status. Public here means safe to redistribute without invitation
+secrets; the current `10.4.146.76` host is accessible on the tested LAN, not a
+published Internet release. Its embedded public CA remains client-local.
+
+## Prepared offline device connection
+
+Use the complete operator-prepared [native connection package](../bootstrap/connect/README.md).
+On Apple Silicon, run `sh ./Connect.command` from the extracted package folder;
+on Windows 11 AMD64, open `Connect.cmd`.
+The recipient needs Docker Desktop, but no host Python or Go. Keep the package
+files together. A package containing an invitation is private to that device.
+
+The native launchers verify the pinned runner and manifest before starting the
+common connection command. Direct CLI equivalents are:
+
+```text
+campus connect --bundle KIT_DIR --manifest-sha256 TRUSTED_MANIFEST_SHA256
+campus connect --bundle KIT_DIR --manifest-sha256 TRUSTED_MANIFEST_SHA256 --check-only
+campus connect --bundle KIT_DIR --manifest-sha256 TRUSTED_MANIFEST_SHA256 --gpu=false
+campus connect --bundle KIT_DIR --manifest-sha256 TRUSTED_MANIFEST_SHA256 --gpu
+campus connect --drain
+campus connect --stop
+```
+
+`connect` validates the native target, pinned metadata and selected image archives,
+requires a local Docker socket, and pins that endpoint for this process. It
+reports CPU model/thread count, RAM and available NVIDIA compute devices. On
+Windows, separate OS display inventory can identify NVIDIA hardware even when
+the compute driver is unavailable; that does not establish usable CUDA. If an
+installed Docker Desktop is stopped, the command tries its normal start command
+and waits for readiness. Missing Docker/WSL/driver setup remains an explicit
+owner action. No service, autostart, global trust or execution-policy change is
+made.
+
+CPU is the default. When a compute GPU is detected, normal interactive connection
+asks for explicit GPU permission with a default of No. `--gpu=false` selects CPU
+without that prompt; `--gpu` explicitly requests CUDA. Only selected, missing
+approved images are loaded from the package. Real CPU arithmetic and, when
+selected, CUDA computation must pass before enrollment. Probes have an independent
+45-second container deadline and a 60-second host-process bound. GPU failure does
+not silently become CPU participation. The resulting CPU/RAM budget is printed.
+
+`--check-only` can start Docker and load prepared local images, but never redeems
+an invitation, joins or serves. It checks local readiness; it does not establish
+LAN reachability or a coordinator session. Normal connection preflights first,
+then uses the private packaged invitation or asks for one. An existing saved
+identity reconnects through `serve` without redeeming that invitation again.
+Leave the foreground window open; Ctrl+C stops participation. Drain/Stop use the
+same local state directory and require no server connection or bundle arguments.
+
+An isolated LAN coordinator from upstream `96bfe6d` is now running at
+[https://10.4.146.76:8443](https://10.4.146.76:8443), with strict TLS and its private
+client CA. The package uses that CA only for this client. A real local Go join
+and ready heartbeat have passed. On a physical Apple M2 Mac (8 cores, 8 GiB RAM),
+`sh ./Connect.command --check-only` passed the CPU probe; normal startup restored
+the saved connection and entered Serving. The server independently observed its
+ready heartbeat over the LAN. The first Finder double-click returned
+`zsh: killed`; its cause is unconfirmed, while the transferred hash and macOS
+signature checks passed. Use the tested `sh` route. Mac Ctrl+C stopped the process
+with the expected exit 130, and restarting restored the saved connection and
+Serving. The Mac later completed a real bounded distributed CPU job through an
+explicit device/image/adapter-allowlisted compatibility overlay. Its
+authenticated 281-byte `model.json` passed SHA-256 and an independent
+exact-rational numerical check; see [the result](../bootstrap/control_plane_compat/RESULT.md).
+Ordinary published assignments still fail closed without the required relative
+deadline and sandbox policy. The target Windows 11 AMD/RTX 5050 run and actual
+CUDA remain outstanding.
+
+## Device participation
+
+```text
+campus doctor --profiles environments/resolved-profiles.json
+campus join https://coordinator.example/join?token=INVITATION --no-serve
+campus serve --profiles environments/resolved-profiles.json
+campus serve --profiles environments/resolved-profiles.json --gpu
+campus leave --drain
+campus leave --stop
+```
+
+`join` accepts an invitation URL or a token with `--endpoint URL`. URLs support a
+`token` query parameter, `#token=...`, a token fragment, or `/join/TOKEN`,
+`/invite/TOKEN` and `/invitations/TOKEN`. A normal join continues into serving;
+`--no-serve` only enrolls the installation. Enrollment is durable if subsequent
+preflight fails: prepare the runtime, then use `serve`. There is no autostart.
+
+The state directory comes from `--state-dir DIR`, `CAMPUS_STATE_DIR`, or the OS
+user configuration directory's `campus` subdirectory. It contains private
+`identity.json`, the local participation control, the process lock and the latest
+submission recovery state. On Windows identity access is restricted with the
+session package's owner ACL; on Unix it uses private permissions. Do not copy one
+installation's state to another device. Join takes the process lock before
+creating an installation ID, and serve holds it for its entire lifetime.
+
+Join negotiates `/api/v1/protocol` before redeeming an invitation. Credential
+redemption and node-session creation each send one POST per explicit command;
+unknown acknowledgements are reported without an automatic mutation retry. Serving
+registers a fresh node session, publishes capabilities, then enters the worker
+loop. `leave` writes local control without requiring coordinator connectivity:
+`--drain` finishes active attempts; `--stop` stops them. The device credential
+remains available for a later explicit `serve`.
+
+`doctor` emits JSON inventory and diagnostics. It returns failure when the
+runtime, selected profile, real computation probe or configured coordinator
+handshake fails. CPU/RAM participation uses discovery's conservative budget and
+pauses for insufficient memory/disk or detected battery power. GPU resources are
+offered only after `--gpu` and successful real CUDA computation. The present
+probe addresses CUDA's default GPU; extra detected GPUs remain unoffered.
+
+Profiles come from `--profiles FILE`, `CAMPUS_PROFILES`, a checkout's
+`environments/profiles.json`, or `profiles.json` beside the installed executable:
+
+```json
+{
+  "schema_version": "1",
+  "profiles": [{
+    "id": "python-ml-cpu-v1",
+    "accelerator": "cpu",
+    "platform": "linux/amd64",
+    "image_digest": "campus/python-ml-cpu-v1@sha256:REPLACE_WITH_64_LOWERCASE_HEX_DIGITS",
+    "guard_version": "1"
+  }]
+}
+```
+
+Use `cuda` for CUDA profiles. Participation publishes canonical OCI repository
+digests `name@sha256:...`. A local
+Docker content ID `sha256:...` is resolved through that cached image's own
+`RepoDigests`; an image without one requires local preparation before serving.
+`doctor` and `benchmark-local` can use the verified local ID without a repository
+digest, including images loaded from an offline archive. Doctor reports missing
+canonical participation metadata as a diagnostic. Resolution never pulls an image.
+Only selected images whose architecture, guard
+contract and computation probe passed are advertised or allowed for work. A null
+digest marks an
+unprepared profile and causes an actionable error when that profile is needed.
+Image architecture and the guard contract are verified before probing; no
+unapproved image is probed. Cross-architecture emulation is not enabled.
+
+## Managed web participation
+
+Add `--managed` to `install`, `connect`, `join` or `serve` to allow the web
+Devices page to pause, resume, drain and choose a contribution mode for this
+foreground invocation. For example:
+
+```text
+campus serve --managed --profiles environments/resolved-profiles.json
+campus install --catalog-url TRUSTED_CATALOG_URL --catalog-sha256 TRUSTED_CATALOG_SHA256 --managed --gpu=false
+```
+
+The supervisor polls device settings about every five seconds using the saved
+device credential. It holds the installation lock and a private snapshot of the
+approved profiles throughout remote pauses. Paused startup fetches settings
+without running compute preflight or opening a worker session. With a new managed
+installation, enrollment precedes compute preflight so its device settings can
+be checked first. Image verification and local GPU consent still happen during
+preparation. `--check-only` retains its local verification behavior.
+
+Low, medium and maximum use 10%, 50% and 90% of sampled idle CPU and currently
+available RAM, bounded by Docker CPU/RAM capacity and optional local owner
+ceilings. Fractional CPU is supported without a one-core floor. Missing CPU or
+Docker capacity measurements leave participation paused. Maximum is intended
+for an idle computer on external power. Web settings cannot enable GPU or
+battery permission; CUDA still requires the local `--gpu` opt-in and successful
+probe. Without `--managed`, the existing conservative contribution budget and
+CLI lifecycle remain unchanged.
+
+Remote pause cancels work and waits for runtime teardown before acknowledging
+the revision. Resume and mode changes create a fresh preflight/session. Explicit
+mode changes stop the old session before new quotas are published. Ambient
+availability changes reduce future admission while existing bounded work
+finishes; reservations prevent extra work when sampled capacity falls below
+active use. Capability increases take effect locally only after the server
+acknowledges a new, monotonically increasing preflight revision. Failed
+publication keeps conservative admission and gates new claims until a fresh
+publication succeeds; existing work continues and local stop remains available. Drain
+blocks new claims, lets active attempts finish, then remains paused until a
+newer running revision. Settings/acknowledgement calls do not require a node
+session, so the supervisor remains reachable while remotely paused. Network
+errors, malformed settings and older servers fail closed; they never switch to
+an unmanaged offer.
+
+Keep the foreground window open. Ctrl+C, `campus leave --stop` and local
+`campus leave --drain` end this invocation, including while remotely paused.
+Later web requests cannot restart a process that has exited. Remote controls
+never overwrite the local leave file. There is no background service or
+autostart installation.
+
+Managed clients send `X-Campus-Worker-Protocol: 2` on API requests to negotiate
+rich bounded assignments. The legacy `campus/0.1.0` user agent remains unchanged.
+Managed result uploads include only declared output paths and retain those
+relative names, including nested paths; incidental workspace changes are omitted.
+Rich assignments distinguish required `outputs` from `optional_outputs`; only
+required paths are passed to the pinned guard's required-output list. Optional
+files are uploaded when produced and may be absent.
+
+## Sign in and run a distributed project
+
+Sign in once with your member account. `login` prompts for the email and a hidden
+password; automated sign-in accepts `--email EMAIL --password-stdin`. Passwords
+and tokens are never command arguments or printed. A custom trusted CA is
+optional when the coordinator already has a publicly trusted HTTPS certificate:
+
+```text
+campus login --endpoint https://coordinator.example --ca-file campus-ca.pem
+```
+
+The CLI saves a revocable member credential and a private copy of the approved
+CA PEM in its user configuration/state directory. Subsequent member commands
+reuse that endpoint and trust without repeating flags. Trust stays inside the
+client; login does not change OS certificate trust. Saved credentials are pinned
+to their coordinator. `campus logout` revokes the saved CLI credential and
+removes its active local copy. Login does not replace device enrollment.
+`CAMPUS_TOKEN` overrides the saved member token for CI. An explicit changed
+endpoint requires its own login or an explicit environment token.
+
+From a directory containing `campus.json`, run:
+
+```text
+campus run --wait --to ./results
+```
+
+`--project DIR` chooses another project directory. Output paths are relative to
+that project; `--to` implies `--wait` and must name a directory that does not
+exist. The CLI displays the code/data inventory, effective resource defaults,
+stage task counts and the returned plan. It asks for exact comma-separated code
+paths to share with the LLM, or `none`, then asks `Submit this reviewed plan?`.
+Enter `yes` to approve. Selected files must be UTF-8 text already present in the
+code snapshot, at most 16 files, 8,000 bytes per file and 24,000 bytes total.
+Dataset bytes and private files cannot be selected. EOF or missing choices do
+not approve sharing or submission.
+
+This minimal portable contract creates one map task per input and one reduction:
+
+```json
+{
+  "schema_version": "1",
+  "name": "batch-summary",
+  "data": ["dataset/*.json"],
+  "stages": [
+    {
+      "id": "map",
+      "kind": "map",
+      "inputs": ["dataset/*.json"],
+      "command": ["python", "worker.py", "map", "{input}", "{accelerator}"],
+      "outputs": [{"path": "partial.json", "max_bytes": 1048576}],
+      "accelerator": "cpu"
+    },
+    {
+      "id": "reduce",
+      "kind": "reduce",
+      "depends_on": ["map"],
+      "command": ["python", "worker.py", "reduce"],
+      "outputs": [{"path": "result.json", "max_bytes": 1048576}],
+      "accelerator": "cpu"
+    }
+  ]
+}
+```
+
+Stages are ordered; dependencies name earlier stages exactly. Map inputs select
+declared data using portable, case-sensitive globs: `*`, `?`, `[ab]`, `[!a]`,
+ranges and complete `**` directory segments. `{input}` is allowed only in map
+arguments and becomes `/inputs/<project-relative-file>`. `{accelerator}` becomes
+the selected `cpu` or `cuda` variant. Arguments remain literal; the CLI does not
+build a shell command. Accepted predecessor outputs appear below
+`/inputs/stages/<stage>/<task-id>/<output-path>`. Map stages with dependencies
+still split their own declared data into separate tasks.
+
+Optional `resources` default to `cpu_millis:1000`, `memory_bytes:536870912`,
+`disk_bytes:268435456`, and `vram_bytes:1073741824`; CPU variants reserve zero
+VRAM. `timeout_seconds` defaults to 300 and output `required` defaults to true.
+Resources and output/temporary disk quotas are bounded by the registered
+environments. `accelerator` defaults to `auto`; existing worker GPU consent and
+verified runtime offers still determine which variant can execute.
+
+The project ZIP contains code and metadata; declared data files, runner state,
+results, credentials, virtual environments and symlinks are excluded. Put
+`dataset/` in `.campusignore` when that directory also contains raw downloads or
+other undeclared data. `.campusignore` controls the code snapshot; explicit
+`data` globs still select separately uploaded data. The code snapshot is bounded
+to 10,000 files/256 MiB, and declared data to 511 files/1 GiB. Each data file is
+checksummed and uploaded separately with bounded checksummed parts. Reuse asks
+the coordinator to verify that the current authenticated account owns those
+exact bytes; local IDs are never trusted across accounts or coordinators.
+
+After an explicit approval, the private per-project review binds the exact code,
+data, configuration, endpoint/account and selected sharing choices. CI can reuse
+that unchanged review:
+
+```text
+campus run --yes --wait --to ./new-results
+```
+
+Changed code, data, configuration or credential/coordinator requires another
+explicit review. A fresh run obtains a fresh job key. Preview IDs, requests,
+explicit pending answers, frozen revisions and job receipts persist below
+`<state-dir>/projects/<project-path-hash>/`. After interruption use:
+
+```text
+campus run --resume --wait --to ./results
+campus run --resume --answer question_id=explicit-answer
+campus run --resume --answers ./answers.json
+```
+
+Project answer files use the same single `{question_id,answer}` string format
+described below. A lost answer acknowledgement is inspected without replay;
+only a newer revision or terminal preview resolves it. Once submission starts,
+resume always uses its frozen revision/key, even if local code/config changed or
+was removed. A never-submitted unknown preview can be abandoned with
+`campus run --discard`. A submitted job cannot be discarded.
+
+`--wait` follows queued/running/waiting-for-capacity work and prints accepted
+units and per-task device IDs. Partial/failed/cancelled jobs exit with an error
+and inspection guidance. A partial job with `--to` downloads its accepted
+verified outputs while still reporting failure. All result downloads retain
+safe namespaced paths and use the same bounded atomic checksum verification as
+`fetch`. A missing `campus.json` reports candidate entry points/data and explains
+the required contract; arbitrary scripts are not assumed parallelizable.
+
+## Explicit command submission, inspection and retrieval
+
+A device invitation grants worker participation. Member operations use a saved
+`campus login` credential, `CAMPUS_TOKEN`, or an explicitly provisioned saved
+member credential. They never substitute the device credential. The coordinator
+comes from `--endpoint URL`, `CAMPUS_ENDPOINT`, or the saved identity.
+
+```powershell
+$env:CAMPUS_TOKEN = "MEMBER_CREDENTIAL"
+campus run --gpu --data ./dataset:/data --output model.pt -- python train.py
+campus logs JOB_ID
+campus fetch JOB_ID --to ./downloaded-results
+campus cancel JOB_ID
+```
+
+`run` snapshots the current directory, or `--project DIR`, using the bounded
+Campus packager. It respects `.campusignore`, excludes state and an explicitly
+bound in-project dataset, and always filters common credentials, `.env`, keys,
+Git metadata, virtual environments and symlinks. The project limit is 10,000
+files/256 MiB; the separate dataset limit is 10,000 files/1 GiB. A dataset must be
+a directory and only one read-only `/data` binding is supported. Splitting on the
+last colon preserves Windows paths such as `C:\data set:/data`.
+
+The program and each argument after `--` are encoded literally in a bounded
+planner prompt, including spaces and Unicode. No host shell command is
+constructed. Before submitting a ready plan, the CLI checks the exact argv,
+working directory, generic adapter, archive bindings, accelerator, offline
+network policy and every declared required output. A changed command is refused.
+Repeat `--output RELATIVE_PATH` to declare outputs. The planner is also asked to
+capture changed/new workspace files within the guard quota. Commands accept at
+most 64 arguments of 4,096 characters each and must fit the complete
+8,000-character planner prompt. GPU requirements never silently become CPU.
+
+The CLI uploads a `project.zip` artifact and a separate `data.zip` artifact when
+requested, asks for a preview, prints the ready plan and submits its revision.
+An unresolved preview prints its ID, positive plan revision and single question,
+and exits with status 3. It does not invent missing inputs or answers.
+
+```text
+campus run --resume
+```
+
+The latest preview request, exact command intent, preview ID, frozen plan
+revision, request keys, pending explicit answer and job receipt are persisted in
+`submission.json`. Resume reads a known preview. Preview creation has no
+published idempotency guarantee: if its acknowledgement is lost before the ID is
+known, resume does not repeat the mutation. `run --discard` can abandon that
+never-submitted preview before a fresh run. Once job submission starts, resume
+sends the exact saved
+`POST /jobs {preview_id, plan_revision}` with the same key, even after an unknown
+acknowledgement. It does not replan that submission. A second new run is refused
+while a submission remains unresolved. Failed/cancelled/expired/rejected planning
+previews persist a definitive terminal flag and permit a fresh run. An unknown
+job acknowledgement always preserves its frozen request regardless of a preview's
+subsequent state.
+
+After a `needs_input` exit, answer the saved preview explicitly:
+
+```text
+campus run --resume --answers ./answers.json
+campus run --resume --answer dataset=training-set
+```
+
+The canonical answers file contains one explicit string answer:
+
+```json
+{"question_id":"dataset","answer":"training-set"}
+```
+
+A one-entry array or `{"answers":[...]}` wrapper is also accepted locally. Use the
+current question ID returned by the preview. `--answer question_id=value` supplies
+the same string format; text must contain 1–2,000 characters. Multiple answers
+and typed JSON values are rejected before network access. The CLI posts
+`{question_id, plan_revision, answer}` once, against the positive current revision,
+then inspects the same preview and submits its ready revision after checking the
+command intent. An answer request/key is saved before transmission. After an
+unknown acknowledgement, resume reads the preview without repeating the answer;
+a strictly newer revision or terminal state resolves that uncertainty. If the
+saved revision remains unchanged, the answer stays unresolved. A definitive 4xx
+rejection (except rate limiting) permits corrected answers on that same preview.
+New answers are refused after job submission starts.
+
+```text
+campus run --discard
+```
+
+Discard only marks a local never-submitted preview as abandoned. It makes no
+network mutation and permits a new run. It refuses previews whose job submission
+started or whose job receipt exists. An unknown submitted job must be reconciled
+with `run --resume`.
+
+Logs read `{entries:[{cursor,text,gap,...}], cursor, truncated}` with numeric,
+strictly increasing cursors until an empty page, within a 4 MiB/1,000-page bound.
+Reported retention gaps and truncation are printed to stderr. Fetch reads the
+job's artifact list,
+checks all paths, case aliases, file/directory conflicts and download staging
+collisions before requesting bytes, then verifies every SHA-256/declared size.
+It publishes a complete staged directory by rename. The destination must not
+exist and its parents must contain no symlinks. Fetch is bounded to 10,000
+files/1 GiB, and failed downloads do not expose the final destination.
+
+All HTTPS certificates are verified. `--ca-file FILE` or `CAMPUS_CA_FILE` extends
+the system CA trust. There is no insecure TLS option. Plain HTTP is accepted
+only for loopback development endpoints. Credential-bearing redirects are not
+followed.
+
+## Foundation API boundary
+
+The network DTOs follow foundation commit
+`5a5bd297dfc0c9fd704e408a929d56643042c4ba` and its generated Go types.
+`run` sends the published `PreviewRequest`, for example:
+
+```json
+{
+  "prompt": "Prepare the exact JSON command intent carried in this bounded prompt...",
+  "project_artifact_id": "00000000-0000-4000-8000-000000000001",
+  "accelerator": "cuda",
+  "inputs": [{
+    "artifact_id": "00000000-0000-4000-8000-000000000002",
+    "mount_path": "/data",
+    "archive": true
+  }],
+  "share_with_llm": false
+}
+```
+
+The endpoints are `POST /job-previews`, `GET /job-previews/{id}`, then
+`POST /jobs {preview_id, plan_revision}`. Preview and job responses use `id`;
+preview responses use a singular `question`. Revisions must be positive integers.
+Planning states are `inspecting`, `planning` and `validating`; server terminal
+states are `failed` and `cancelled`. Older saved terminal flags remain recoverable.
+Unknown job acknowledgements retain the exact frozen request and stable
+`Idempotency-Key`; this is local recovery behavior, not proof of production
+exactly-once handling. Preview and answer mutations have no automatic replay.
+
+Member upload creation uses `name`, `sha256`, `size_bytes`, `media_type`, bounded
+`part_size_bytes` and `kind` (`project` or `input`), without worker attempt proof.
+Upload responses use `id`, `state`, `part_count` and part descriptors. Finalized
+and job artifacts use `{id, name, sha256, size_bytes, media_type}`; checksum and
+size verification still precede publishing any downloaded directory.
+
+The original `5a5bd29` foundation supplied DTOs, fixtures and a fixture server.
+The later `96bfe6d` coordinator is deployed separately on the LAN. Real local
+enrollment/heartbeat and a physical Mac's restricted distributed CPU computation
+have passed. The Mac diagnostic uses an explicit administrator allowlist and
+fixed relative hard bound/quotas; it does not make ordinary Assignment DTOs
+generally compatible. Those ordinary assignments still lack the worker's
+relative `task_remaining_ms` hard bound and agreed detailed sandbox quotas, and
+execution fails closed at that boundary. No general planner-to-worker flow,
+server-side exactly-once claim or two-device benchmark is established.
+
+## Local baseline
+
+```text
+campus benchmark-local --manifest prepared-local.json --repetitions 3 --out baseline.json --profiles environments/resolved-profiles.json
+```
+
+This runs locally under the same Docker guard with no scheduler, upload or
+coordinator request. It needs prepared local input files, cached models and an
+approved immutable image. A GPU assignment additionally needs `--gpu`. It locks
+the local installation against simultaneous serving. It does not export a
+successful record when Docker or execution fails.
+
+The version 1 local manifest uses this shape; replace all digest placeholders
+with real lowercase SHA-256 values from the prepared recipe:
+
+```json
+{
+  "schema_version": "1",
+  "adapter_digest": "ADAPTER_SHA256",
+  "model_digest": "MODEL_SHA256_OR_OMIT_FIELD",
+  "batch": 1,
+  "concurrency": 1,
+  "assignment": {
+    "manifest_digest": "WORKLOAD_MANIFEST_SHA256",
+    "adapter": {"id": "generic.project", "version": "1"},
+    "image_digest": "sha256:IMAGE_SHA256",
+    "platform": "linux/amd64",
+    "argv": ["python", "train.py"],
+    "working_dir": "/workspace",
+    "task_remaining_ms": 600000,
+    "outputs": ["model.pt"],
+    "network_policy": "none",
+    "resource_limits": {
+      "cpu_millis": 1000,
+      "memory_bytes": 1073741824,
+      "pids": 256,
+      "workspace_bytes": 268435456,
+      "output_bytes": 134217728,
+      "checkpoint_bytes": 134217728,
+      "tmp_bytes": 67108864,
+      "gpu_ids": [],
+      "vram_bytes": 0
+    }
+  },
+  "inputs": [{
+    "source": "prepared/project.zip",
+    "artifact_id": "local-project",
+    "digest": "PROJECT_ZIP_SHA256",
+    "size_bytes": 123,
+    "kind": "project",
+    "path": "project.zip"
+  }]
+}
+```
+
+Local sources may be absolute or relative to the manifest. They are copied with
+digest/size checks; traversal, symlinks and collisions are rejected. A `dataset`
+input is a separately prepared ZIP extracted to read-only `/data`. Project ZIPs
+must use `project.zip`. Runtime bounds are 1 second–24 hours, repetitions 1–100,
+and only sequential `concurrency=1` is implemented. Resume checkpoints are not
+used in a fresh baseline. Supplied digest values are claims checked against the
+trusted registered adapter in the immutable image, alongside the full
+configuration digest and verified input bytes. With a validator configured, a
+separate bounded `validate_input` container runs before compute. Its
+`manifest_digest` and trusted-source `adapter_digest` must match the record's
+claims. A supplied model digest must match; an omitted model digest is derived
+from this trusted preflight and frozen before measurement. Verification must
+return that same actual tuple. Missing or mismatched provenance prevents an
+eligible record from being exported.
+
+An optional `validator` object enables actual registered-adapter verification:
+
+```json
+{
+  "adapter": {"id": "training.image-classifier", "version": "1"},
+  "manifest": {"schema_version": "1", "kind": "training", "...": "complete prepared workload manifest"},
+  "policy": {"...": "fixed registered validation policy"},
+  "output_paths": ["outputs/result.json"],
+  "inputs": []
+}
+```
+
+The validator must match the assignment's registered adapter/version. Supported
+IDs are `embeddings.e5`, `training.image-classifier` and `generic.project`, version
+`1`. Validator-only inputs (for example a full E5 reference) use the same local
+input descriptor format and are mounted only for validation. The trusted JSON
+adapter runs in a separate bounded, offline guard container using isolated
+Python and the immutable `/opt/campus` adapter registry. Verified compute outputs
+are copied into that container at their original `/outputs` or `/workspace`
+paths, so the training evaluator sees its safetensors weights. Arbitrary
+manifest-provided Python validator code is not imported.
+
+`quality` and eligibility come from that real validator. Missing validators and
+generic execution stay `unverified`; structural or sampled checks are never
+promoted to full correctness. Each measurement separates container duration,
+validator duration and other overhead. The record additionally reports separate
+pre-compute `provenance_duration_ms` and actual trusted metadata. Registered
+adapter source digests bind the fixed LF-normalized trusted source bundle, with
+`adapter_digest_kind=trusted_source_lf_sha256`. E5's `model_kind` is
+`pretrained_transformer` and binds its ID/revision/complete actual local file lock.
+Training's `registered_training_recipe` digest binds its registered recipe,
+effective validated parameters, classes and cuBLAS setting; trained weights have
+their own output digest. Generic uses `model_kind=none`, an empty model digest and
+never becomes benchmark eligible. Record metadata is checked again against the
+post-compute verifier.
+
+Durations use Go's monotonic clock; timestamps use UTC. Container duration
+includes guard startup and output capture.
+Utilization uses real Docker samples at one-second windows, so subsecond runs
+can have no samples. GPU utilization is not fabricated when Docker has no such
+metric. Each repetition uses a fresh process/container; first/subsequent cache
+labels explicitly leave host/model/image cache temperature uncontrolled. This
+does not measure an in-process warm model or claim flushed cold caches.
+
+`StandaloneRecord` version 1 binds the device/config/manifest/model/image/adapter,
+limits, batch, concurrency, measurements and output digests. A local registered
+device credential adds HMAC-SHA256 over the record and signer metadata with the
+signature value empty. This verifies credential origin and integrity only; it
+does not attest hardware timings or correctness. Without one, the record is
+marked `unsigned_local`. There is no automatic benchmark import command; a
+coordinator must authenticate and apply its policy before importing the record.
+
+Exit status: `0` success/help/version; `1` operational failure; `2` invalid usage;
+`3` unresolved preview input; `130` context cancellation/deadline.
+
+Real execution gates remain environment dependent. A passing Go suite uses HTTP
+integration servers and explicit runtime boundary doubles; it does not establish
+Docker isolation, CUDA execution, ML quality or a two-device benchmark result.

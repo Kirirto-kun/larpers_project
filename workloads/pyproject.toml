@@ -1,0 +1,37 @@
+[project]
+name = "campus-workloads"
+version = "0.1.0"
+requires-python = ">=3.11,<3.13"
+dependencies = ["campus-pool", "numpy==2.2.6", "pillow==11.3.0", "safetensors==0.6.2", "transformers==4.57.1", "packaging==26.3", "pip==25.3"]
+
+[project.optional-dependencies]
+cpu = ["torch==2.9.1"]
+cuda = ["torch==2.9.1"]
+
+[dependency-groups]
+dev = ["pytest==8.4.2", "pydantic==2.14.3"]
+
+[tool.uv]
+package = false
+conflicts = [[{extra = "cpu"}, {extra = "cuda"}]]
+
+[tool.uv.sources]
+campus-pool = {path = "../sdk/python", editable = true}
+torch = [
+  {index = "pytorch-cpu", extra = "cpu"},
+  {index = "pytorch-cu128", extra = "cuda", marker = "sys_platform == 'linux' or sys_platform == 'win32'"},
+]
+
+[[tool.uv.index]]
+name = "pytorch-cpu"
+url = "https://download.pytorch.org/whl/cpu"
+explicit = true
+
+[[tool.uv.index]]
+name = "pytorch-cu128"
+url = "https://download.pytorch.org/whl/cu128"
+explicit = true
+
+[tool.pytest.ini_options]
+pythonpath = ["..", "../sdk/python"]
+testpaths = ["tests"]

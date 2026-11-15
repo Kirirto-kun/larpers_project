@@ -1,0 +1,82 @@
+{
+  "environments": [
+    {
+      "id": "diagnostic-cpu-arm64",
+      "name": "Bounded Mac CPU diagnostic",
+      "variant_id": "cpu-arm64",
+      "image_digest": "campus/python-ml-cpu-v1-arm64@sha256:3d7435b47960fcc183cd61a2350b5b3ca2e58fd5abfcf832b4563dad4eda55fb",
+      "platform": "linux/arm64",
+      "accelerator": "cpu",
+      "resource_requirements": {
+        "cpu_millis": 1000,
+        "memory_bytes": 268435456,
+        "disk_bytes": 35651584,
+        "gpu_slots": 0,
+        "vram_bytes": 0
+      }
+    },
+    {
+      "id": "diagnostic-cuda-amd64",
+      "name": "Bounded RTX 5050 CUDA diagnostic",
+      "variant_id": "cuda-amd64",
+      "image_digest": "campus/python-ml-cuda-v1-amd64@sha256:d416742141559c0428ce0e41b5c94044dfd523522c61b0da09189e8f8dc48bb6",
+      "platform": "linux/amd64",
+      "accelerator": "cuda",
+      "resource_requirements": {
+        "cpu_millis": 1000,
+        "memory_bytes": 1073741824,
+        "disk_bytes": 35651584,
+        "gpu_slots": 1,
+        "vram_bytes": 1073741824
+      }
+    }
+  ],
+  "adapters": [
+    {
+      "ref": {
+        "id": "campus.diagnostic",
+        "version": "1"
+      },
+      "image_ids": [
+        "diagnostic-cpu-arm64"
+      ],
+      "policies": [
+        "structural"
+      ],
+      "checkpoints": false,
+      "parallel": false,
+      "recipe": {
+        "id": "diagnostic-quadratic",
+        "name": "CPU quadratic model diagnostic",
+        "description": "A bounded deterministic regression fit; independent numerical verification is performed by the diagnostic caller.",
+        "adapter": {
+          "id": "campus.diagnostic",
+          "version": "1"
+        }
+      }
+    },
+    {
+      "ref": {
+        "id": "campus.diagnostic.cuda",
+        "version": "1"
+      },
+      "image_ids": [
+        "diagnostic-cuda-amd64"
+      ],
+      "policies": [
+        "structural"
+      ],
+      "checkpoints": false,
+      "parallel": false,
+      "recipe": {
+        "id": "diagnostic-cuda-matmul",
+        "name": "RTX 5050 CUDA matrix diagnostic",
+        "description": "Small bounded exact CUDA matrix computation; independent full CPU integer verification by the caller.",
+        "adapter": {
+          "id": "campus.diagnostic.cuda",
+          "version": "1"
+        }
+      }
+    }
+  ]
+}

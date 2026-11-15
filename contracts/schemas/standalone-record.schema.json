@@ -1,0 +1,275 @@
+{
+  "$defs": {
+    "AdapterRef": {
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "pattern": "^[a-zA-Z0-9][a-zA-Z0-9._-]{0,63}$",
+          "title": "Id",
+          "type": "string"
+        },
+        "version": {
+          "pattern": "^[a-zA-Z0-9][a-zA-Z0-9._-]{0,63}$",
+          "title": "Version",
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "version"
+      ],
+      "title": "AdapterRef",
+      "type": "object"
+    },
+    "Resources": {
+      "additionalProperties": false,
+      "properties": {
+        "cpu_millis": {
+          "exclusiveMinimum": 0.0,
+          "maximum": 9.223372036854776e+18,
+          "title": "Cpu Millis",
+          "type": "integer"
+        },
+        "disk_bytes": {
+          "exclusiveMinimum": 0.0,
+          "maximum": 9.223372036854776e+18,
+          "title": "Disk Bytes",
+          "type": "integer"
+        },
+        "gpu_slots": {
+          "default": 0,
+          "maximum": 64.0,
+          "minimum": 0.0,
+          "title": "Gpu Slots",
+          "type": "integer"
+        },
+        "memory_bytes": {
+          "exclusiveMinimum": 0.0,
+          "maximum": 9.223372036854776e+18,
+          "title": "Memory Bytes",
+          "type": "integer"
+        },
+        "vram_bytes": {
+          "default": 0,
+          "maximum": 9.223372036854776e+18,
+          "minimum": 0.0,
+          "title": "Vram Bytes",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "cpu_millis",
+        "memory_bytes",
+        "disk_bytes"
+      ],
+      "title": "Resources",
+      "type": "object"
+    },
+    "StandaloneRecord": {
+      "additionalProperties": false,
+      "properties": {
+        "adapter": {
+          "$ref": "#/$defs/AdapterRef"
+        },
+        "batch_policy": {
+          "additionalProperties": {
+            "exclusiveMinimum": 0.0,
+            "maximum": 9.223372036854776e+18,
+            "type": "integer"
+          },
+          "maxProperties": 16,
+          "title": "Batch Policy",
+          "type": "object"
+        },
+        "concurrency": {
+          "default": 1,
+          "description": "Maximum simultaneous compute tasks per node",
+          "exclusiveMinimum": 0.0,
+          "maximum": 9.223372036854776e+18,
+          "title": "Concurrency",
+          "type": "integer"
+        },
+        "config_digest": {
+          "pattern": "^[a-f0-9]{64}$",
+          "title": "Config Digest",
+          "type": "string"
+        },
+        "duration_ms": {
+          "exclusiveMinimum": 0.0,
+          "maximum": 9.223372036854776e+18,
+          "title": "Duration Ms",
+          "type": "integer"
+        },
+        "ended_at": {
+          "format": "date-time",
+          "title": "Ended At",
+          "type": "string"
+        },
+        "image_digest": {
+          "maxLength": 256,
+          "pattern": "^[a-z0-9][a-z0-9./:_-]*@sha256:[a-f0-9]{64}$",
+          "title": "Image Digest",
+          "type": "string"
+        },
+        "manifest_digest": {
+          "pattern": "^[a-f0-9]{64}$",
+          "title": "Manifest Digest",
+          "type": "string"
+        },
+        "model_digest": {
+          "anyOf": [
+            {
+              "pattern": "^[a-f0-9]{64}$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Model Digest"
+        },
+        "node_id": {
+          "format": "uuid",
+          "title": "Node Id",
+          "type": "string"
+        },
+        "quality_passed": {
+          "title": "Quality Passed",
+          "type": "boolean"
+        },
+        "repetition": {
+          "maximum": 9.223372036854776e+18,
+          "minimum": 0.0,
+          "title": "Repetition",
+          "type": "integer"
+        },
+        "resource_limits": {
+          "$ref": "#/$defs/Resources"
+        },
+        "schema_version": {
+          "const": "1",
+          "default": "1",
+          "title": "Schema Version",
+          "type": "string"
+        },
+        "started_at": {
+          "format": "date-time",
+          "title": "Started At",
+          "type": "string"
+        },
+        "units": {
+          "exclusiveMinimum": 0.0,
+          "maximum": 9.223372036854776e+18,
+          "title": "Units",
+          "type": "integer"
+        },
+        "utilization": {
+          "items": {
+            "$ref": "#/$defs/Telemetry"
+          },
+          "maxItems": 10000,
+          "title": "Utilization",
+          "type": "array"
+        },
+        "verification_ms": {
+          "default": 0,
+          "maximum": 9.223372036854776e+18,
+          "minimum": 0.0,
+          "title": "Verification Ms",
+          "type": "integer"
+        },
+        "warm": {
+          "title": "Warm",
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "node_id",
+        "manifest_digest",
+        "config_digest",
+        "image_digest",
+        "adapter",
+        "resource_limits",
+        "repetition",
+        "units",
+        "quality_passed",
+        "duration_ms",
+        "started_at",
+        "ended_at",
+        "warm"
+      ],
+      "title": "StandaloneRecord",
+      "type": "object"
+    },
+    "Telemetry": {
+      "additionalProperties": false,
+      "properties": {
+        "cpu_percent": {
+          "anyOf": [
+            {
+              "maximum": 100.0,
+              "minimum": 0.0,
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Cpu Percent"
+        },
+        "gpu_percent": {
+          "anyOf": [
+            {
+              "maximum": 100.0,
+              "minimum": 0.0,
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Gpu Percent"
+        },
+        "memory_bytes": {
+          "anyOf": [
+            {
+              "maximum": 9.223372036854776e+18,
+              "minimum": 0.0,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Memory Bytes"
+        },
+        "phase": {
+          "enum": [
+            "idle",
+            "transfer",
+            "start",
+            "compute",
+            "verify",
+            "aggregate"
+          ],
+          "title": "Phase",
+          "type": "string"
+        },
+        "sequence": {
+          "maximum": 9.223372036854776e+18,
+          "minimum": 0.0,
+          "title": "Sequence",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "sequence",
+        "phase"
+      ],
+      "title": "Telemetry",
+      "type": "object"
+    }
+  },
+  "$ref": "#/$defs/StandaloneRecord",
+  "$schema": "https://json-schema.org/draft/2020-12/schema"
+}

@@ -1,0 +1,65 @@
+import {createRequire} from 'node:module';
+import {pathToFileURL, fileURLToPath} from 'node:url';
+import path from 'node:path';
+import fs from 'node:fs/promises';
+import crypto from 'node:crypto';
+
+const root=path.resolve(path.dirname(fileURLToPath(import.meta.url)),'../..');
+const require=createRequire(pathToFileURL(path.join(root,'apps/portal/package.json')));
+const {chromium,expect}=require('@playwright/test');
+const jobId=process.env.CAMPUS_TEST_JOB;
+if(!/^[0-9a-f-]{36}$/.test(jobId||''))throw new Error('Set CAMPUS_TEST_JOB to an existing completed test job');
+const origin=process.env.CAMPUS_TEST_ORIGIN||'https://10.4.146.76:8443';
+const runtime=process.env.CAMPUS_TEST_RUNTIME||path.join(process.env.LOCALAPPDATA,'Campus/server-96bfe6d');
+const out=path.join(root,'.git/campus-runner/distributed-projects/browser',jobId);
+await fs.mkdir(out,{recursive:true});
+const account=JSON.parse((await fs.readFile(path.join(runtime,'web-test-account.json'),'utf8')).replace(/^\uFEFF/,''));
+const browser=await chromium.launch({headless:true});
+const context=await browser.newContext({ignoreHTTPSErrors:true,viewport:{width:1440,height:1000},reducedMotion:'reduce'});
+const page=await context.newPage();
+const errors=[];
+page.on('pageerror',e=>errors.push(e.message));
+const report={job_id:jobId,checks:[],tls_note:'Isolated browser ignores private-CA warnings; separate strict-CA HTTP verification is required.'};
+try {
+  await page.goto(origin,{waitUntil:'networkidle'});
+  await page.getByLabel('Электронная почта').fill(account.email);
+  await page.getByLabel('Пароль',{exact:true}).fill(account.password);
+  await page.getByRole('button',{name:'Войти',exact:true}).click();
+  await expect(page.getByRole('heading',{name:'Ваше рабочее пространство'})).toBeVisible();
+  await page.goto(origin+'/jobs/'+jobId,{waitUntil:'networkidle'});
+  await expect(page.getByRole('heading',{name:'Результаты',exact:true})).toBeVisible();
+  const response=await context.request.get(origin+'/api/v1/jobs/'+jobId);
+  if(response.status()!==200)throw new Error('Member cannot read own CLI-created job');
+  const job=await response.json();
+  if(job.state!=='succeeded'||job.accepted_units!==24||job.tasks.length!==24||job.failed_units!==0)throw new Error('Incomplete distributed job');
+  for(const artifact of job.artifacts)await expect(page.getByRole('link',{name:artifact.name,exact:true})).toBeVisible();
+  report.checks.push('member views CLI-created 24/24 job and every unique accepted artifact');
+  const pending=page.waitForEvent('download');
+  await page.getByRole('link',{name:'result.json',exact:true}).click();
+  const download=await pending;
+  const target=path.join(out,'result.json');
+  await download.saveAs(target);
+  const bytes=await fs.readFile(target);
+  const artifact=job.artifacts.find(a=>a.name==='result.json');
+  const hash=crypto.createHash('sha256').update(bytes).digest('hex');
+  if(bytes.length!==artifact.size_bytes||hash!==artifact.sha256)throw new Error('Browser download differs from accepted bytes');
+  const result=JSON.parse(bytes);
+  if(result.test_count!==10000||result.correct!==6768)throw new Error('Unexpected result coverage');
+  report.result_sha256=hash;
+  report.checks.push('real browser result download matches size/SHA-256 and 10,000-image coverage');
+  await page.screenshot({path:path.join(out,'desktop.png'),fullPage:true});
+  await page.setViewportSize({width:390,height:844});
+  await page.screenshot({path:path.join(out,'mobile.png'),fullPage:true});
+  if(await page.evaluate(()=>document.documentElement.scrollWidth>innerWidth))throw new Error('Job page overflows mobile viewport');
+  if(errors.length)throw new Error('Browser runtime errors');
+  report.checks.push('desktop/mobile job page has no runtime errors or horizontal overflow');
+  report.passed=true;
+} catch(error) {
+  report.passed=false;
+  report.error=error.message;
+  process.exitCode=1;
+} finally {
+  await fs.writeFile(path.join(out,'report.json'),JSON.stringify(report,null,2)+'\n');
+  await browser.close();
+}
+console.log(JSON.stringify(report));

@@ -1,0 +1,32 @@
+{
+  "$defs": {
+    "AdapterRequest": {
+      "additionalProperties": false,
+      "properties": {
+        "operation": {
+          "enum": [
+            "validate_input",
+            "split",
+            "verify",
+            "aggregate"
+          ],
+          "title": "Operation",
+          "type": "string"
+        },
+        "payload": {
+          "additionalProperties": true,
+          "title": "Payload",
+          "type": "object"
+        }
+      },
+      "required": [
+        "operation",
+        "payload"
+      ],
+      "title": "AdapterRequest",
+      "type": "object"
+    }
+  },
+  "$ref": "#/$defs/AdapterRequest",
+  "$schema": "https://json-schema.org/draft/2020-12/schema"
+}

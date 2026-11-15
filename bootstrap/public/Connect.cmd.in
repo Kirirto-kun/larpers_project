@@ -1,0 +1,16 @@
+@echo off
+setlocal DisableDelayedExpansion
+set "PSModulePath=%SystemRoot%\System32\WindowsPowerShell\v1.0\Modules"
+set "CAMPUS_PUBLIC_STARTER=%~f0"
+powershell.exe -NoLogo -NoProfile -Command "$ErrorActionPreference='Stop'; try { $text=[IO.File]::ReadAllText([Environment]::GetEnvironmentVariable('CAMPUS_PUBLIC_STARTER','Process')); $marker=[string]::Concat('#',' CAMPUS PUBLIC POWERSHELL'); $offset=$text.IndexOf($marker); if($offset -lt 0){throw 'Starter body is missing'}; & ([ScriptBlock]::Create($text.Substring($offset+$marker.Length))); exit $LASTEXITCODE } catch { [Console]::Error.WriteLine('Campus: '+$_.Exception.Message); exit 1 }"
+set "CAMPUS_PUBLIC_EXIT=%errorlevel%"
+if "%CAMPUS_PUBLIC_EXIT%"=="0" goto done
+if "%CAMPUS_PUBLIC_EXIT%"=="130" goto done
+if "%CAMPUS_PUBLIC_EXIT%"=="-1073741510" goto done
+if "%CAMPUS_PUBLIC_EXIT%"=="3221225786" goto done
+echo(
+set /p "CAMPUS_PUBLIC_DISMISS=Press Enter to close this window..."
+:done
+exit /b %CAMPUS_PUBLIC_EXIT%
+# CAMPUS PUBLIC POWERSHELL
+@POWERSHELL_BODY@

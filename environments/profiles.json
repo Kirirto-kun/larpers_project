@@ -1,0 +1,7 @@
+{
+  "schema_version": "1",
+  "profiles": [
+    {"id": "python-ml-cpu-v1", "accelerator": "cpu", "platform": "linux/amd64", "image_digest": null, "guard_version": "1", "dockerfile": "environments/cpu/Dockerfile", "dependencies": {"python": "3.11.14", "torch": "2.9.1", "transformers": "4.57.1", "numpy": "2.2.6", "pillow": "11.3.0", "safetensors": "0.6.2"}},
+    {"id": "python-ml-cuda-v1", "accelerator": "cuda", "platform": "linux/amd64", "image_digest": null, "guard_version": "1", "dockerfile": "environments/cuda/Dockerfile", "dependencies": {"python": "3.11.14", "torch": "2.9.1", "cuda_wheels": "12.8", "transformers": "4.57.1", "numpy": "2.2.6", "pillow": "11.3.0", "safetensors": "0.6.2"}}
+  ]
+}

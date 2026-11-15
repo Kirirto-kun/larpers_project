@@ -1,0 +1,40 @@
+{
+  "$defs": {
+    "AdapterResponse": {
+      "additionalProperties": false,
+      "properties": {
+        "error": {
+          "anyOf": [
+            {
+              "maxLength": 256,
+              "minLength": 1,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Error"
+        },
+        "result": {
+          "anyOf": [
+            {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Result"
+        }
+      },
+      "title": "AdapterResponse",
+      "type": "object"
+    }
+  },
+  "$ref": "#/$defs/AdapterResponse",
+  "$schema": "https://json-schema.org/draft/2020-12/schema"
+}

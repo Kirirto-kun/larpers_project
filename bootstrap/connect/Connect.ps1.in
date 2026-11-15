@@ -1,0 +1,19 @@
+[CmdletBinding()]
+param([Parameter(ValueFromRemainingArguments=$true)][string[]]$ConnectionArguments)
+$ErrorActionPreference = 'Stop'
+try {
+    $bundle = $PSScriptRoot
+    $runner = Join-Path $bundle 'campus.exe'
+    $manifest = Join-Path $bundle 'connection.json'
+    foreach ($path in @($runner, $manifest)) {
+        $item = Get-Item -LiteralPath $path -Force
+        if ($item.PSIsContainer -or ($item.Attributes -band [IO.FileAttributes]::ReparsePoint)) { throw 'Package payload must be a regular file' }
+    }
+    if ((Get-FileHash -LiteralPath $runner -Algorithm SHA256).Hash -ne '@RUNNER_SHA256@') { throw 'Runner checksum mismatch; obtain a fresh trusted package' }
+    if ((Get-FileHash -LiteralPath $manifest -Algorithm SHA256).Hash -ne '@MANIFEST_SHA256@') { throw 'Manifest checksum mismatch; obtain a fresh trusted package' }
+    & $runner connect --bundle $bundle --manifest-sha256 '@MANIFEST_SHA256@' @ConnectionArguments
+    exit $LASTEXITCODE
+} catch {
+    Write-Error ('Campus: ' + $_.Exception.Message) -ErrorAction Continue
+    exit 1
+}

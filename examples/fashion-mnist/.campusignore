@@ -1,0 +1,12 @@
+# Upload declared NPZ inputs separately; keep cached source archives out of code.
+dataset/
+results/
+outputs/
+state/
+tests/
+__pycache__/
+.pytest_cache/
+.ruff_cache/
+*.pyc
+
+# manifest.json intentionally remains in the code snapshot for the worker.

@@ -1,0 +1,2 @@
+# Preserve original upstream bytes for the pinned provenance checks on Windows.
+tests/fixtures/foundation/*.json text eol=lf

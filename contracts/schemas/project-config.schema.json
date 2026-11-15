@@ -1,0 +1,209 @@
+{
+  "$defs": {
+    "ProjectConfig": {
+      "additionalProperties": false,
+      "properties": {
+        "data": {
+          "items": {
+            "maxLength": 512,
+            "minLength": 1,
+            "type": "string"
+          },
+          "maxItems": 32,
+          "title": "Data",
+          "type": "array"
+        },
+        "name": {
+          "maxLength": 256,
+          "minLength": 1,
+          "title": "Name",
+          "type": "string"
+        },
+        "prompt": {
+          "anyOf": [
+            {
+              "maxLength": 8000,
+              "minLength": 1,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Prompt"
+        },
+        "schema_version": {
+          "const": "1",
+          "title": "Schema Version",
+          "type": "string"
+        },
+        "stages": {
+          "items": {
+            "$ref": "#/$defs/ProjectStage"
+          },
+          "maxItems": 24,
+          "minItems": 1,
+          "title": "Stages",
+          "type": "array"
+        }
+      },
+      "required": [
+        "schema_version",
+        "name",
+        "data",
+        "stages"
+      ],
+      "title": "ProjectConfig",
+      "type": "object"
+    },
+    "ProjectOutput": {
+      "additionalProperties": false,
+      "properties": {
+        "max_bytes": {
+          "maximum": 536870912.0,
+          "minimum": 1.0,
+          "title": "Max Bytes",
+          "type": "integer"
+        },
+        "path": {
+          "maxLength": 512,
+          "minLength": 1,
+          "title": "Path",
+          "type": "string"
+        },
+        "required": {
+          "default": true,
+          "title": "Required",
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "path",
+        "max_bytes"
+      ],
+      "title": "ProjectOutput",
+      "type": "object"
+    },
+    "ProjectResources": {
+      "additionalProperties": false,
+      "properties": {
+        "cpu_millis": {
+          "default": 1000,
+          "maximum": 4000.0,
+          "minimum": 1.0,
+          "title": "Cpu Millis",
+          "type": "integer"
+        },
+        "disk_bytes": {
+          "default": 268435456,
+          "maximum": 536870912.0,
+          "minimum": 1048576.0,
+          "title": "Disk Bytes",
+          "type": "integer"
+        },
+        "memory_bytes": {
+          "default": 536870912,
+          "maximum": 4294967296.0,
+          "minimum": 33554432.0,
+          "title": "Memory Bytes",
+          "type": "integer"
+        },
+        "vram_bytes": {
+          "default": 1073741824,
+          "maximum": 4294967296.0,
+          "minimum": 0.0,
+          "title": "Vram Bytes",
+          "type": "integer"
+        }
+      },
+      "title": "ProjectResources",
+      "type": "object"
+    },
+    "ProjectStage": {
+      "additionalProperties": false,
+      "properties": {
+        "accelerator": {
+          "default": "auto",
+          "enum": [
+            "auto",
+            "cpu",
+            "cuda"
+          ],
+          "title": "Accelerator",
+          "type": "string"
+        },
+        "command": {
+          "items": {
+            "maxLength": 4096,
+            "type": "string"
+          },
+          "maxItems": 64,
+          "minItems": 1,
+          "title": "Command",
+          "type": "array"
+        },
+        "depends_on": {
+          "items": {
+            "pattern": "^[a-zA-Z0-9][a-zA-Z0-9._-]{0,63}$",
+            "type": "string"
+          },
+          "maxItems": 24,
+          "title": "Depends On",
+          "type": "array"
+        },
+        "id": {
+          "pattern": "^[a-zA-Z0-9][a-zA-Z0-9._-]{0,63}$",
+          "title": "Id",
+          "type": "string"
+        },
+        "inputs": {
+          "items": {
+            "maxLength": 512,
+            "minLength": 1,
+            "type": "string"
+          },
+          "maxItems": 32,
+          "title": "Inputs",
+          "type": "array"
+        },
+        "kind": {
+          "enum": [
+            "map",
+            "reduce"
+          ],
+          "title": "Kind",
+          "type": "string"
+        },
+        "outputs": {
+          "items": {
+            "$ref": "#/$defs/ProjectOutput"
+          },
+          "maxItems": 32,
+          "minItems": 1,
+          "title": "Outputs",
+          "type": "array"
+        },
+        "resources": {
+          "$ref": "#/$defs/ProjectResources"
+        },
+        "timeout_seconds": {
+          "default": 300,
+          "maximum": 86400.0,
+          "minimum": 1.0,
+          "title": "Timeout Seconds",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "id",
+        "kind",
+        "command",
+        "outputs"
+      ],
+      "title": "ProjectStage",
+      "type": "object"
+    }
+  },
+  "$ref": "#/$defs/ProjectConfig",
+  "$schema": "https://json-schema.org/draft/2020-12/schema"
+}

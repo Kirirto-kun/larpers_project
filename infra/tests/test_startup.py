@@ -13,7 +13,7 @@ BASH = ("C:/Program Files/Git/bin/bash.exe" if os.name == "nt" else shutil.which
 
 
 class StartupTests(unittest.TestCase):
-    def run_start(self, shell, runtime=False, auto=False, incomplete=False, fail="", project="", fresh_env=True):
+    def run_start(self, shell, runtime=False, auto=False, incomplete=False, fail="", project="", fresh_env=True, packaged=False):
         with tempfile.TemporaryDirectory(prefix="campus-start-") as temporary:
             root = Path(temporary)
             (root / "infra").mkdir()
@@ -31,12 +31,14 @@ class StartupTests(unittest.TestCase):
             env["CALL_LOG"] = str(log)
             env["FAIL_STEP"] = fail
             private = root / "local" / "Campus" / "server-96bfe6d" if auto else root / "private runtime"
-            if runtime or auto or incomplete:
+            if packaged:
+                private = root / "local" / "Packages" / "OpenAI.Codex_test" / "LocalCache" / "Local" / "Campus" / "server-96bfe6d"
+            if runtime or auto or incomplete or packaged:
                 private.mkdir(parents=True)
                 (private / "runtime.env").touch()
                 if not incomplete:
                     (private / "live.override.yaml").touch()
-                if not auto:
+                if not auto and not packaged:
                     env["CAMPUS_RUNTIME_DIR"] = str(private)
             if shell == "ps1":
                 if not PWSH:
@@ -114,6 +116,17 @@ function global:docker {
         result, calls, _ = self.run_start("ps1", auto=True)
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertIn("--project-name|campus-live", calls[-1])
+
+    def test_windows_discovers_packaged_private_runtime(self):
+        result, calls, private = self.run_start("ps1", packaged=True)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn("--project-name|campus-live", calls[-1])
+        self.assertIn(str(Path(private) / "runtime.env"), calls[-1])
+
+    def test_incomplete_packaged_runtime_does_not_create_new_pool(self):
+        result, calls, _ = self.run_start("ps1", packaged=True, incomplete=True)
+        self.assertNotEqual(result.returncode, 0)
+        self.assertEqual(calls, [])
 
     def test_explicit_project_override(self):
         for shell in ("ps1", "sh"):

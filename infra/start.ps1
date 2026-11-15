@@ -8,10 +8,19 @@ Push-Location $root
 try {
     # An incomplete existing runtime must fail rather than create a fresh pool.
     if (-not $RuntimeDirectory -and $env:LOCALAPPDATA) {
-        $existing = Join-Path $env:LOCALAPPDATA 'Campus/server-96bfe6d'
-        if ((Test-Path -LiteralPath (Join-Path $existing 'runtime.env')) -or
-            (Test-Path -LiteralPath (Join-Path $existing 'live.override.yaml'))) {
-            $RuntimeDirectory = $existing
+        $runtimeCandidates = @(Join-Path $env:LOCALAPPDATA 'Campus/server-96bfe6d')
+        $packages = Join-Path $env:LOCALAPPDATA 'Packages'
+        if (Test-Path -LiteralPath $packages -PathType Container) {
+            foreach ($package in Get-ChildItem -LiteralPath $packages -Directory -Filter 'OpenAI.Codex_*') {
+                $runtimeCandidates += Join-Path $package.FullName 'LocalCache/Local/Campus/server-96bfe6d'
+            }
+        }
+        foreach ($existing in $runtimeCandidates) {
+            if ((Test-Path -LiteralPath (Join-Path $existing 'runtime.env')) -or
+                (Test-Path -LiteralPath (Join-Path $existing 'live.override.yaml'))) {
+                $RuntimeDirectory = $existing
+                break
+            }
         }
     }
     $composeArgs = @('compose')

@@ -17,18 +17,27 @@
 
 ## 2. Готовое содержание: два слайда / до 60 секунд
 
-### Слайд 1 — Users & adoption
+Используй **две небольшие таблицы**, по одной на слайд. Они заменяют общие списки преимуществ: первая показывает выбор клиента, вторая — затраты. Не добавляй их третьим и четвёртым слайдами.
 
-**Заголовок:** `Shared compute for small research teams`
+### Слайд 1 — Customer, alternatives & business model
 
-Поставь четыре коротких блока; подписи слева, содержание справа:
+**Заголовок:** `Who pays, and why choose larpool?`
 
-| Подпись | Текст на слайде |
-|---|---|
-| First → regular users | `Research teams → recurring document / data batches` |
-| Alternatives | `One workstation · Cloud GPUs · Existing pools` |
-| Our hypothesis | `A simpler workflow on the team's existing CPU/GPU devices` |
-| Acquire → expand | `Lab-led pilot → adjacent labs → courses` |
+**Строка над таблицей:** `First users: research teams with recurring batches. Potential buyer: lab lead.`
+
+| Option | What the team gets | Decision / trade-off |
+|---|---|---|
+| One workstation | Local execution | Simplest baseline; one machine's capacity |
+| Runpod / AutoDL | Rented GPU capacity | Rental, storage and setup costs |
+| Salad Private / HTCondor | Existing own-device pooling | Pooling already exists |
+| **larpool — pilot** | **Guided team batch workflow** | **Ease and cost advantage to validate** |
+
+**Строки под таблицей:**
+
+- `Acquire & expand: lab-led pilot → adjacent labs → courses.`
+- `Revenue hypothesis: paid setup + monthly private-pool support.`
+
+Это сравнение моделей использования, а не рейтинг производительности. Не ставь конкурентам крестики в колонках privacy, AI, verification или own devices: отсутствия этих функций мы не установили. Объединение Salad и HTCondor в одной строке означает только общий вариант «использовать готовое решение для своего пула», а не одинаковые продукты или лицензии.
 
 **Заметки выступающего, не переносить целиком на слайд:**
 
@@ -37,18 +46,46 @@
 - Канал привлечения — руководитель лаборатории/TA и существующая группа команды. Расширение начинается с соседних лабораторий, затем курсов.
 - Прямые альтернативы: Salad Private Cloud, HTCondor, BOINC. Объединение устройств, приватный пул, AI и учёт вклада сами по себе не уникальны. Сравнительное удобство larpool — гипотеза для проверки.
 
-### Слайд 2 — Economics & trust
+### Слайд 2 — Cost plan & sustainability
 
-**Заголовок:** `Measure value per correct result`
+**Заголовок:** `Support effort determines the economics`
 
-| Подпись | Текст на слайде |
+**Обязательная заметная подпись:** `Illustrative monthly budget — assumptions, not measured costs.`
+
+| Cost item | USD / month |
+|---|---:|
+| Electricity | $3.60 |
+| Hardware wear reserve | $4.80 |
+| Coordinator, storage/network & AI | $6.00 |
+| Operator time | $40.00 |
+| **Total economic cost** | **$54.40** |
+
+**Основание прямо под таблицей:** `4 existing devices · 160 device-hours/month · 4 operator hours/month.`
+
+**Две короткие нижние строки:**
+
+- `Validate: total cost per correct result + repeat usage.`
+- `Trust: owner permission, voluntary participation, non-sensitive pilot data.`
+
+Не называй $54.40 тарифом подписки, фактическим счётом, доказанной экономией или стоимостью определённого объёма результатов. Не сопоставляй эту сумму с облачным GPU-часом. Это условная полная стоимость эксплуатации одного пула при перечисленных ниже предположениях.
+
+**Предположения для speaker notes; сохранить вместе со слайдом:**
+
+| Параметр | Условное значение / расчёт |
 |---|---|
-| Buyer / model hypothesis | `Lab lead · Private-pool setup & support` |
-| Full cost | `Hardware wear + power + network/storage + AI + operations` |
-| Measure | `Total cost ÷ unique accepted results` |
-| Trust / availability | `Owner permission · Voluntary participation · Non-sensitive pilot data · Variable availability` |
+| Устройства и время | 4 уже имеющихся совместимых устройства × 40 часов/месяц = 160 device-hours; работоспособность этого состава требует проверки |
+| Энергия | Дополнительная мощность всего устройства 0.15 kW × 160 часов × $0.15/kWh = $3.60 |
+| Износ | Условный резерв $0.03/device-hour × 160 = $4.80; не включает покупку нового компьютера |
+| Инфраструктура и AI | Координатор, хранение и сеть: условно $5; внешний AI: условно $1 |
+| Обслуживание | 4 часа труда × условные $10/час = $40, даже если в пилоте никто не выплачивает зарплату |
+| Не включено | Первичное подключение, разработка продукта, привлечение клиентов, налоги и компенсации сверх уже учтённых энергии/износа |
+| Валюта и статус | USD для иллюстрации; это не тариф кампуса, не зарплата команды и не проверенный расход. Для рабочего бюджета заменить реальными местными значениями |
 
-**Нижняя строка:** `Pilot proposal — demand, savings and retention are not yet validated.`
+**Бизнес-логика, объяснить в заметках:** покупатель — руководитель лаборатории/курса; предложение — настройка частного пула, поддержанные сценарии, обновления и поддержка. Сначала бесплатный ограниченный пилот, затем проверка готовности оплачивать внедрение и сопровождение. Финальная цена и продажи пока не подтверждены.
+
+Не смешивать стоимость пула и расходы компании: в этом примере энергия и износ составляют $8.40 у владельцев устройств. Если larpool сам оплачивает инфраструктуру/AI и весь труд оператора, его прямые затраты обслуживания — $46/месяц. Это ещё не полная себестоимость бизнеса: к ней добавятся подключение, разработка и привлечение. Если работу выполняет лаборатория, распределение расходов будет другим. Нельзя вычитать все $54.40 из выручки larpool, не объяснив, кто что оплачивает.
+
+Чувствительность для ответа на вопросы: при 1 часе поддержки полная стоимость примера — $24.40; при 8 часах — $94.40. Это показывает, почему самостоятельная установка и понятная диагностика влияют на бизнес. Объём корректных результатов неизвестен, поэтому стоимость единицы пока считается формулой, а не выдуманным числом.
 
 **Заметки выступающего:**
 
@@ -68,10 +105,12 @@
 |---|---|
 | Users & growth | `Recurring research batches. Lab pilot → adjacent labs → courses.` |
 | Alternatives & focus | `Workstation / cloud / existing pools. Our hypothesis: simpler team workflows.` |
-| Economics | `Test paid pool support. Measure cost per correct result: hardware, power, network, operations.` |
+| Economics | `Paid setup + monthly support: hypothesis. Illustrative pool cost: ~$54/month; support dominates.` |
 | Trust & risks | `Owner permission; voluntary participation; non-sensitive pilot data. Setup and availability are key risks.` |
 
 **Нижняя строка:** `Pilot proposal — demand, savings and retention are not yet validated.`
+
+Если показываешь ~$54, рядом обязательно оставь `Estimate: 4 devices, 160 device-hours, 4 support hours/month; excludes initial setup.` Полные предположения из раздела 2 перенеси в speaker notes. Если это не помещается читаемо, убери сумму и оставь `Measure full cost per correct result`; не скрывай оговорку мелким шрифтом. Для 30 секунд обе подробные таблицы остаются в резерве.
 
 ## 4. Готовый текст выступления
 
@@ -79,13 +118,13 @@
 
 **Около 30 секунд, один слайд:**
 
-> Larpool targets research teams with recurring batch jobs. Alternatives are workstations, cloud GPUs and existing pools. Our hypothesis is simpler team workflows. We start with lab pilots, then adjacent labs and courses. We will test paid support and cost per correct result, including hardware wear, power, bandwidth and operations. Participation requires owner permission and non-sensitive pilot data. Demand and savings remain unvalidated.
+> Larpool targets research teams with recurring batch jobs. Alternatives are workstations, cloud GPUs and existing pools. We start with lab pilots, then adjacent labs and courses. Our business hypothesis is paid setup and support. An illustrative four-device budget is about fifty-four dollars monthly, mostly operator time; actual costs need measurement. Participation requires owner permission and non-sensitive data. Demand and savings remain unvalidated.
 
 **Около 60 секунд, два слайда; переключить после первого абзаца:**
 
-> Larpool targets small research teams with recurring batch tasks, such as indexing permitted documents. Their alternatives are a workstation, rented GPUs or existing pools like Salad and HTCondor. Our hypothesis is a simpler complete workflow on the team's CPU and GPU devices. We would recruit through a lab lead, then expand to adjacent labs and courses after repeat use.
+> Our first users are research teams with recurring batch tasks. They can use a workstation, rent GPUs, or deploy existing pools like Salad and HTCondor. We aim to simplify the team workflow. We start through lab leads, then adjacent labs and courses. Our revenue hypothesis is paid setup and monthly pool support.
 >
-> The business hypothesis is paid setup and support for private pools. We will compare cost per correct result, including hardware wear, electricity, bandwidth, storage, AI and operator time. Setup effort and unreliable device availability are key risks. Participation requires explicit owner permission; initial data is non-sensitive. We still need real multi-device measurements, returning users and willingness-to-pay evidence before claiming commercial advantage.
+> Our illustrative budget for four existing devices is about fifty-four dollars per month, including forty dollars of operator time. It covers energy, wear, infrastructure and AI, but excludes initial setup. These are assumptions, not measured costs or our subscription price. We will measure cost per correct result and repeat usage. Owner permission, voluntary participation and non-sensitive pilot data address initial trust concerns; installation and variable availability remain key risks.
 
 **Если 30–60 секунд — весь питч проекта: реплика Investment на 10–15 секунд.** Остальные критерии покрыть реальной демонстрацией и измерениями; этот файл их не заменяет.
 
@@ -94,10 +133,10 @@
 ## 5. Правила для агента: что добавлять и чего не выдумывать
 
 - На слайдах отделяй **предлагаемый пилот и бизнес-модель** от результатов. Не называй запланированные команды или устройства действующими клиентами.
-- Если появились свежие подтверждённые результаты, замени нижнюю строку одним сильным фактом: реальный workload, число физических исполнителей, измеренный выигрыш или повторные пользователи. Укажи источник замера; если факта нет, оставь пометку о гипотезах. Не вставляй незаполненные placeholders.
+- Если появились свежие подтверждённые результаты, строку о непроверенных результатах можно заменить одним сильным фактом: реальный workload, число физических исполнителей, измеренный выигрыш или повторные пользователи. Укажи источник замера; если факта нет, оставь пометку о гипотезах. Подпись об условном бюджете и его предположения сохраняй, пока нет настоящих замеров затрат. Не вставляй незаполненные placeholders.
 - В доступном [отчёте проверки сервера](../../server/VERIFICATION.md) зафиксирован один физический Mac и checksum smoke. Это не доказательство полезного multi-device ML benchmark. Более новые результаты коллеги должны иметь отдельное подтверждение.
 - Не обещай «быстрее/дешевле облака», гарантированную доступность, объединённую VRAM, отсутствие внешней передачи данных или уникальность механизма pooling без доказательств.
-- Не добавляй условные **$54.40/месяц**, рекламные GPU-тарифы, TAM, график выручки и прогноз прибыли: в коротком питче они отвлекают и легко воспринимаются как измеренные показатели.
+- Условные **$54.40/месяц** разрешены только как явно подписанный сценарий из раздела 2, с доступными предположениями. Это не прайс продукта и не фактические затраты. Не добавляй рекламные GPU-тарифы, неподтверждённый TAM, выдуманную выручку или прогноз прибыли.
 - Используй стиль существующей презентации: крупный заголовок, короткие подписи, один акцентный цвет. Никаких архитектурных схем и полной конкурентной матрицы в этом блоке. Не называть «35/100» полученной оценкой — это вес Investment в брифе.
 
 ## 6. Источники для speaker notes / справочного слайда
@@ -109,5 +148,7 @@
 - [HTCondor](https://htcondor.readthedocs.io/en/26.x/admin-manual/introduction-admin-manual.html): собственный пул, очередь и правила владельца устройства.
 - [BOINC](https://boinc.berkeley.edu/boinc_a_platform_for_volunteer_computing.pdf): добровольные вычисления и проверка результатов.
 - [Colab FAQ](https://research.google.com/colaboratory/faq.html): notebook-альтернатива и ограничения ресурсов.
+- [Runpod RTX 4090](https://www.runpod.io/gpu-models/rtx-4090): арендуемые GPU как альтернатива своему парку; тарифы в слайдах не приводить.
+- [AutoDL quick start](https://www.autodl.com/docs/quick_start/) и [billing](https://www.autodl.com/docs/price/): выбор GPU/образа и расходы аренды/хранения.
 
 **Готовность блока:** критерии 20 + 15 покрыты; слайдов не больше двух; текст проговорён за доступное время; неподтверждённые показатели не представлены как результаты.

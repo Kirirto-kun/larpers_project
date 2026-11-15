@@ -2,7 +2,7 @@ import type { Page } from "@playwright/test";
 export const node = {
   id: "node-1",
   owner_id: "owner-1",
-  name: "Лаборатория",
+  name: "Laboratory",
   state: "ready",
   last_seen_at: "2026-11-15T00:00:00Z",
   capabilities: {
@@ -78,7 +78,12 @@ export const benchmark = {
 };
 export async function fixtures(
   page: Page,
-  options: { role?: string; empty?: boolean } = {},
+  options: {
+    role?: string;
+    empty?: boolean;
+    summaryUnavailable?: boolean;
+    missingCapabilities?: boolean;
+  } = {},
 ) {
   const requests: { path: string; body: any }[] = [];
   await page.route("**/api/v1/**", (route) => {
@@ -93,21 +98,40 @@ export async function fixtures(
     if (path === "/auth/me")
       return json({
         id: "owner-1",
-        name: "Администратор",
+        name: "Administrator",
         email: "admin@example.com",
         role: options.role || "owner",
         pool_id: "pool-1",
         csrf_token: "csrf",
       });
+    if (path === "/pool/summary" && options.summaryUnavailable)
+      return route.fulfill({
+        status: 503,
+        json: { code: "UNAVAILABLE", message: "Pool summary unavailable." },
+      });
     if (path === "/pool/summary")
       return json({
         pool_id: "pool-1",
-        nodes: 1,
-        ready_nodes: 1,
-        accepted_units: 10,
-        jobs_by_state: { running: 2, succeeded: 3, failed: 1 },
+        nodes: options.empty ? 0 : 1,
+        ready_nodes: options.empty ? 0 : 1,
+        accepted_units: options.empty ? 0 : 10,
+        jobs_by_state: options.empty
+          ? {}
+          : { running: 2, succeeded: 3, failed: 1 },
       });
-    if (path === "/nodes") return json(options.empty ? [] : [node]);
+    if (path === "/nodes")
+      return json(
+        options.empty
+          ? []
+          : [
+              {
+                ...node,
+                capabilities: options.missingCapabilities
+                  ? null
+                  : node.capabilities,
+              },
+            ],
+      );
     if (path === "/jobs") return json([]);
     if (path === "/benchmarks") return json(options.empty ? [] : [benchmark]);
     if (path.includes("/control") || path.includes("/settings"))

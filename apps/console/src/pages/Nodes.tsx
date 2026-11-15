@@ -29,12 +29,10 @@ export function Nodes() {
   }
   return (
     <>
-      <PageHeader eyebrow="УСТРОЙСТВА" title="Вычислительные ресурсы пула">
-        Состояние поступает от клиентов. Команда из браузера не запускает
-        выключенное приложение.
-      </PageHeader>
+      <PageHeader title="Devices" />
       <ErrorBox message={error || message} />
-      {data?.length === 0 && <Empty>Устройств пока нет.</Empty>}
+      {!data && !error && <Empty>Loading devices…</Empty>}
+      {data?.length === 0 && <Empty>No devices registered.</Empty>}
       {data?.map((n) => (
         <article className="card" key={n.id}>
           <div className="row">
@@ -43,66 +41,66 @@ export function Nodes() {
           </div>
           <div className="grid">
             <div>
-              <h3>Оборудование и доступность</h3>
+              <h3>Hardware</h3>
               {n.capabilities ? (
                 <>
                   <p>
                     {n.capabilities.os} / {n.capabilities.arch} ·{" "}
                     {n.capabilities.cpu_logical} CPU ·{" "}
-                    {bytes(n.capabilities.memory_available_bytes)} памяти
+                    {bytes(n.capabilities.memory_available_bytes)} memory
                   </p>
                   <p>
                     Docker {n.capabilities.runtime.version} ·{" "}
                     {n.capabilities.runtime.healthy
-                      ? "работает"
-                      : "требует внимания"}
+                      ? "healthy"
+                      : "needs attention"}
                   </p>
                   <p>
-                    Источник питания:{" "}
+                    Power:{" "}
                     {n.capabilities.power_state === "ac"
-                      ? "сеть"
+                      ? "AC power"
                       : n.capabilities.power_state === "battery"
-                        ? "батарея"
-                        : "неизвестен"}
+                        ? "battery"
+                        : "unknown"}
                   </p>
                   {n.capabilities.gpus.map((g) => (
                     <p key={g.id}>
                       <b>{g.vendor}</b> · {bytes(g.vram_bytes)} · CUDA{" "}
-                      {g.cuda_verified ? "проверена" : "не подтверждена"}
+                      {g.cuda_verified ? "verified" : "not verified"}
                     </p>
                   ))}
                   <p>
-                    Предоставлено:{" "}
-                    {n.capabilities.offered_budget.cpu_millis / 1000} CPU ·{" "}
-                    {bytes(n.capabilities.offered_budget.memory_bytes)} ·{" "}
+                    Offered: {n.capabilities.offered_budget.cpu_millis / 1000}{" "}
+                    CPU · {bytes(n.capabilities.offered_budget.memory_bytes)} ·{" "}
                     {n.capabilities.offered_budget.gpu_slots} GPU
                   </p>
                 </>
               ) : (
-                <p>Клиент ещё не передал характеристики.</p>
+                <p>Hardware details not received yet.</p>
               )}
               <p className="muted">
-                Загрузка CPU/GPU: не измерена в этом представлении.
+                CPU and GPU utilization not measured here.
               </p>
             </div>
             <div>
-              <h3>Участие</h3>
+              <h3>Activity & controls</h3>
               <p>
-                {n.active_attempts} активных задач · {n.accepted_units} принято
+                {n.active_attempts} active tasks · {n.accepted_units} accepted
+                units
               </p>
-              <p>Последняя связь: {date(n.last_seen_at)}</p>
+              <p>Last seen: {date(n.last_seen_at)}</p>
               <p>
-                Владелец: <code>{n.owner_id}</code>
+                Owner: <code>{n.owner_id}</code>
               </p>
               {n.supports_web_controls ? (
                 <>
                   <p className="notice">
                     {n.applied_revision === n.settings.revision
-                      ? "Настройки применены клиентом"
-                      : "Ожидает применения на компьютере"}
+                      ? "Settings applied"
+                      : "Waiting for device to apply settings"}
                   </p>
                   <label>
-                    Режим нагрузки
+                    Workload mode
                     <select
                       value={n.settings.mode}
                       disabled={!!busy}
@@ -122,15 +120,15 @@ export function Nodes() {
                         }
                       }}
                     >
-                      <option value="low">Лёгкий · 10%</option>
-                      <option value="medium">Средний · 50%</option>
-                      <option value="max">Максимальный · 90%</option>
+                      <option value="low">Low · 10%</option>
+                      <option value="medium">Medium · 50%</option>
+                      <option value="max">Maximum · 90%</option>
                     </select>
                   </label>
                 </>
               ) : (
                 <p className="notice">
-                  Для удалённых настроек требуется обновление клиента.
+                  Update the desktop app to change settings remotely.
                 </p>
               )}
               {n.settings_error && <ErrorBox message={n.settings_error} />}
@@ -138,15 +136,12 @@ export function Nodes() {
           </div>
           <div className="actions">
             {[
-              { id: "drain", name: "Завершить текущую работу" },
-              { id: "stop", name: "Остановить" },
-              { id: "resume", name: "Продолжить" },
+              { id: "drain", name: "Finish current work" },
+              { id: "stop", name: "Stop" },
+              { id: "resume", name: "Resume" },
               {
                 id: n.state === "quarantined" ? "release" : "quarantine",
-                name:
-                  n.state === "quarantined"
-                    ? "Снять блокировку"
-                    : "Заблокировать",
+                name: n.state === "quarantined" ? "Release" : "Quarantine",
               },
             ].map((a) => (
               <Button

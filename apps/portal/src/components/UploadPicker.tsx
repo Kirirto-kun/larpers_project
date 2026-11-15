@@ -15,7 +15,7 @@ export function UploadPicker({
   return (
     <>
       <label>
-        Код и данные
+        Code and data
         <input type="file" multiple disabled={disabled} onChange={pick} />
       </label>
       {files.map((f, i) => (
@@ -23,15 +23,15 @@ export function UploadPicker({
           <span>
             {f.webkitRelativePath || f.name}
             {excluded(f.webkitRelativePath || f.name) && (
-              <b> · Исключён: секрет или служебный файл</b>
+              <b> · Excluded: secret or system file</b>
             )}
           </span>
           <small>{bytes(f.size)}</small>
         </div>
       ))}
       <p className="muted">
-        Файлы кода и данные загрузятся в пул. .env, ключи и служебные папки
-        исключаются. Проверьте содержимое перед загрузкой.
+        Files are uploaded to the pool. .env files, keys, and system folders are
+        excluded. Review your files before uploading.
       </p>
     </>
   );

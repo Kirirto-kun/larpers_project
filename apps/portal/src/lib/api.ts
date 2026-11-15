@@ -26,7 +26,9 @@ export async function api<T>(path: string, init: RequestInit = {}): Promise<T> {
       credentials: "same-origin",
     });
   } catch {
-    throw new Error("Нет связи с сервером. Проверьте подключение и повторите.");
+    throw new Error(
+      "Cannot reach the server. Check your connection and try again.",
+    );
   }
   if (!res.ok) {
     if (res.status === 401)
@@ -45,28 +47,29 @@ export function post<T>(path: string, body: unknown, headers?: HeadersInit) {
   return api<T>(path, { method: "POST", body: JSON.stringify(body), headers });
 }
 const messages: Record<string, string> = {
-  UNAUTHORIZED: "Не удалось войти. Проверьте почту и пароль.",
-  FORBIDDEN: "Недостаточно прав для этого действия.",
-  EMAIL_IN_USE: "Эта почта уже используется. Войдите в аккаунт.",
-  ACCOUNT_EXISTS: "Пароль для аккаунта уже задан. Войдите с ним.",
+  UNAUTHORIZED: "Could not sign in. Check your email and password.",
+  FORBIDDEN: "You do not have permission for this action.",
+  EMAIL_IN_USE: "This email is already registered. Sign in to continue.",
+  ACCOUNT_EXISTS: "This account already has a password. Sign in to continue.",
   PLANNER_UNAVAILABLE:
-    "Планировщик временно недоступен. Файлы сохранены: попробуйте снова.",
-  RATE_LIMITED: "Слишком много запросов. Подождите немного.",
-  STALE_PREVIEW: "План изменился. Проверьте обновлённый план перед запуском.",
+    "The planner is temporarily unavailable. Your files are saved; try again.",
+  RATE_LIMITED: "Too many requests. Wait a moment and try again.",
+  STALE_PREVIEW:
+    "The plan changed. Review the updated version before starting.",
   CAPACITY_UNAVAILABLE:
-    "Пока нет подходящего устройства. Подключите компьютер или подождите.",
+    "No suitable device is available. Connect a computer or wait.",
   QUOTA_EXCEEDED:
-    "Превышен доступный объём. Уменьшите файлы или обратитесь к владельцу.",
+    "Storage limit reached. Use smaller files or contact the pool owner.",
 };
 export function errorText(e: unknown) {
   if (e instanceof ApiError)
     return (
       (messages[e.code] || e.message) +
-      (e.requestId ? " · Код обращения: " + e.requestId : "")
+      (e.requestId ? " · Request ID: " + e.requestId : "")
     );
   return e instanceof Error
     ? e.message
-    : "Не удалось выполнить действие. Повторите попытку.";
+    : "Could not complete this action. Try again.";
 }
 export function artifactUrl(id: string) {
   return "/api/v1/artifacts/" + encodeURIComponent(id) + "/content";

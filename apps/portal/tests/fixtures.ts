@@ -1,7 +1,7 @@
 import type { Page } from "@playwright/test";
 export const identity = {
   id: "user-1",
-  name: "Анна",
+  name: "Anna",
   email: "anna@example.com",
   role: "member",
   pool_id: "pool-1",
@@ -10,7 +10,7 @@ export const identity = {
 export const node = {
   id: "node-1",
   owner_id: "user-1",
-  name: "Мой ноутбук",
+  name: "My laptop",
   state: "offline",
   last_seen_at: null,
   capabilities: null,
@@ -34,7 +34,7 @@ export const preview = {
   plan: {
     plan_revision: 1,
     execution_kind: "single",
-    assumptions: ["Тестовая задача CPU"],
+    assumptions: ["CPU test task"],
     evidence: [],
     questions: [],
     job_deadline_at: "2030-01-01T00:00:00Z",
@@ -186,7 +186,7 @@ export async function fixtures(
         state: answered ? "ready" : "needs_input",
         question: answered
           ? null
-          : { question_id: "q1", prompt: "Какой набор данных?" },
+          : { question_id: "q1", prompt: "Which dataset?" },
       });
     if (path.endsWith("/logs"))
       return json({
@@ -196,7 +196,7 @@ export async function fixtures(
             attempt_id: "attempt-1",
             sequence: 1,
             occurred_at: "2026-11-15T00:00:00Z",
-            text: "Готово",
+            text: "Ready",
             gap: false,
           },
         ],
@@ -206,7 +206,10 @@ export async function fixtures(
     if (path === "/jobs" && req.method() === "POST") {
       starts++;
       if (options.retry && starts === 1)
-        return json({ code: "TEMPORARY", message: "Соединение прервано" }, 503);
+        return json(
+          { code: "TEMPORARY", message: "Connection interrupted" },
+          503,
+        );
       return json(job, 201);
     }
     if (path === "/jobs") return json([job]);

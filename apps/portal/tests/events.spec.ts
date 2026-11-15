@@ -25,7 +25,7 @@ test("SSE numeric cursor deduplicates reconnects and resets", async ({
   });
   await page.goto("/jobs/job-1");
   await expect(
-    page.getByRole("heading", { name: "Задача · job-1" }),
+    page.getByRole("heading", { name: "Task · job-1" }),
   ).toBeVisible();
   const emit = (kind: string) =>
     page.evaluate((kind) => {

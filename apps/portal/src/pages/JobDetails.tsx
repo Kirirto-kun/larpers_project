@@ -30,18 +30,18 @@ export function JobDetails() {
   const [busy, setBusy] = useState(false);
   return (
     <>
-      <Link to="/">← К задачам</Link>
-      <PageHeader eyebrow="ЗАДАЧА" title={"Задача · " + (id || "").slice(0, 8)}>
-        Результаты и подтверждённый прогресс вычислений.
+      <Link to="/">← Back to tasks</Link>
+      <PageHeader eyebrow="TASK" title={"Task · " + (id || "").slice(0, 8)}>
+        Follow progress and download your results.
       </PageHeader>
       <ErrorBox message={error || actionError} />
-      {!job && !error && <p role="status">Загружаем задачу…</p>}
+      {!job && !error && <p role="status">Loading task…</p>}
       {job && (
         <>
           <div className="row">
             <div>
               <Status value={job.state} />
-              <p className="muted">Создана {date(job.created_at)}</p>
+              <p className="muted">Created {date(job.created_at)}</p>
             </div>
             {!["succeeded", "partial", "failed", "cancelled"].includes(
               job.state,
@@ -61,33 +61,33 @@ export function JobDetails() {
                   }
                 }}
               >
-                Отменить задачу
+                Cancel task
               </Button>
             )}
           </div>
           {!connected && (
             <p className="muted" role="status">
-              Прямое соединение прервано. Обновляем данные каждые 5 секунд.
+              Reconnecting to live updates. Refreshing every 5 seconds.
             </p>
           )}
           {job.state === "waiting_for_capacity" && (
             <div className="notice">
-              Ожидаем подходящее устройство.{" "}
-              <Link to="/contribute">Подключить компьютер</Link>
+              Waiting for a suitable device.{" "}
+              <Link to="/contribute">Connect a computer</Link>
             </div>
           )}
           {job.failed_units > 0 && (
             <div className="notice">
-              Частичный результат: {job.failed_units} единиц не выполнено. Они
-              не учитываются как принятые.
+              Partial result: {job.failed_units} units failed and are not
+              counted as accepted.
             </div>
           )}
           <div className="metrics">
-            <Metric label="Принято" value={job.accepted_units} />
-            <Metric label="Всего" value={job.total_units} />
-            <Metric label="С ошибкой" value={job.failed_units} />
+            <Metric label="Accepted" value={job.accepted_units} />
+            <Metric label="Total" value={job.total_units} />
+            <Metric label="Failed" value={job.failed_units} />
             <Metric
-              label="Прогресс"
+              label="Progress"
               value={
                 job.total_units
                   ? Math.round((100 * job.accepted_units) / job.total_units) +
@@ -98,7 +98,7 @@ export function JobDetails() {
           </div>
           <progress
             className="job-progress"
-            aria-label="Подтверждённый прогресс"
+            aria-label="Verified progress"
             value={job.accepted_units}
             max={Math.max(1, job.total_units)}
           />
@@ -106,10 +106,10 @@ export function JobDetails() {
           <ResultViewer job={job} />
           {job.artifacts.length > 0 && (
             <details className="card">
-              <summary>Поиск по результату</summary>
+              <summary>Search results</summary>
               <p>
-                Для задачи, которая создала поисковый индекс, выберите файл
-                индекса. Поиск выполняется в пуле как отдельная задача.
+                Choose the search index created by this task. Searching runs as
+                a separate task in the pool.
               </p>
               <form
                 onSubmit={async (e) => {
@@ -134,7 +134,7 @@ export function JobDetails() {
                 }}
               >
                 <label>
-                  Файл индекса
+                  Index file
                   <select
                     value={indexId || job.artifacts[0].id}
                     onChange={(e) => setIndexId(e.target.value)}
@@ -147,7 +147,7 @@ export function JobDetails() {
                   </select>
                 </label>
                 <label>
-                  Поисковый запрос
+                  Search query
                   <input
                     required
                     maxLength={4000}
@@ -155,22 +155,20 @@ export function JobDetails() {
                     onChange={(e) => setQuery(e.target.value)}
                   />
                 </label>
-                <Button disabled={busy || !query.trim()}>
-                  Найти в индексе
-                </Button>
+                <Button disabled={busy || !query.trim()}>Search index</Button>
               </form>
             </details>
           )}
           <section className="card">
-            <h2>Журнал</h2>
+            <h2>Logs</h2>
             <ErrorBox message={logError} />
-            {logs?.truncated && <p className="notice">Журнал сокращён</p>}
+            {logs?.truncated && <p className="notice">Log truncated</p>}
             {logs?.entries.some((e) => e.gap) && (
-              <p className="notice">Часть строк журнала недоступна.</p>
+              <p className="notice">Some log lines are unavailable.</p>
             )}
-            <pre aria-label="Журнал выполнения">
+            <pre aria-label="Execution log">
               {logs?.entries.map((e) => e.text).join("\n") ||
-                "Записей пока нет."}
+                "No log entries yet."}
             </pre>
           </section>
         </>

@@ -17,7 +17,7 @@ export function Benchmarks() {
     error,
     refresh,
   } = useResource<Benchmark[]>("/benchmarks");
-  const { data: nodes } = useResource<Node[]>("/nodes");
+  const { data: nodes, error: nodeError } = useResource<Node[]>("/nodes");
   const [selected, setSelected] = useState("");
   const [previewId, setPreviewId] = useState("");
   const [revision, setRevision] = useState(1);
@@ -30,17 +30,14 @@ export function Benchmarks() {
   const report = reports?.find((b) => b.id === selected);
   return (
     <>
-      <PageHeader eyebrow="ИЗМЕРЕНИЯ" title="Проверяйте пользу общего пула">
-        Сравнение одинаковых задач и бюджетов на отдельных компьютерах и в пуле.
-        Загрузка устройства не равна эффективности пула.
-      </PageHeader>
-      <ErrorBox message={error || message} />
+      <PageHeader title="Benchmarks" />
+      <ErrorBox message={error || nodeError || message} />
       <details className="card">
-        <summary>Новое измерение</summary>
+        <summary>New benchmark</summary>
         <p>
-          Сначала подготовьте и проверьте план в рабочем пространстве. Выберите
-          минимум два устройства. Для отдельных запусков нужны соответствующие
-          записи клиента.
+          Use a validated plan from your workspace and select at least two
+          devices. Import matching standalone runs to compare individual devices
+          with the pool.
         </p>
         <form
           onSubmit={async (e) => {
@@ -68,7 +65,7 @@ export function Benchmarks() {
         >
           <div className="grid">
             <label>
-              ID проверенного плана
+              Validated plan ID
               <input
                 required
                 value={previewId}
@@ -76,7 +73,7 @@ export function Benchmarks() {
               />
             </label>
             <label>
-              Версия плана
+              Plan revision
               <input
                 type="number"
                 min={1}
@@ -86,7 +83,7 @@ export function Benchmarks() {
               />
             </label>
             <label>
-              Параллельных задач на устройство
+              Concurrent tasks per device
               <input
                 type="number"
                 min={1}
@@ -97,7 +94,7 @@ export function Benchmarks() {
               />
             </label>
             <label>
-              Повторений
+              Repetitions
               <input
                 type="number"
                 min={3}
@@ -114,10 +111,12 @@ export function Benchmarks() {
               checked={warm}
               onChange={(e) => setWarm(e.target.checked)}
             />
-            Прогретое окружение
+            Warm environment
           </label>
           <fieldset>
-            <legend>Устройства</legend>
+            <legend>Devices</legend>
+            {!nodes && !nodeError && <p>Loading devices…</p>}
+            {nodes?.length === 0 && <p>No devices registered.</p>}
             {nodes?.map((n) => (
               <label className="check" key={n.id}>
                 <input
@@ -135,16 +134,19 @@ export function Benchmarks() {
               </label>
             ))}
           </fieldset>
-          <Button disabled={busy || ids.length < 2}>Создать измерение</Button>
+          <Button disabled={busy || ids.length < 2}>
+            {busy ? "Working…" : "Create benchmark"}
+          </Button>
         </form>
       </details>
       <section className="card">
-        <h2>Сохранённые измерения</h2>
-        {reports?.length === 0 && <Empty>Измерений пока нет</Empty>}
+        <h2>Saved benchmarks</h2>
+        {!reports && !error && <Empty>Loading benchmarks…</Empty>}
+        {reports?.length === 0 && <Empty>No benchmarks yet.</Empty>}
         {reports?.map((b) => (
           <div className="row" key={b.id}>
             <Button variant="ghost" onClick={() => setSelected(b.id)}>
-              Измерение {b.id}
+              Benchmark {b.id}
             </Button>
             <Status value={b.status} />
           </div>
@@ -152,10 +154,10 @@ export function Benchmarks() {
       </section>
       {report && (
         <section className="card">
-          <h2>Измерение {report.id}</h2>
+          <h2>Benchmark {report.id}</h2>
           <div className="metrics">
             <Metric
-              label="Эффективность пула"
+              label="Pool efficiency"
               value={
                 report.efficiency_percent == null
                   ? "—"
@@ -163,25 +165,25 @@ export function Benchmarks() {
               }
             />
             <Metric
-              label="Ускорение"
+              label="Speedup"
               value={
                 report.speedup == null ? "—" : report.speedup.toFixed(2) + "×"
               }
             />
             <Metric
-              label="Пул, ед. / сек."
+              label="Pool units / sec"
               value={report.pooled_units_per_second?.toFixed(2) ?? "—"}
             />
-            <Metric label="Повторений" value={report.config.repetitions} />
+            <Metric label="Repetitions" value={report.config.repetitions} />
           </div>
           {report.efficiency_percent != null &&
             report.efficiency_percent > 100 && (
               <p className="notice">
-                Эффективность выше 100%. Проверьте сопоставимость окружения,
-                прогрева и измерений.
+                Efficiency exceeds 100%. Check that environments, warm-up and
+                measurements are comparable.
               </p>
             )}
-          <h3>Производительность отдельных устройств</h3>
+          <h3>Standalone throughput</h3>
           {Object.entries(report.standalone_units_per_second).map(
             ([id, rate]) => (
               <div className="chart-row" key={id}>
@@ -189,6 +191,10 @@ export function Benchmarks() {
                   {nodes?.find((n) => n.id === id)?.name || id.slice(0, 8)}
                 </span>
                 <meter
+                  aria-label={
+                    "Throughput for " +
+                    (nodes?.find((n) => n.id === id)?.name || id)
+                  }
                   min={0}
                   max={Math.max(
                     1,
@@ -197,33 +203,33 @@ export function Benchmarks() {
                   )}
                   value={rate}
                 />
-                <span>{rate.toFixed(2)} ед./с</span>
+                <span>{rate.toFixed(2)} units/s</span>
               </div>
             ),
           )}
           <dl>
-            <dt>Параллельность</dt>
+            <dt>Concurrency</dt>
             <dd>{report.config.concurrency}</dd>
-            <dt>Окружение</dt>
-            <dd>{report.config.warm ? "Прогретое" : "Холодный старт"}</dd>
-            <dt>Манифест</dt>
+            <dt>Environment</dt>
+            <dd>{report.config.warm ? "Warm" : "Cold start"}</dd>
+            <dt>Manifest digest</dt>
             <dd>
               <code>{report.manifest_digest}</code>
             </dd>
-            <dt>Конфигурация</dt>
+            <dt>Configuration digest</dt>
             <dd>
               <code>{report.config_digest}</code>
             </dd>
           </dl>
-          <h3>Исходные измерения и телеметрия</h3>
+          <h3>Raw measurements</h3>
           {report.standalone_results.map((r, i) => (
             <details key={i}>
               <summary>
-                {r.node_id} · {r.units} ед. / {r.duration_ms} мс
+                {r.node_id} · {r.units} units / {r.duration_ms} ms
               </summary>
               <p>
-                Вычисления: {r.duration_ms} мс · проверка: {r.verification_ms}{" "}
-                мс
+                Compute: {r.duration_ms} ms · verification: {r.verification_ms}{" "}
+                ms
               </p>
               {r.utilization.length ? (
                 <div>
@@ -232,8 +238,8 @@ export function Benchmarks() {
                     <table>
                       <thead>
                         <tr>
-                          <th>Отсчёт</th>
-                          <th>Фаза</th>
+                          <th>Sample</th>
+                          <th>Phase</th>
                           <th>CPU</th>
                           <th>GPU</th>
                         </tr>
@@ -245,12 +251,12 @@ export function Benchmarks() {
                             <td>{u.phase}</td>
                             <td>
                               {u.cpu_percent == null
-                                ? "Не измерено"
+                                ? "Not measured"
                                 : u.cpu_percent + "%"}
                             </td>
                             <td>
                               {u.gpu_percent == null
-                                ? "Не измерено"
+                                ? "Not measured"
                                 : u.gpu_percent + "%"}
                             </td>
                           </tr>
@@ -260,7 +266,7 @@ export function Benchmarks() {
                   </div>
                 </div>
               ) : (
-                <p>Телеметрия не записана.</p>
+                <p>No telemetry recorded.</p>
               )}
             </details>
           ))}
@@ -270,11 +276,11 @@ export function Benchmarks() {
               href={"/api/v1/benchmarks/" + report.id + "/export"}
               download
             >
-              Скачать JSON
+              Download JSON
             </a>
           </div>
           <label>
-            Импорт отдельного измерения (JSON)
+            Import standalone results (JSON)
             <input
               type="file"
               accept="application/json"
@@ -283,7 +289,7 @@ export function Benchmarks() {
                 const file = e.target.files?.[0];
                 if (!file) return;
                 if (file.size > 10 * 1024 * 1024) {
-                  setMessage("Выберите JSON до 10 МБ.");
+                  setMessage("Choose a JSON file up to 10 MB.");
                   return;
                 }
                 setBusy(true);

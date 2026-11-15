@@ -1,6 +1,8 @@
-# Campus Pool console
+# larpool console
 
 Independent React/TypeScript/Vite application mounted at `/admin/`. Pages: Overview, Devices, Jobs, Benchmarks.
+
+The interface follows the colleague's larpool design through the shared `apps/shared/product.css` visual system. All interface copy is English. The overview charts use the current server DTOs; missing data remains distinct from measured zero. Signing in from a nested page returns to that page.
 
 ```sh
 npm --prefix apps/console ci

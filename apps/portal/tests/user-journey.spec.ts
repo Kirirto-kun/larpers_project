@@ -13,11 +13,11 @@ test("long job logs advance the cursor and retain new lines", async ({
       cursor === 0
         ? Array.from({ length: 100 }, (_, i) => ({
             cursor: i + 1,
-            text: "Строка " + (i + 1),
+            text: "Line " + (i + 1),
             gap: false,
           }))
         : cursor === 100
-          ? [{ cursor: 101, text: "Последняя строка 101", gap: false }]
+          ? [{ cursor: 101, text: "Last line 101", gap: false }]
           : [];
     return r.fulfill({
       json: {
@@ -28,36 +28,27 @@ test("long job logs advance the cursor and retain new lines", async ({
     });
   });
   await page.goto("/jobs/job-1");
-  await expect(page.getByLabel("Журнал выполнения")).toContainText(
-    "Последняя строка 101",
-  );
+  await expect(page.getByLabel("Execution log")).toContainText("Last line 101");
 });
 test("registers with password and real empty devices", async ({ page }) => {
   const f = await fixtures(page, { anonymous: true });
-  await page.goto("/");
-  await page
-    .getByRole("button", { name: "Создать аккаунт", exact: true })
-    .click();
-  await page.getByLabel("Имя", { exact: true }).fill("Анна");
-  await page.getByLabel("Электронная почта").fill("anna@example.com");
-  await page.getByLabel("Пароль", { exact: true }).fill("a-strong-password");
-  await page
-    .getByRole("button", { name: "Зарегистрироваться", exact: true })
-    .click();
+  await page.goto("/register");
+  await page.getByLabel("Name", { exact: true }).fill("Anna");
+  await page.getByLabel("Email").fill("anna@example.com");
+  await page.getByLabel("Password", { exact: true }).fill("a-strong-password");
+  await page.getByRole("button", { name: "Sign up", exact: true }).click();
   await expect(
-    page.getByRole("heading", { name: "Ваше рабочее пространство" }),
+    page.getByRole("heading", { name: "Your workspace" }),
   ).toBeVisible();
   expect(f.requests.find((r) => r.path === "/auth/register")?.body).toEqual({
-    name: "Анна",
+    name: "Anna",
     email: "anna@example.com",
     password: "a-strong-password",
   });
-  await page.getByRole("link", { name: "Устройства", exact: true }).click();
-  await expect(page.getByText("Пока нет подключённых устройств")).toBeVisible();
-  await page.getByRole("button", { name: "Выйти", exact: true }).click();
-  await expect(
-    page.getByRole("heading", { name: "Вход в аккаунт" }),
-  ).toBeVisible();
+  await page.getByRole("link", { name: "Devices", exact: true }).click();
+  await expect(page.getByText("No devices connected yet")).toBeVisible();
+  await page.getByRole("button", { name: "Sign out", exact: true }).click();
+  await expect(page.getByRole("heading", { name: "Sign in" })).toBeVisible();
 });
 test("offline resume stays pending and private invitation is separate", async ({
   page,
@@ -65,20 +56,20 @@ test("offline resume stays pending and private invitation is separate", async ({
   const f = await fixtures(page, { nodes: true });
   await page.setViewportSize({ width: 390, height: 844 });
   await page.goto("/contribute");
-  await expect(page.getByText("Не в сети", { exact: true })).toBeVisible();
-  await page.getByRole("button", { name: "Подключить / продолжить" }).click();
-  await expect(page.getByText("Не в сети", { exact: true })).toBeVisible();
+  await expect(page.getByText("Offline", { exact: true })).toBeVisible();
+  await page.getByRole("button", { name: "Connect / resume" }).click();
+  await expect(page.getByText("Offline", { exact: true })).toBeVisible();
   await expect(
-    page.getByText("Ожидает применения", { exact: false }),
+    page.getByText("Waiting for device to apply settings", { exact: false }),
   ).toBeVisible();
-  await page.getByLabel("Название компьютера").fill("Мой ПК");
-  await page.getByRole("button", { name: "Создать приглашение" }).click();
-  await expect(page.getByLabel("Приватное приглашение")).toHaveValue(
+  await page.getByLabel("Computer name").fill("My PC");
+  await page.getByRole("button", { name: "Create invitation" }).click();
+  await expect(page.getByLabel("Private invitation")).toHaveValue(
     "private-device-invitation-1234567890",
   );
   expect(f.requests.find((r) => r.path === "/invitations")?.body).toEqual({
     kind: "device",
-    name: "Мой ПК",
+    name: "My PC",
     ttl_seconds: 1800,
   });
   expect(
@@ -92,28 +83,24 @@ test("preview review clarification safe retry and download use server contract",
 }) => {
   const f = await fixtures(page, { retry: true, question: true });
   await page.goto("/new");
-  await page.getByLabel("Что нужно сделать?").fill("Обработать данные");
-  await page.getByLabel("Разрешаю отправить").check();
-  await page.getByRole("button", { name: "Подготовить план" }).click();
+  await page.getByLabel("What should the task do?").fill("Process data");
+  await page.getByLabel("I allow my description").check();
+  await page.getByRole("button", { name: "Prepare plan" }).click();
   await expect(
-    page.getByRole("button", { name: "Запустить задачу", exact: true }),
+    page.getByRole("button", { name: "Start task", exact: true }),
   ).toBeDisabled();
-  await page.getByLabel("Какой набор данных?").fill("Все");
-  await page.getByRole("button", { name: "Отправить ответ" }).click();
-  await page
-    .getByRole("button", { name: "Запустить задачу", exact: true })
-    .click();
-  await expect(page.getByRole("alert")).toContainText("Соединение прервано");
-  await page
-    .getByRole("button", { name: "Запустить задачу", exact: true })
-    .click();
+  await page.getByLabel("Which dataset?").fill("All");
+  await page.getByRole("button", { name: "Send answer" }).click();
+  await page.getByRole("button", { name: "Start task", exact: true }).click();
+  await expect(page.getByRole("alert")).toContainText("Connection interrupted");
+  await page.getByRole("button", { name: "Start task", exact: true }).click();
   await expect(page).toHaveURL(/jobs\/job-1/);
   const starts = f.requests.filter((r) => r.path === "/jobs" && r.body);
   expect(starts[0].headers["idempotency-key"]).toBe(
     starts[1].headers["idempotency-key"],
   );
   expect(starts[0].body).toEqual({ preview_id: "preview-1", plan_revision: 2 });
-  await expect(page.getByText("Журнал сокращён")).toBeVisible();
+  await expect(page.getByText("Log truncated")).toBeVisible();
   const download = page.waitForEvent("download");
   await page.getByRole("link", { name: "result.txt" }).click();
   const file = await download;
@@ -124,18 +111,18 @@ test("activation consumes hash and saves account", async ({ page }) => {
   const f = await fixtures(page, { anonymous: true });
   await page.goto("/#token=private-activation-token-1234567890");
   await expect(
-    page.getByRole("heading", { name: "Завершите создание аккаунта" }),
+    page.getByRole("heading", { name: "Finish your account" }),
   ).toBeVisible();
   expect(page.url()).not.toContain("token=");
   expect(f.requests.find((r) => r.path === "/auth/login")?.body).toEqual({
     token: "private-activation-token-1234567890",
   });
-  await page.getByLabel("Имя", { exact: true }).fill("Анна");
-  await page.getByLabel("Электронная почта").fill("anna@example.com");
-  await page.getByLabel("Пароль", { exact: true }).fill("a-strong-password");
-  await page.getByRole("button", { name: "Сохранить аккаунт" }).click();
+  await page.getByLabel("Name", { exact: true }).fill("Anna");
+  await page.getByLabel("Email").fill("anna@example.com");
+  await page.getByLabel("Password", { exact: true }).fill("a-strong-password");
+  await page.getByRole("button", { name: "Save account" }).click();
   await expect(
-    page.getByRole("heading", { name: "Ваше рабочее пространство" }),
+    page.getByRole("heading", { name: "Your workspace" }),
   ).toBeVisible();
 });
 
@@ -182,7 +169,7 @@ test("upload includes whole and part checksums, resumes and uses artifact input 
     expect(r.headers()["x-content-sha256"]).toMatch(/^[a-f0-9]{64}$/);
     if (number === 1 && !failed) {
       failed = true;
-      return json({ code: "TEMPORARY", message: "Загрузка прервана" }, 503);
+      return json({ code: "TEMPORARY", message: "Upload interrupted" }, 503);
     }
     parts.push({
       number,
@@ -192,8 +179,8 @@ test("upload includes whole and part checksums, resumes and uses artifact input 
     return json(parts.at(-1));
   });
   await page.goto("/new");
-  await page.getByLabel("Что нужно сделать?").fill("Запустить main.py");
-  await page.getByLabel("Код и данные").setInputFiles([
+  await page.getByLabel("What should the task do?").fill("Run main.py");
+  await page.getByLabel("Code and data").setInputFiles([
     {
       name: "main.py",
       mimeType: "text/plain",
@@ -201,15 +188,13 @@ test("upload includes whole and part checksums, resumes and uses artifact input 
     },
     { name: ".env", mimeType: "text/plain", buffer: Buffer.from("SECRET") },
   ]);
+  await expect(page.getByText("Excluded: secret or system file")).toBeVisible();
+  await page.getByLabel("I allow my description").check();
+  await page.getByRole("button", { name: "Prepare plan" }).click();
+  await expect(page.getByRole("alert")).toContainText("Upload interrupted");
+  await page.getByRole("button", { name: "Prepare plan" }).click();
   await expect(
-    page.getByText("Исключён: секрет или служебный файл"),
-  ).toBeVisible();
-  await page.getByLabel("Разрешаю отправить").check();
-  await page.getByRole("button", { name: "Подготовить план" }).click();
-  await expect(page.getByRole("alert")).toContainText("Загрузка прервана");
-  await page.getByRole("button", { name: "Подготовить план" }).click();
-  await expect(
-    page.getByRole("heading", { name: "Проверьте план" }),
+    page.getByRole("heading", { name: "Review the plan" }),
   ).toBeVisible();
   expect(created).toBe(1);
   expect(sent).toEqual([0, 1, 1]);
@@ -228,21 +213,19 @@ test("password login and logout send credential and CSRF contracts", async ({
   page,
 }) => {
   const f = await fixtures(page, { anonymous: true });
-  await page.goto("/");
-  await page.getByLabel("Электронная почта").fill("anna@example.com");
-  await page.getByLabel("Пароль", { exact: true }).fill("a-strong-password");
-  await page.getByRole("button", { name: "Войти", exact: true }).click();
+  await page.goto("/login");
+  await page.getByLabel("Email").fill("anna@example.com");
+  await page.getByLabel("Password", { exact: true }).fill("a-strong-password");
+  await page.getByRole("button", { name: "Sign in", exact: true }).click();
   await expect(
-    page.getByRole("heading", { name: "Ваше рабочее пространство" }),
+    page.getByRole("heading", { name: "Your workspace" }),
   ).toBeVisible();
   expect(f.requests.find((r) => r.path === "/auth/login")?.body).toEqual({
     email: "anna@example.com",
     password: "a-strong-password",
   });
-  await page.getByRole("button", { name: "Выйти" }).click();
-  await expect(
-    page.getByRole("heading", { name: "Вход в аккаунт" }),
-  ).toBeVisible();
+  await page.getByRole("button", { name: "Sign out" }).click();
+  await expect(page.getByRole("heading", { name: "Sign in" })).toBeVisible();
   expect(
     f.requests.find((r) => r.path === "/auth/logout")?.headers["x-csrf-token"],
   ).toBe("csrf-test");
@@ -254,14 +237,14 @@ test("example opens review without uploading or sharing with AI", async ({
   await page.route("**/api/v1/examples", (r) =>
     r.fulfill({
       json: [
-        { id: "cpu", name: "CPU", description: "Пример", requires_gpu: false },
+        { id: "cpu", name: "CPU", description: "Example", requires_gpu: false },
       ],
     }),
   );
   await page.goto("/new");
-  await page.getByRole("button", { name: "Посмотреть план CPU" }).click();
+  await page.getByRole("button", { name: "View plan CPU" }).click();
   await expect(
-    page.getByRole("heading", { name: "Проверьте план" }),
+    page.getByRole("heading", { name: "Review the plan" }),
   ).toBeVisible();
   expect(
     f.requests.find((r) => r.path === "/examples/cpu/preview")?.body,
@@ -286,12 +269,12 @@ test("clipboard refusal gives manual copy and macOS has shell fallback", async (
     }),
   );
   await page.goto("/contribute");
-  await page.getByRole("button", { name: "Создать приглашение" }).click();
-  await page.getByRole("button", { name: "Скопировать", exact: true }).click();
+  await page.getByRole("button", { name: "Create invitation" }).click();
+  await page.getByRole("button", { name: "Copy", exact: true }).click();
   await expect(
-    page.getByText("Выделите приглашение выше и скопируйте вручную."),
+    page.getByText("Select the invitation above and copy it manually."),
   ).toBeVisible();
-  await page.getByText("macOS: если файл не открывается").click();
+  await page.getByText("macOS: download will not open?").click();
   await expect(
     page.getByText("sh ~/Downloads/Connect.command", { exact: true }),
   ).toBeVisible();
@@ -304,9 +287,9 @@ test("search uses selected index artifact and follows created search job", async
     r.fulfill({ status: 202, json: { search_job_id: "search-1" } }),
   );
   await page.goto("/jobs/job-1");
-  await page.getByText("Поиск по результату").click();
-  await page.getByLabel("Поисковый запрос").fill("данные");
-  await page.getByRole("button", { name: "Найти в индексе" }).click();
+  await page.getByText("Search results").click();
+  await page.getByLabel("Search query").fill("data");
+  await page.getByRole("button", { name: "Search index" }).click();
   await expect(page).toHaveURL(/jobs\/search-1/);
 });
 test("project text disclosure is explicit and secret entries are unavailable", async ({
@@ -340,9 +323,9 @@ test("project text disclosure is explicit and secret entries are unavailable", a
     return route.fulfill({ json: { number: 0 } });
   });
   await page.goto("/new");
-  await page.getByLabel("Что нужно сделать?").fill("Запусти main.py");
-  await page.getByText("Добавить проект ZIP или папку с кодом").click();
-  await page.getByLabel("Проект ZIP", { exact: true }).setInputFiles({
+  await page.getByLabel("What should the task do?").fill("Run main.py");
+  await page.getByText("Add a project ZIP or code folder").click();
+  await page.getByLabel("Project ZIP", { exact: true }).setInputFiles({
     name: "project.zip",
     mimeType: "application/zip",
     buffer: Buffer.from(
@@ -354,14 +337,14 @@ test("project text disclosure is explicit and secret entries are unavailable", a
   });
   await page.getByText("main.py", { exact: true }).click();
   await expect(
-    page.getByLabel("Отправить текст этого файла в ИИ"),
+    page.getByLabel("Share this file’s text with DeepSeek"),
   ).not.toBeChecked();
   await expect(page.getByText("SECRET=hide")).toHaveCount(0);
-  await page.getByLabel("Отправить текст этого файла в ИИ").check();
-  await page.getByLabel("Разрешаю отправить").check();
-  await page.getByRole("button", { name: "Подготовить план" }).click();
+  await page.getByLabel("Share this file’s text with DeepSeek").check();
+  await page.getByLabel("I allow my description").check();
+  await page.getByRole("button", { name: "Prepare plan" }).click();
   await expect(
-    page.getByRole("heading", { name: "Проверьте план" }),
+    page.getByRole("heading", { name: "Review the plan" }),
   ).toBeVisible();
   expect(
     f.requests.find((r) => r.path === "/job-previews")?.body,
@@ -385,15 +368,15 @@ test("small screen keyboard and reduced motion retain usable account forms", asy
   await fixtures(page, { anonymous: true });
   await page.setViewportSize({ width: 375, height: 812 });
   await page.emulateMedia({ reducedMotion: "reduce" });
-  await page.goto("/");
-  await page.getByLabel("Электронная почта").focus();
+  await page.goto("/login");
+  await page.getByLabel("Email").focus();
   await page.keyboard.type("anna@example.com");
   await page.keyboard.press("Tab");
-  await expect(page.getByLabel("Пароль", { exact: true })).toBeFocused();
+  await expect(page.getByLabel("Password", { exact: true })).toBeFocused();
   await page.keyboard.type("a-strong-password");
   await page.keyboard.press("Enter");
   await expect(
-    page.getByRole("heading", { name: "Ваше рабочее пространство" }),
+    page.getByRole("heading", { name: "Your workspace" }),
   ).toBeVisible();
   expect(
     await page.evaluate(
@@ -428,22 +411,18 @@ test("stale revision requires refreshed review and a new submission key", async 
     return r.fulfill({ json: [job] });
   });
   await page.goto("/new");
-  await page.getByLabel("Что нужно сделать?").fill("Задача");
-  await page.getByLabel("Разрешаю отправить").check();
-  await page.getByRole("button", { name: "Подготовить план" }).click();
+  await page.getByLabel("What should the task do?").fill("Task");
+  await page.getByLabel("I allow my description").check();
+  await page.getByRole("button", { name: "Prepare plan" }).click();
   await page.route("**/api/v1/job-previews/preview-1", (r) =>
     r.fulfill({ json: { ...preview, plan_revision: 2 } }),
   );
-  await page
-    .getByRole("button", { name: "Запустить задачу", exact: true })
-    .click();
+  await page.getByRole("button", { name: "Start task", exact: true }).click();
   await expect(
-    page.getByText("Версия плана: 2", { exact: true }),
+    page.getByText("Plan version: 2", { exact: true }),
   ).toBeVisible();
-  await expect(page.getByRole("alert")).toContainText("План изменился");
-  await page
-    .getByRole("button", { name: "Запустить задачу", exact: true })
-    .click();
+  await expect(page.getByRole("alert")).toContainText("The plan changed");
+  await page.getByRole("button", { name: "Start task", exact: true }).click();
   await expect(page).toHaveURL(/jobs\/job-1/);
   expect(starts).toBe(2);
   expect(keys[0]).not.toBe(keys[1]);

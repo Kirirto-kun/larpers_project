@@ -21,21 +21,21 @@ import {
 const modes: { id: Mode; name: string; percent: number; detail: string }[] = [
   {
     id: "low",
-    name: "Лёгкий",
+    name: "Light",
     percent: 10,
-    detail: "Для работы за компьютером",
+    detail: "While you use your computer",
   },
   {
     id: "medium",
-    name: "Средний",
+    name: "Balanced",
     percent: 50,
-    detail: "Баланс скорости и комфорта",
+    detail: "Balanced performance",
   },
   {
     id: "max",
-    name: "Максимальный",
+    name: "Maximum",
     percent: 90,
-    detail: "Когда компьютер свободен и подключён к питанию",
+    detail: "When idle and plugged in",
   },
 ];
 export function DeviceCard({
@@ -89,23 +89,21 @@ export function DeviceCard({
       </div>
       <p className="muted">
         {cap
-          ? `${cap.os === "darwin" ? "macOS" : cap.os} · ${cap.cpu_logical} CPU · ${bytes(cap.memory_available_bytes)} доступно`
-          : "Характеристики появятся после подключения"}
+          ? `${cap.os === "darwin" ? "macOS" : cap.os} · ${cap.cpu_logical} CPU · ${bytes(cap.memory_available_bytes)} available`
+          : "Device details appear after connection"}
       </p>
       {cap && (
         <p className="muted">
-          Выделено: {(cap.offered_budget.cpu_millis / 1000).toFixed(1)} CPU ·{" "}
-          {bytes(cap.offered_budget.memory_bytes)} памяти · GPU:{" "}
-          {cap.offered_budget.gpu_slots > 0
-            ? "разрешён локально"
-            : "не предоставлен"}
+          Shared: {(cap.offered_budget.cpu_millis / 1000).toFixed(1)} CPU ·{" "}
+          {bytes(cap.offered_budget.memory_bytes)} memory · GPU:{" "}
+          {cap.offered_budget.gpu_slots > 0 ? "enabled locally" : "not shared"}
         </p>
       )}
       <div className="device-meta">
-        <span>{node.active_attempts} активных задач</span>
-        <span>{node.accepted_units} принято</span>
+        <span>{node.active_attempts} active tasks</span>
+        <span>{node.accepted_units} accepted</span>
       </div>
-      <p className="muted">Последняя связь: {date(node.last_seen_at)}</p>
+      <p className="muted">Last seen: {date(node.last_seen_at)}</p>
       {node.supports_web_controls ? (
         <>
           <p
@@ -113,16 +111,16 @@ export function DeviceCard({
             role="status"
           >
             {node.settings_error
-              ? "Не удалось применить: " + node.settings_error
+              ? "Could not apply settings: " + node.settings_error
               : pending
-                ? "Ожидает применения на компьютере"
-                : "Настройки применены клиентом"}
+                ? "Waiting for device to apply settings"
+                : "Settings applied"}
             {pending && node.state === "offline"
-              ? " — откройте Campus на этом компьютере."
+              ? " — open the app on this device."
               : ""}
           </p>
           <fieldset disabled={busy}>
-            <legend>Нагрузка CPU и памяти</legend>
+            <legend>CPU and memory usage</legend>
             <div className="mode-options">
               {modes.map((mode) => (
                 <label
@@ -149,33 +147,33 @@ export function DeviceCard({
               disabled={busy || node.state === "quarantined"}
               onClick={() => void change({ desired_state: "running" })}
             >
-              Подключить / продолжить
+              Connect / resume
             </Button>
             <Button
               variant="outline"
               disabled={busy}
               onClick={() => void change({ desired_state: "paused" })}
             >
-              Пауза
+              Pause
             </Button>
             <Button
               variant="outline"
               disabled={busy}
               onClick={() => void change({ desired_state: "draining" })}
             >
-              Завершить текущую работу
+              Finish current work
             </Button>
           </div>
           <p className="muted">
-            Команда выполнится, когда запущенный клиент свяжется с сервером.
-            Браузер не может открыть приложение на компьютере.
+            The app applies changes when it next connects. Keep it open on your
+            device.
           </p>
         </>
       ) : (
         <>
           <div className="notice">
-            Обновите клиент для настройки нагрузки и управления из браузера.
-            Существующее подключение продолжает работать.
+            Update the app to manage usage here. Your current connection will
+            keep working.
           </div>
           <div className="actions">
             <Button
@@ -183,14 +181,14 @@ export function DeviceCard({
               disabled={busy}
               onClick={() => void legacy("drain")}
             >
-              Завершить текущую работу
+              Finish current work
             </Button>
             <Button
               variant="outline"
               disabled={busy}
               onClick={() => void legacy("stop")}
             >
-              Остановить
+              Stop
             </Button>
           </div>
         </>
@@ -206,9 +204,7 @@ export function DeviceCard({
               )
             }
           >
-            {node.state === "quarantined"
-              ? "Снять блокировку"
-              : "Заблокировать"}
+            {node.state === "quarantined" ? "Unblock" : "Block"}
           </Button>
         </div>
       )}
@@ -223,7 +219,7 @@ export function Contribute() {
     error: releaseError,
     refresh: refreshRelease,
   } = useResource<Release>("/client-release");
-  const [name, setName] = useState("Мой компьютер");
+  const [name, setName] = useState("My computer");
   const [invitation, setInvitation] = useState<Invitation>();
   const [busy, setBusy] = useState(false);
   const [actionError, setError] = useState("");
@@ -231,21 +227,18 @@ export function Contribute() {
   const [macCopy, setMacCopy] = useState("");
   return (
     <>
-      <PageHeader eyebrow="УСТРОЙСТВА" title="Подключите свободные ресурсы">
-        Участие можно приостановить в любой момент. Вы управляете нагрузкой, а
-        Campus распределяет задачи.
+      <PageHeader eyebrow="DEVICES" title="Share your spare capacity">
+        Connect a computer, choose its usage limit, and pause whenever you need.
       </PageHeader>
       <div className="grid">
         <section className="card">
-          <p className="eyebrow">ПОДКЛЮЧЕНИЕ ЗА ТРИ ШАГА</p>
-          <h2>Добавить компьютер</h2>
+          <p className="eyebrow">GET CONNECTED</p>
+          <h2>Add a computer</h2>
           <div className="step">
             <b>1</b>
             <div>
-              <h3>Скачайте Campus</h3>
-              <p className="muted">
-                Небольшой файл запуска для вашего компьютера.
-              </p>
+              <h3>Download the app</h3>
+              <p className="muted">Choose the download for your computer.</p>
               <div className="actions">
                 {release?.downloads.map((d) => (
                   <a
@@ -266,7 +259,7 @@ export function Contribute() {
                     variant="outline"
                     onClick={() => void refreshRelease()}
                   >
-                    Повторить загрузку ссылок
+                    Retry downloads
                   </Button>
                 </>
               )}
@@ -275,20 +268,16 @@ export function Contribute() {
           <div className="step">
             <b>2</b>
             <div>
-              <h3>Откройте скачанный файл</h3>
+              <h3>Open the download</h3>
               <p>
-                Следуйте подсказкам приложения. На Windows и macOS сначала
-                установите и запустите Docker Desktop вручную. На Linux нужен
-                работающий Docker Engine.
+                Follow the setup steps. On Windows or macOS, install and open
+                Docker Desktop first. Linux needs a running Docker Engine.
               </p>
             </div>
           </div>
           <details>
-            <summary>macOS: если файл не открывается</summary>
-            <p>
-              Откройте приложение «Терминал» и вставьте команду для скачанного
-              файла:
-            </p>
+            <summary>macOS: download will not open?</summary>
+            <p>Open Terminal and run:</p>
             <pre>sh ~/Downloads/Connect.command</pre>
             <Button
               variant="outline"
@@ -298,29 +287,29 @@ export function Contribute() {
                   await navigator.clipboard.writeText(
                     "sh ~/Downloads/Connect.command",
                   );
-                  setMacCopy("Скопировано");
+                  setMacCopy("Copied");
                 } catch {
-                  setMacCopy("Выделите команду и скопируйте вручную.");
+                  setMacCopy("Select the command and copy it manually.");
                 }
               }}
             >
-              Скопировать команду macOS
+              Copy macOS command
             </Button>
             <p role="status">{macCopy}</p>
           </details>
           <div className="step">
             <b>3</b>
             <div>
-              <h3>Вставьте приватное приглашение</h3>
-              <p>Создайте его справа и вставьте в открытый клиент.</p>
+              <h3>Paste your private invitation</h3>
+              <p>Create an invitation below and paste it into the app.</p>
             </div>
           </div>
         </section>
         <section className="card">
-          <h2>Приглашение для вашего компьютера</h2>
+          <h2>Create a device invitation</h2>
           <p className="muted">
-            Одноразовое приглашение действует 30 минут. Передавайте его только
-            своему устройству.
+            This single-use invitation expires in 30 minutes. Share it only with
+            your own device.
           </p>
           <form
             onSubmit={async (e) => {
@@ -344,7 +333,7 @@ export function Contribute() {
             }}
           >
             <label>
-              Название компьютера
+              Computer name
               <input
                 value={name}
                 maxLength={256}
@@ -353,13 +342,13 @@ export function Contribute() {
               />
             </label>
             <Button disabled={busy || !name.trim()}>
-              {busy ? "Создаём…" : "Создать приглашение"}
+              {busy ? "Creating…" : "Create invitation"}
             </Button>
           </form>
           {invitation && (
             <div className="invite-result">
               <label>
-                Приватное приглашение
+                Private invitation
                 <input
                   readOnly
                   value={invitation.token}
@@ -372,46 +361,46 @@ export function Contribute() {
                   try {
                     if (!navigator.clipboard) throw new Error();
                     await navigator.clipboard.writeText(invitation.token);
-                    setCopy("Скопировано");
+                    setCopy("Copied");
                   } catch {
-                    setCopy("Выделите приглашение выше и скопируйте вручную.");
+                    setCopy(
+                      "Select the invitation above and copy it manually.",
+                    );
                   }
                 }}
               >
                 <Copy aria-hidden="true" size={16} />
-                Скопировать
+                Copy
               </Button>
               <p role="status">{copy}</p>
-              <small>Действует до {date(invitation.expires_at)}</small>
+              <small>Expires {date(invitation.expires_at)}</small>
             </div>
           )}
           <ErrorBox message={actionError} />
           <div className="notice">
-            GPU включается только с вашего разрешения в клиенте. Режим нагрузки
-            не меняет это разрешение и не разрешает работу от батареи.
+            Enable GPU sharing in the app. Usage limits do not change GPU
+            permission or allow battery use.
           </div>
           <p className="muted">
-            10 / 50 / 90% — доля локально доступных CPU и памяти, ограниченная
-            возможностями Docker и настройками владельца.
+            10 / 50 / 90% applies to the CPU and memory available within your
+            Docker and device settings.
           </p>
         </section>
       </div>
       <section>
         <div className="row">
-          <h2>Подключённые устройства</h2>
+          <h2>Your devices</h2>
           <Button variant="ghost" onClick={() => void refresh()}>
-            Обновить
+            Refresh
           </Button>
         </div>
         <ErrorBox message={error} />
-        {!nodes && !error && <p role="status">Загружаем устройства…</p>}
+        {!nodes && !error && <p role="status">Loading devices…</p>}
         {nodes?.length === 0 && (
           <Empty>
             <Monitor aria-hidden="true" />
-            <h3>Пока нет подключённых устройств</h3>
-            <p>
-              Скачайте Campus и добавьте первый компьютер по инструкции выше.
-            </p>
+            <h3>No devices connected yet</h3>
+            <p>Follow the steps above to connect your first computer.</p>
           </Empty>
         )}
         {nodes?.map((node) => (

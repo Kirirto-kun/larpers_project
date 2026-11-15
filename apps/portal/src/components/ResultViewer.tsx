@@ -4,9 +4,11 @@ import { bytes, Empty } from "./Common";
 export function ResultViewer({ job }: { job: Job }) {
   return (
     <section className="card">
-      <h2>Результаты</h2>
+      <h2>Results</h2>
       {job.artifacts.length === 0 && (
-        <Empty>Файлы появятся после выполнения и проверки результата.</Empty>
+        <Empty>
+          Files appear after the task finishes and results are verified.
+        </Empty>
       )}
       {job.artifacts.map((a) => (
         <div className="row" key={a.id}>
@@ -16,7 +18,7 @@ export function ResultViewer({ job }: { job: Job }) {
             </a>
             <p>{bytes(a.size_bytes)}</p>
             <details>
-              <summary>Контрольная сумма SHA-256</summary>
+              <summary>SHA-256 checksum</summary>
               <code>{a.sha256}</code>
             </details>
           </div>
@@ -26,7 +28,7 @@ export function ResultViewer({ job }: { job: Job }) {
         <article className="card" key={m.item_id}>
           <h3>{m.source}</h3>
           <p>{m.excerpt}</p>
-          <small>Совпадение: {m.score.toFixed(3)}</small>
+          <small>Match score: {m.score.toFixed(3)}</small>
         </article>
       ))}
     </section>

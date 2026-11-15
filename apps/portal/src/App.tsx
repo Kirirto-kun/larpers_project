@@ -1,17 +1,20 @@
 import { useEffect, useRef, useState } from "react";
-import { Link, NavLink, Route, Routes } from "react-router-dom";
 import {
-  Layers,
-  House,
-  Plus,
-  Monitor,
-  LogOut,
-  ShieldCheck,
-} from "lucide-react";
+  Link,
+  NavLink,
+  Navigate,
+  Route,
+  Routes,
+  useLocation,
+  useNavigate,
+} from "react-router-dom";
+import { House, Plus, Monitor, LogOut, ShieldCheck } from "lucide-react";
 import { api, post, setCsrf, errorText, ApiError } from "./lib/api";
 import type { Session } from "./lib/types";
 import { Button } from "./components/ui/button";
 import { ErrorBox } from "./components/Common";
+import { Logo } from "./components/Logo";
+import { Landing } from "./pages/Landing";
 import { Home } from "./pages/Home";
 import { Contribute } from "./pages/Contribute";
 import { NewJob } from "./pages/NewJob";
@@ -20,14 +23,25 @@ export function App() {
   const [session, setSession] = useState<Session | null>();
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
-  const [signup, setSignup] = useState(false);
+  const route = useLocation();
+  const navigate = useNavigate();
+  const signup = route.pathname === "/register";
+  const authRoute = ["/login", "/register"].includes(route.pathname);
+  const requested =
+    new URLSearchParams(route.search).get("next") ||
+    (authRoute ? "/" : route.pathname);
+  const destination =
+    /^\/(?:new|contribute|jobs\/[a-zA-Z0-9_-]+|admin\/(?:nodes|jobs|benchmarks)?)?$/.test(
+      requested,
+    )
+      ? requested
+      : "/";
   const [activation, setActivation] = useState(false);
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const started = useRef(false);
   function accept(s: Session) {
-    setSignup(false);
     setCsrf(s.csrf_token || "");
     setSession(s);
     setName(s.name);
@@ -68,41 +82,57 @@ export function App() {
   if (session === undefined)
     return (
       <main className="login card" role="status">
-        Подключаемся к Campus…
+        Loading your workspace…
       </main>
+    );
+  if (!session && route.pathname === "/")
+    return (
+      <>
+        <Landing />
+        {error && (
+          <div className="landing-server-error">
+            <ErrorBox message={error} />
+          </div>
+        )}
+      </>
+    );
+  if (session && !activation && authRoute)
+    return destination.startsWith("/admin/") ? (
+      <ConsoleRedirect to={destination} />
+    ) : (
+      <Navigate to={destination} replace />
     );
   if (!session || activation)
     return (
       <main className="auth-layout">
         <section className="auth-story">
           <Link className="brand" to="/">
-            <Layers aria-hidden="true" />
-            campus pool
+            <Logo />
           </Link>
           <h1>
-            Больше возможностей.
+            Big ideas.
             <br />
-            Вместе.
+            <span>Shared power.</span>
           </h1>
           <p>
-            Объединяйте свободные ресурсы компьютеров и превращайте задачи в
-            результаты.
+            Your projects, connected computers and results. All in one place.
           </p>
-          <span className="pill">Ваш компьютер. Ваш выбор.</span>
+          <Link className="auth-back" to="/">
+            ← Back to larpool
+          </Link>
         </section>
         <section className="login card">
-          <p className="eyebrow">ДОБРО ПОЖАЛОВАТЬ В CAMPUS</p>
           <h2>
             {activation
-              ? "Завершите создание аккаунта"
+              ? "Finish your account"
               : signup
-                ? "Создайте аккаунт"
-                : "Вход в аккаунт"}
+                ? "Create your account"
+                : "Sign in"}
           </h2>
           <p className="muted">
             {activation
-              ? "Укажите почту и пароль для следующих входов."
-              : "Задачи, устройства и результаты в одном месте."}
+              ? "Add an email and password for your next sign-in."
+              : "Welcome to your shared computing workspace."}
           </p>
           <form
             onSubmit={async (e) => {
@@ -132,7 +162,7 @@ export function App() {
           >
             {(signup || activation) && (
               <label>
-                Имя
+                Name
                 <input
                   required
                   maxLength={256}
@@ -143,7 +173,7 @@ export function App() {
               </label>
             )}
             <label>
-              Электронная почта
+              Email
               <input
                 type="email"
                 required
@@ -154,7 +184,7 @@ export function App() {
               />
             </label>
             <label>
-              Пароль
+              Password
               <input
                 type="password"
                 required
@@ -168,30 +198,33 @@ export function App() {
               />
             </label>
             {(signup || activation) && (
-              <p className="muted">Не менее 12 символов.</p>
+              <p className="muted">At least 12 characters.</p>
             )}
             <ErrorBox message={error} />
             <Button disabled={busy}>
               {busy
-                ? "Подождите…"
+                ? "Please wait…"
                 : activation
-                  ? "Сохранить аккаунт"
+                  ? "Save account"
                   : signup
-                    ? "Зарегистрироваться"
-                    : "Войти"}
+                    ? "Sign up"
+                    : "Sign in"}
             </Button>
           </form>
           {!activation && (
-            <Button
-              variant="ghost"
-              disabled={busy}
-              onClick={() => {
-                setSignup(!signup);
-                setError("");
-              }}
-            >
-              {signup ? "Уже есть аккаунт? Войти" : "Создать аккаунт"}
-            </Button>
+            <p className="auth-switch">
+              {signup ? "Already have an account? " : "New to larpool? "}
+              <Link
+                to={
+                  (signup ? "/login" : "/register") +
+                  "?next=" +
+                  encodeURIComponent(destination)
+                }
+                onClick={() => setError("")}
+              >
+                {signup ? "Sign in" : "Create account"}
+              </Link>
+            </p>
           )}
         </section>
       </main>
@@ -199,63 +232,63 @@ export function App() {
   return (
     <div className="shell">
       <a className="skip-link" href="#main">
-        К содержимому
+        Skip to content
       </a>
       <aside className="sidebar">
         <Link className="brand" to="/">
-          <Layers aria-hidden="true" />
-          campus pool
+          <Logo />
         </Link>
-        <nav aria-label="Основная навигация">
+        <nav aria-label="Main navigation">
           <NavLink to="/" end>
             <House aria-hidden="true" size={18} />
-            Обзор
+            Overview
           </NavLink>
           <NavLink to="/new">
             <Plus aria-hidden="true" size={18} />
-            Новая задача
+            New task
           </NavLink>
           <NavLink to="/contribute">
             <Monitor aria-hidden="true" size={18} />
-            Устройства
+            Devices
           </NavLink>
           {session.role !== "member" && (
             <a href="/admin/">
               <ShieldCheck aria-hidden="true" size={18} />
-              Управление пулом
+              Pool console
             </a>
           )}
         </nav>
-        <footer>
-          ОБЩИЕ РЕСУРСЫ. ВАШИ ИДЕИ.<p>Участвуйте на своих условиях.</p>
+        <footer className="sidebar-account">
+          <div className="account-avatar" aria-hidden="true">
+            {session.name.trim().slice(0, 1).toUpperCase()}
+          </div>
+          <div className="account-name">
+            <strong>{session.name}</strong>
+            <span>Personal workspace</span>
+          </div>
+          <Button
+            variant="ghost"
+            aria-label="Sign out"
+            onClick={async () => {
+              try {
+                await post("/auth/logout", {});
+                Object.keys(sessionStorage)
+                  .filter((k) => k.startsWith("campus-"))
+                  .forEach((k) => sessionStorage.removeItem(k));
+                setSession(null);
+                setCsrf("");
+                setPassword("");
+                navigate("/login");
+              } catch (e) {
+                setError(errorText(e));
+              }
+            }}
+          >
+            <LogOut aria-hidden="true" size={18} />
+          </Button>
         </footer>
       </aside>
       <div className="main">
-        <div className="topbar">
-          <span>Рабочее пространство</span>
-          <div className="actions" style={{ margin: 0 }}>
-            <span>{session.name}</span>
-            <Button
-              variant="ghost"
-              aria-label="Выйти"
-              onClick={async () => {
-                try {
-                  await post("/auth/logout", {});
-                  Object.keys(sessionStorage)
-                    .filter((k) => k.startsWith("campus-"))
-                    .forEach((k) => sessionStorage.removeItem(k));
-                  setSession(null);
-                  setCsrf("");
-                  setPassword("");
-                } catch (e) {
-                  setError(errorText(e));
-                }
-              }}
-            >
-              <LogOut aria-hidden="true" size={18} />
-            </Button>
-          </div>
-        </div>
         <main className="content" id="main">
           <ErrorBox message={error} />
           <Routes>
@@ -267,7 +300,7 @@ export function App() {
               path="*"
               element={
                 <p>
-                  Страница не найдена. <Link to="/">На главную</Link>
+                  Page not found. <Link to="/">Back to workspace</Link>
                 </p>
               }
             />
@@ -275,5 +308,16 @@ export function App() {
         </main>
       </div>
     </div>
+  );
+}
+
+function ConsoleRedirect({ to }: { to: string }) {
+  useEffect(() => {
+    window.location.replace(to);
+  }, [to]);
+  return (
+    <main className="login card" role="status">
+      Opening pool console…
+    </main>
   );
 }

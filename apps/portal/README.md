@@ -1,6 +1,8 @@
-# Campus Pool portal
+# larpool portal
 
-Independent React/TypeScript/Vite application. Routes: `/`, `/contribute`, `/new`, `/jobs/:id`.
+React/TypeScript/Vite application. Signed-out visitors see the public landing at `/`; signed-in users see their workspace. Account pages are `/login` and `/register`. Workspace routes are `/contribute`, `/new`, `/jobs/:id`. Account links retain the requested destination through login or registration.
+
+The visual system and logo are adapted from the colleague's `landing-page` branch (84611dc). Both web apps import `apps/shared/product.css`; the landing uses local React and canvas assets, with no CDN runtime dependencies. All interface copy is English; user files, logs and generated task content retain their original language.
 
 From the repository root:
 

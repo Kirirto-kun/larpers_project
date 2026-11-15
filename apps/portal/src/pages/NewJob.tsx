@@ -14,6 +14,10 @@ type Example = {
   description: string;
   requires_gpu: boolean;
 };
+const exampleDescriptions: Record<string, string> = {
+  cpu: "Train a small model on 250,000 examples and download a verified result.",
+  cuda: "Run matrix calculations with NVIDIA CUDA and download the result.",
+};
 export function NewJob() {
   const nav = useNavigate();
   const [recipes, setRecipes] = useState<{ id: string; name: string }[]>([]);
@@ -80,7 +84,7 @@ export function NewJob() {
     setProject(file);
     try {
       if (file.size > 64 * 1024 * 1024)
-        throw new Error("Для просмотра проекта выберите ZIP до 64 МБ.");
+        throw new Error("Choose a project ZIP up to 64 MB.");
       let total = 0,
         count = 0;
       const entries = unzipSync(new Uint8Array(await file.arrayBuffer()), {
@@ -115,7 +119,7 @@ export function NewJob() {
         (f) => !excluded(f.webkitRelativePath || f.name),
       );
       if (included.reduce((n, f) => n + f.size, 0) > 64 * 1024 * 1024)
-        throw new Error("Папка проекта должна быть не больше 64 МБ.");
+        throw new Error("The project folder must be 64 MB or smaller.");
       const contents: Record<string, Uint8Array> = {};
       for (const f of included) {
         const path = f.webkitRelativePath || f.name;
@@ -226,20 +230,21 @@ export function NewJob() {
   }
   return (
     <>
-      <PageHeader eyebrow="НОВАЯ ЗАДАЧА" title="Что будем вычислять?">
-        Опишите результат, добавьте код или данные и проверьте план перед
-        запуском.
+      <PageHeader eyebrow="NEW TASK" title="Start a new task">
+        Describe your task, add files, and review the plan before starting.
       </PageHeader>
       {examples.length > 0 && (
         <section className="card">
-          <h2>Начните с простого примера</h2>
+          <h2>Try an example</h2>
           <div className="grid">
             {examples.map((ex) => (
               <div key={ex.id}>
                 <h3>
-                  {ex.requires_gpu ? "Пример на NVIDIA GPU" : "Пример на CPU"}
+                  {ex.requires_gpu ? "NVIDIA GPU example" : "CPU example"}
                 </h3>
-                <p className="muted">{ex.description}</p>
+                <p className="muted">
+                  {exampleDescriptions[ex.id] || ex.description}
+                </p>
                 <Button
                   variant="outline"
                   disabled={busy}
@@ -261,22 +266,22 @@ export function NewJob() {
                     }
                   }}
                 >
-                  Посмотреть план {ex.requires_gpu ? "GPU" : "CPU"}
+                  View plan {ex.requires_gpu ? "GPU" : "CPU"}
                 </Button>
               </div>
             ))}
           </div>
           <p className="muted">
-            Готовый пример не отправляет ваши данные во внешний ИИ. Сначала
-            покажем план.
+            Examples open a plan for review without sending your data to
+            DeepSeek.
           </p>
         </section>
       )}
       <div className="grid">
         <section className="card">
-          <h2>1. Задача и файлы</h2>
+          <h2>1. Task and files</h2>
           <label>
-            Что нужно сделать?
+            What should the task do?
             <textarea
               value={prompt}
               maxLength={8000}
@@ -285,11 +290,11 @@ export function NewJob() {
                 invalidate();
                 setPrompt(e.target.value);
               }}
-              placeholder="Например: запусти main.py и сохрани результат в result.json"
+              placeholder="For example: run main.py and save the output to result.json"
             />
           </label>
           <label>
-            Шаблон задачи
+            Task template
             <select
               value={recipe}
               disabled={busy}
@@ -298,7 +303,7 @@ export function NewJob() {
                 setRecipe(e.target.value);
               }}
             >
-              <option value="">Автоматический выбор по описанию</option>
+              <option value="">Choose automatically</option>
               {recipes.map((r) => (
                 <option key={r.id} value={r.id}>
                   {r.name}
@@ -315,13 +320,13 @@ export function NewJob() {
             }}
           />
           <details>
-            <summary>Добавить проект ZIP или папку с кодом</summary>
+            <summary>Add a project ZIP or code folder</summary>
             <p className="muted">
-              Для проекта можно выбрать текстовые файлы, которые увидит ИИ.
-              Проверьте ZIP на секреты перед загрузкой.
+              Choose which project text DeepSeek can read. Check the ZIP for
+              secrets before uploading.
             </p>
             <label>
-              Проект ZIP
+              Project ZIP
               <input
                 type="file"
                 accept=".zip"
@@ -334,7 +339,7 @@ export function NewJob() {
               />
             </label>
             <label>
-              Или папка проекта
+              Or choose a project folder
               <input
                 type="file"
                 multiple
@@ -358,18 +363,18 @@ export function NewJob() {
                     setSelected([]);
                   }}
                 >
-                  Убрать проект
+                  Remove project
                 </Button>
               </div>
             )}
           </details>
         </section>
         <section className="card">
-          <h2>2. Разрешение на помощь ИИ</h2>
+          <h2>2. DeepSeek permission</h2>
           <p>
-            DeepSeek получит описание задачи, сведения о входных файлах и только
-            отмеченный ниже текст из проекта. Вычисления выполняются на
-            устройствах пула.
+            DeepSeek receives your task description, input file details, and
+            only the project text you select below. Computation runs on pool
+            devices.
           </p>
           {Object.entries(snippets).map(([name, text]) => (
             <details key={name}>
@@ -389,16 +394,20 @@ export function NewJob() {
                     );
                   }}
                 />
-                Отправить текст этого файла в ИИ
+                Share this file’s text with DeepSeek
               </label>
             </details>
           ))}
-          <p className="muted">
-            Файлы не выбраны автоматически. Для ZIP показаны до 16 текстовых
-            файлов размером до 8 КБ каждый, суммарно до 24 КБ. Обычный код и
-            данные загружаются в пул, их содержимое не отправляется в ИИ без
-            выбора в проекте.
-          </p>
+          {project && (
+            <details className="sharing-details">
+              <summary>Project preview limits</summary>
+              <p className="muted">
+                Preview up to 16 text files, 8 KB each and 24 KB total. Nothing
+                is selected automatically. Only the project text you select is
+                shared with DeepSeek.
+              </p>
+            </details>
+          )}
           <label className="check">
             <input
               type="checkbox"
@@ -406,13 +415,13 @@ export function NewJob() {
               disabled={busy}
               onChange={(e) => setConsent(e.target.checked)}
             />
-            Разрешаю отправить описание и выбранный текст в DeepSeek
+            I allow my description and selected text to be sent to DeepSeek
           </label>
           <Button
             disabled={busy || !consent || !prompt.trim()}
             onClick={() => void prepare()}
           >
-            {busy ? "Подготавливаем…" : "Подготовить план"}
+            {busy ? "Preparing…" : "Prepare plan"}
           </Button>
           <p aria-live="polite">{progress}</p>
         </section>
@@ -457,7 +466,7 @@ export function NewJob() {
                   onChange={(e) => setAnswer(e.target.value)}
                 />
               </label>
-              <Button disabled={busy}>Отправить ответ</Button>
+              <Button disabled={busy}>Send answer</Button>
             </form>
           )}
           <div className="actions">
@@ -465,7 +474,7 @@ export function NewJob() {
               disabled={busy || preview.state !== "ready" || !preview.plan}
               onClick={() => void run()}
             >
-              Запустить задачу
+              Start task
             </Button>
             {!["failed", "cancelled"].includes(preview.state) && (
               <Button
@@ -487,10 +496,10 @@ export function NewJob() {
                   }
                 }}
               >
-                Отменить план
+                Cancel plan
               </Button>
             )}
-            <small>Запускается только проверенная версия плана.</small>
+            <small>Only the reviewed plan version will run.</small>
           </div>
         </>
       )}

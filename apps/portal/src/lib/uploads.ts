@@ -68,9 +68,7 @@ export async function upload(
   }
   if (status.state === "expired") {
     sessionStorage.removeItem(key);
-    throw new Error(
-      "Срок загрузки истёк. Нажмите «Подготовить план», чтобы начать снова.",
-    );
+    throw new Error("Upload expired. Select Prepare plan to start again.");
   }
   if (status.artifact) {
     sessionStorage.removeItem(key);
@@ -78,14 +76,14 @@ export async function upload(
   }
   const size = status.part_size_bytes;
   if (!Number.isSafeInteger(size) || size <= 0)
-    throw new Error("Сервер вернул неверный размер части файла.");
+    throw new Error("The server returned an invalid upload part size.");
   for (let offset = 0, part = 0; offset < file.size; offset += size, part++) {
     const blob = file.slice(offset, offset + size),
       hash = await sha(blob),
       recorded = status.parts.find((p) => p.number === part);
     if (recorded && recorded.sha256 !== hash) {
       sessionStorage.removeItem(key);
-      throw new Error("Файл изменился. Повторите загрузку.");
+      throw new Error("The file changed. Upload it again.");
     }
     if (!recorded)
       await api("/uploads/" + id + "/parts/" + part, {

@@ -1,31 +1,33 @@
 import type { ReactNode } from "react";
 export const stateNames: Record<string, string> = {
-  ready: "Готово",
-  preflight: "Проверка компьютера",
-  offline: "Не в сети",
-  paused: "На паузе",
-  draining: "Завершает работу",
-  quarantined: "Заблокировано",
-  running: "Выполняется",
-  queued: "В очереди",
-  waiting_for_capacity: "Ожидает устройства",
-  succeeded: "Завершено",
-  partial: "Частичный результат",
-  failed: "Ошибка",
-  cancelled: "Отменено",
-  inspecting: "Проверяем файлы",
-  planning: "Готовим план",
-  needs_input: "Нужен ваш ответ",
-  validating: "Проверяем план",
-  leased: "Назначено",
-  verifying: "Проверка результата",
-  retry_wait: "Повторная попытка",
-  collecting: "Сбор измерений",
-  complete: "Завершено",
+  ready: "Ready",
+  preflight: "Checking device",
+  offline: "Offline",
+  paused: "Paused",
+  draining: "Finishing work",
+  quarantined: "Quarantined",
+  running: "Running",
+  queued: "Queued",
+  waiting_for_capacity: "Waiting for a device",
+  succeeded: "Completed",
+  partial: "Partial result",
+  failed: "Failed",
+  cancelled: "Cancelled",
+  inspecting: "Checking files",
+  planning: "Preparing plan",
+  needs_input: "Needs your input",
+  validating: "Checking plan",
+  leased: "Assigned",
+  verifying: "Verifying results",
+  retry_wait: "Waiting to retry",
+  collecting: "Collecting measurements",
+  complete: "Complete",
 };
 export function Status({ value }: { value: string }) {
   return (
-    <span className={"status " + value}>{stateNames[value] || value}</span>
+    <span className={"status " + value}>
+      {stateNames[value] || value.replaceAll("_", " ")}
+    </span>
   );
 }
 export function ErrorBox({ message }: { message: string }) {
@@ -57,26 +59,28 @@ export function Metric({
 }
 export function bytes(n: number) {
   return n >= 1073741824
-    ? (n / 1073741824).toFixed(1) + " ГБ"
+    ? (n / 1073741824).toFixed(1) + " GB"
     : n >= 1048576
-      ? (n / 1048576).toFixed(1) + " МБ"
-      : n.toLocaleString("ru-RU") + " Б";
+      ? (n / 1048576).toFixed(1) + " MB"
+      : n.toLocaleString("en-US") + " B";
 }
 export function date(value: string | null) {
-  return value ? new Date(value).toLocaleString("ru-RU") : "Ещё не подключался";
+  return value ? new Date(value).toLocaleString("en-US") : "Never connected";
 }
 export function PageHeader({
   eyebrow,
   title,
   children,
 }: {
-  eyebrow: string;
+  eyebrow?: string;
   title: string;
   children?: ReactNode;
 }) {
   return (
     <header className="page-header">
-      <p className="eyebrow">{eyebrow}</p>
+      {eyebrow && eyebrow.toLowerCase() !== title.toLowerCase() && (
+        <p className="eyebrow">{eyebrow}</p>
+      )}
       <h1>{title}</h1>
       {children && <p>{children}</p>}
     </header>

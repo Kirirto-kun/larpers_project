@@ -1,4 +1,5 @@
 import { Link } from "react-router-dom";
+import { Monitor } from "lucide-react";
 import { useResource } from "../lib/hooks";
 import type { Summary, Node } from "../lib/types";
 import {
@@ -8,135 +9,111 @@ import {
   Status,
   Empty,
   bytes,
-  stateNames,
   date,
 } from "../components/Common";
+import { PoolCharts } from "../components/PoolCharts";
+
 export function Overview() {
   const { data: summary, error } = useResource<Summary>("/pool/summary");
   const { data: nodes, error: nodeError } = useResource<Node[]>("/nodes");
+  const readyNodes = nodes?.filter((node) => node.state === "ready");
+  const capacityKnown = readyNodes?.every((node) => node.capabilities !== null);
+  const offered = capacityKnown
+    ? readyNodes!.reduce(
+        (total, node) => ({
+          cpu: total.cpu + node.capabilities!.offered_budget.cpu_millis,
+          memory: total.memory + node.capabilities!.offered_budget.memory_bytes,
+          gpu: total.gpu + node.capabilities!.offered_budget.gpu_slots,
+        }),
+        { cpu: 0, memory: 0, gpu: 0 },
+      )
+    : undefined;
+
   return (
-    <>
-      <PageHeader eyebrow="ОБЗОР ПУЛА" title="Пул под контролем">
-        Устройства, подтверждённая работа и состояние задач. Данные обновляются
-        каждые 5 секунд.
-      </PageHeader>
+    <div className="overview-page">
+      <section className="overview-intro">
+        <PageHeader title="Overview" />
+        <span className="connection-note">Updates every 5 seconds</span>
+      </section>
       <ErrorBox message={error || nodeError} />
       <div className="metrics">
         <Metric
-          label="Готовы к работе"
+          label="Ready devices"
           value={summary?.ready_nodes ?? "—"}
-          hint={summary ? summary.nodes + " устройств в пуле" : undefined}
+          hint={
+            summary
+              ? `${summary.nodes} registered`
+              : error
+                ? "Unavailable"
+                : "Loading…"
+          }
+        />
+        <Metric label="Accepted units" value={summary?.accepted_units ?? "—"} />
+        <Metric
+          label="Running tasks"
+          value={summary ? (summary.jobs_by_state.running ?? 0) : "—"}
         />
         <Metric
-          label="Принято единиц работы"
-          value={summary?.accepted_units ?? "—"}
-        />
-        <Metric
-          label="Выполняются"
-          value={summary?.jobs_by_state.running ?? "—"}
-        />
-        <Metric
-          label="С ошибкой"
-          value={summary?.jobs_by_state.failed ?? "—"}
+          label="Failed tasks"
+          value={summary ? (summary.jobs_by_state.failed ?? 0) : "—"}
         />
       </div>
-      <div className="grid">
-        <section className="card">
-          <h2>Распределение задач</h2>
-          {summary && Object.keys(summary.jobs_by_state).length ? (
-            Object.entries(summary.jobs_by_state).map(([state, count]) => (
-              <div className="chart-row" key={state}>
-                <span>
-                  {stateNames[state] || state}: {count}
-                </span>
-                <meter
-                  min={0}
-                  max={Math.max(1, ...Object.values(summary.jobs_by_state))}
-                  value={count}
-                />
-                <span>{count}</span>
-              </div>
-            ))
-          ) : (
-            <Empty>Задач пока нет.</Empty>
-          )}
-          <Link to="/jobs">Все задачи →</Link>
-        </section>
-        <section className="card">
-          <h2>Доступная вычислительная мощность</h2>
-          <p>
-            Вклад ограничен разрешениями участников и возможностями их
-            устройств.
+      <PoolCharts
+        summary={summary}
+        nodes={nodes}
+        summaryUnavailable={!!error}
+        nodesUnavailable={!!nodeError}
+      />
+      <section className="card overview-section">
+        <div className="section-heading">
+          <h2>Offered capacity</h2>
+          <span className="muted">Ready devices only</span>
+        </div>
+        <dl>
+          <dt>CPU cores</dt>
+          <dd>{offered ? offered.cpu / 1000 : "—"}</dd>
+          <dt>Memory</dt>
+          <dd>{offered ? bytes(offered.memory) : "—"}</dd>
+          <dt>GPU slots</dt>
+          <dd>{offered ? offered.gpu : "—"}</dd>
+        </dl>
+        {readyNodes && !capacityKnown && (
+          <p className="muted">
+            Some device capabilities have not been reported.
           </p>
-          <dl>
-            <dt>CPU предложено</dt>
-            <dd>
-              {nodes
-                ? nodes
-                    .filter((n) => n.state === "ready")
-                    .reduce(
-                      (v, n) =>
-                        v + (n.capabilities?.offered_budget.cpu_millis || 0),
-                      0,
-                    ) / 1000
-                : "—"}
-            </dd>
-            <dt>Память предложена</dt>
-            <dd>
-              {nodes
-                ? bytes(
-                    nodes
-                      .filter((n) => n.state === "ready")
-                      .reduce(
-                        (v, n) =>
-                          v +
-                          (n.capabilities?.offered_budget.memory_bytes || 0),
-                        0,
-                      ),
-                  )
-                : "—"}
-            </dd>
-            <dt>GPU предложено</dt>
-            <dd>
-              {nodes
-                ? nodes
-                    .filter((n) => n.state === "ready")
-                    .reduce(
-                      (v, n) =>
-                        v + (n.capabilities?.offered_budget.gpu_slots || 0),
-                      0,
-                    )
-                : "—"}
-            </dd>
-            <dt>Время и стоимость</dt>
-            <dd>Не измерены</dd>
-          </dl>
-        </section>
-      </div>
-      <section className="card">
-        <h2>Устройства пула</h2>
-        {nodes?.length === 0 && <Empty>Устройств пока нет.</Empty>}
+        )}
+      </section>
+      <section className="card overview-section">
+        <div className="section-heading">
+          <h2>Devices{nodes ? ` · ${nodes.length}` : ""}</h2>
+          <Link to="/nodes">View devices →</Link>
+        </div>
+        {nodes?.length === 0 && <Empty>No devices registered.</Empty>}
+        {!nodes && (
+          <Empty>
+            {nodeError ? "Devices unavailable." : "Loading devices…"}
+          </Empty>
+        )}
         <div className="topology">
-          {nodes?.map((n) => (
-            <article className="node-tile" key={n.id}>
-              <h3>{n.name}</h3>
-              <Status value={n.state} />
+          {nodes?.map((node) => (
+            <article className="node-tile" key={node.id}>
+              <Monitor size={20} aria-hidden="true" />
+              <h3>{node.name}</h3>
+              <Status value={node.state} />
               <p>
-                {n.capabilities
-                  ? `${n.capabilities.cpu_logical} CPU`
-                  : "Проверка ещё не выполнена"}
+                {node.capabilities
+                  ? `${node.capabilities.cpu_logical} CPU threads · ${node.capabilities.gpus.length} ${node.capabilities.gpus.length === 1 ? "GPU" : "GPUs"}`
+                  : "Hardware details pending"}
               </p>
               <p>
-                {n.active_attempts} активных задач · {n.accepted_units} принято
+                {node.active_attempts} active tasks · {node.accepted_units}{" "}
+                accepted units
               </p>
-              <small>Связь: {date(n.last_seen_at)}</small>
+              <small>Last seen: {date(node.last_seen_at)}</small>
             </article>
           ))}
         </div>
-        <div className="actions">
-          <Link to="/nodes">Управлять устройствами →</Link>
-        </div>
       </section>
-    </>
+    </div>
   );
 }

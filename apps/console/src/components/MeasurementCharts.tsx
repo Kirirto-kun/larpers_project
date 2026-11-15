@@ -17,7 +17,7 @@ export function UtilizationChart({ samples }: { samples: Sample[] }) {
       <svg
         viewBox="0 0 600 200"
         role="img"
-        aria-label="Загрузка CPU и GPU по отсчётам клиента"
+        aria-label="CPU and GPU utilization by device sample"
       >
         {[0, 50, 100].map((v) => (
           <g key={v}>
@@ -68,12 +68,11 @@ export function UtilizationChart({ samples }: { samples: Sample[] }) {
           );
         })}
         <text x="40" y="190" fill="#526454" fontSize="13">
-          Отсчёты клиента
+          Device samples
         </text>
       </svg>
       <figcaption>
-        CPU — зелёная линия · GPU — синяя. Пропуски не соединяются. Нет значения
-        — нет измерения.
+        CPU: green · GPU: blue. Gaps indicate missing measurements.
       </figcaption>
     </figure>
   );

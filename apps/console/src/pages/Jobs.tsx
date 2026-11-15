@@ -18,22 +18,20 @@ export function Jobs() {
   const job = data?.find((j) => j.id === selected);
   return (
     <>
-      <PageHeader eyebrow="ЗАДАЧИ" title="Вся работа пула">
-        Принятые единицы учитываются после проверки. Неудачные попытки не
-        увеличивают полезный результат.
-      </PageHeader>
+      <PageHeader title="Tasks" />
       <ErrorBox message={error || message} />
       <section className="card">
-        {data?.length === 0 && <Empty>Задач пока нет.</Empty>}
+        {!data && !error && <Empty>Loading tasks…</Empty>}
+        {data?.length === 0 && <Empty>No tasks yet.</Empty>}
         {data?.map((j) => (
           <div className="row" key={j.id}>
             <div>
               <Button variant="ghost" onClick={() => setSelected(j.id)}>
-                Задача {j.id.slice(0, 8)}
+                Task {j.id.slice(0, 8)}
               </Button>
               <p>
                 {date(j.created_at)} · {j.accepted_units} / {j.total_units}{" "}
-                принято · {j.failed_units} с ошибкой
+                accepted · {j.failed_units} failed
               </p>
             </div>
             <Status value={j.state} />
@@ -42,17 +40,17 @@ export function Jobs() {
       </section>
       {job && (
         <section className="card">
-          <h2>Задача {job.id.slice(0, 8)}</h2>
+          <h2>Task {job.id.slice(0, 8)}</h2>
           <p>
-            Владелец: <code>{job.owner_id}</code>
+            Owner: <code>{job.owner_id}</code>
           </p>
           {job.tasks.map((t) => (
             <div className="row" key={t.id}>
               <div>
                 <b>{t.stage_id}</b>
                 <p>
-                  {t.units} ед. · попытка {t.generation} ·{" "}
-                  {t.node_id || "Устройство не назначено"}
+                  {t.units} units · attempt {t.generation} ·{" "}
+                  {t.node_id || "No device assigned"}
                 </p>
                 {t.error_code && <p className="error">{t.error_code}</p>}
               </div>
@@ -61,7 +59,7 @@ export function Jobs() {
           ))}
           <div className="actions">
             <a className="button outline" href={"/jobs/" + job.id}>
-              Открыть журнал и результаты
+              View log and results
             </a>
             {!["succeeded", "partial", "failed", "cancelled"].includes(
               job.state,
@@ -82,7 +80,7 @@ export function Jobs() {
                   }
                 }}
               >
-                Отменить задачу
+                Cancel task
               </Button>
             )}
           </div>

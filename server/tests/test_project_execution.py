@@ -1,4 +1,5 @@
 from copy import deepcopy
+from pathlib import Path
 
 import pytest
 from pydantic import ValidationError
@@ -520,6 +521,8 @@ def test_project_adapter_protocol_is_bounded_and_does_not_import_selected_script
     }
     response = subprocess.run(
         [sys.executable, "-m", "campus.project_adapter"],
+        # pytest's pythonpath setting does not propagate to child interpreters.
+        cwd=Path(__file__).resolve().parents[1],
         input=json.dumps(request),
         text=True,
         capture_output=True,
@@ -527,7 +530,7 @@ def test_project_adapter_protocol_is_bounded_and_does_not_import_selected_script
         check=False,
         env={**os.environ, "PYTHONDONTWRITEBYTECODE": "1"},
     )
-    assert response.returncode == 0
+    assert response.returncode == 0, response.stderr
     body = json.loads(response.stdout)
     assert body["result"] is None
     assert body["error"]
